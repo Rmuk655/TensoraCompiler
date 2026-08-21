@@ -67,7 +67,7 @@ tensora/tools/setup-dev.sh
 ## 10.3 Frontend Listing (`grammar/`, lexer/parser headers and sources)
 
 ### `grammar/Tensora.g4`
-```
+```antlr
 // Tensora grammar (RM 3.1-3.3, 3.24). This is one ANTLR4 file for the
 // lexer and the parser. One file holds the whole surface language. The
 // grammar is the single source of truth for lexical and syntax rules.
@@ -210,7 +210,7 @@ ERROR: . -> channel(HIDDEN);
 ```
 
 ### `include/tensora/lexer/Token.h`
-```
+```cpp
 #pragma once
 #include <cstdint>
 #include <string_view>
@@ -294,7 +294,7 @@ inline const char* tokenKindName(TokenKind k) {
 ```
 
 ### `include/tensora/lexer/TokenAdapter.h`
-```
+```cpp
 #pragma once
 #include "antlr4-runtime.h"
 #include "tensora/shared/Diagnostic.h"
@@ -318,7 +318,7 @@ Token adaptToken(antlr4::Token& antlrToken, const SourceBuffer& src, DiagnosticE
 ```
 
 ### `include/tensora/lexer/Lexer.h`
-```
+```cpp
 #pragma once
 #include <vector>
 
@@ -347,7 +347,7 @@ private:
 ```
 
 ### `src/lexer/Lexer.cpp`
-```
+```cpp
 // This file implements the lexer.
 // The lexer reads source text and creates tokens.
 // The parser reads these tokens (Parser.cpp lexes its own copy directly;
@@ -386,7 +386,7 @@ std::vector<Token> Lexer::tokenize() {
 ```
 
 ### `src/lexer/TokenAdapter.cpp`
-```
+```cpp
 // This file implements the ANTLR-token-to-project-Token conversion.
 // The lexer and the parser both use it, so both agree on what a token
 // means and on when a character is illegal.
@@ -500,7 +500,7 @@ Token adaptToken(antlr4::Token& antlrToken, const SourceBuffer& src, DiagnosticE
 ```
 
 ### `include/tensora/shared/Ast.h`
-```
+```cpp
 #pragma once
 #include <cstdint>
 #include <memory>
@@ -601,7 +601,7 @@ struct AstProgram {
 ```
 
 ### `include/tensora/parser/Parser.h`
-```
+```cpp
 #pragma once
 #include <string>
 
@@ -644,7 +644,7 @@ std::string dumpParseTree(const SourceBuffer& src);
 ```
 
 ### `src/parser/Parser.cpp`
-```
+```cpp
 // This file implements the parser.
 // The parser reads source text, runs the ANTLR lexer and parser, and
 // creates the AST. Semantic analysis reads the AST next.
@@ -712,7 +712,7 @@ std::string dumpParseTree(const SourceBuffer& src) {
 ```
 
 ### `src/parser/AstBuilder.h`
-```
+```cpp
 #pragma once
 #include "TensoraParser.h"
 #include "antlr4-runtime.h"
@@ -764,7 +764,7 @@ class AstBuilder {
 ```
 
 ### `src/parser/AstBuilder.cpp`
-```
+```cpp
 // This file implements the parse-tree-to-AST conversion.
 // It walks the ANTLR parse tree and creates the AST. Semantic analysis
 // reads the AST next.
@@ -1048,7 +1048,7 @@ ast::AstProgram AstBuilder::build(generated::TensoraParser::ProgramContext* ctx)
 ```
 
 ### `src/parser/ParserErrorListener.h`
-```
+```cpp
 #pragma once
 #include "antlr4-runtime.h"
 #include "tensora/shared/Diagnostic.h"
@@ -1084,7 +1084,7 @@ class ParserErrorListener : public antlr4::BaseErrorListener {
 ```
 
 ### `src/parser/ParserErrorListener.cpp`
-```
+```cpp
 #include "ParserErrorListener.h"
 
 namespace tensora {
@@ -1132,7 +1132,7 @@ void ParserErrorListener::syntaxError(antlr4::Recognizer*, antlr4::Token* offend
 ```
 
 ### `src/parser/ParserErrorStrategy.h`
-```
+```cpp
 #pragma once
 #include "antlr4-runtime.h"
 
@@ -1171,7 +1171,7 @@ class ParserErrorStrategy : public antlr4::DefaultErrorStrategy {
 ```
 
 ### `src/parser/ParserErrorStrategy.cpp`
-```
+```cpp
 #include "ParserErrorStrategy.h"
 
 namespace tensora {
@@ -1205,7 +1205,7 @@ void ParserErrorStrategy::reportMatch(antlr4::Parser* recognizer) {
 ```
 
 ### `include/tensora/shared/SourceSpan.h`
-```
+```cpp
 #pragma once
 #include <cstdint>
 
@@ -1225,7 +1225,7 @@ struct SourceSpan {
 ```
 
 ### `include/tensora/shared/SourceBuffer.h`
-```
+```cpp
 #pragma once
 #include <cstdint>
 #include <string>
@@ -1255,7 +1255,7 @@ private:
 ```
 
 ### `include/tensora/shared/Result.h`
-```
+```cpp
 #pragma once
 #include <optional>
 #include <utility>
@@ -1295,7 +1295,7 @@ class Result {
 ```
 
 ### `include/tensora/shared/Diagnostic.h`
-```
+```cpp
 #pragma once
 #include <string>
 #include <vector>
@@ -1393,7 +1393,7 @@ private:
 ## 10.4 Semantic Listing (symbol table, type system, contracts, `SemanticAnalyzer`)
 
 ### `include/tensora/semantic/Symbol.h`
-```
+```cpp
 #pragma once
 #include <string>
 #include <string_view>
@@ -1473,7 +1473,7 @@ class SymbolTable {
 ```
 
 ### `src/semantic/Symbol.cpp`
-```
+```cpp
 // This file implements the symbol table.
 // Semantic analysis uses it to resolve names and enforce scope rules
 // (RM 3.6).
@@ -1521,7 +1521,7 @@ const Symbol* SymbolTable::resolve(std::string_view name) const {
 ```
 
 ### `include/tensora/shared/Type.h`
-```
+```cpp
 #pragma once
 #include <cstdint>
 #include <deque>
@@ -1654,7 +1654,7 @@ std::string describeType(const Type* t, const TypeContext& ctx);
 ```
 
 ### `src/shared/Type.cpp`
-```
+```cpp
 // This file implements the tensor type representation.
 // Semantic analysis, optimization, and codegen all read and create
 // these types, so this file lives in shared/.
@@ -1715,7 +1715,7 @@ std::string describeType(const Type* t, const TypeContext& ctx) {
 ```
 
 ### `include/tensora/shared/DimSolver.h`
-```
+```cpp
 #pragma once
 #include <unordered_map>
 #include <vector>
@@ -1775,7 +1775,7 @@ class DimSolver {
 ```
 
 ### `src/shared/DimSolver.cpp`
-```
+```cpp
 // This file implements the bounded symbolic-dimension solver.
 // Semantic analysis uses it to unify axis sizes and check element-count
 // equality (RM 3.4), without a general SMT solver.
@@ -1851,7 +1851,7 @@ ElementCountResult DimSolver::sameElementCount(const std::vector<Dimension>& lhs
 ```
 
 ### `include/tensora/semantic/Contracts.h`
-```
+```cpp
 #pragma once
 #include <cstdint>
 #include <string_view>
@@ -1901,7 +1901,7 @@ const Type* checkMaxPool(const Type* x, int64_t size, int64_t stride, ContractCt
 ```
 
 ### `src/semantic/Contracts.cpp`
-```
+```cpp
 // This file implements the operator contract checkers.
 // Each function checks one Tensora operator (matmul, linear, conv2d,
 // and so on) and returns its verified result type. SemanticAnalyzer
@@ -2377,7 +2377,7 @@ const Type* checkMaxPool(const Type* xType, int64_t size, int64_t stride, Contra
 ```
 
 ### `include/tensora/semantic/SemanticAnalyzer.h`
-```
+```cpp
 #pragma once
 #include <unordered_map>
 #include <unordered_set>
@@ -2474,7 +2474,7 @@ class SemanticAnalyzer {
 ```
 
 ### `src/semantic/SemanticAnalyzer.cpp`
-```
+```cpp
 // This file implements semantic analysis.
 // It checks the AST for name, scope, type, and shape errors, and
 // creates the verified Typed Computation Graph (TCG). Optimization
@@ -2978,7 +2978,7 @@ Result<TypedProgram> SemanticAnalyzer::analyze(const ast::AstProgram& program) {
 ## 10.5 Typed Graph Listing (node/value definitions, builder, verifier)
 
 ### `include/tensora/shared/Ir.h`
-```
+```cpp
 #pragma once
 #include <cstdint>
 #include <optional>
@@ -3203,7 +3203,7 @@ class GraphVerifier {
 ```
 
 ### `src/shared/Ir.cpp`
-```
+```cpp
 // This file implements the Typed Computation Graph (TCG).
 // Semantic analysis creates the TCG. Optimization and codegen read it.
 #include "tensora/shared/Ir.h"
@@ -3325,7 +3325,7 @@ DiagnosticList GraphVerifier::verify(const TypedGraph& g) const {
 ## 10.6 Optimization Listing (Level-1 graph passes, liveness analysis)
 
 ### `include/tensora/optimization/GraphPass.h`
-```
+```cpp
 #pragma once
 #include <memory>
 #include <string_view>
@@ -3431,7 +3431,7 @@ std::unique_ptr<GraphPass> createLinearBiasActivationFusionPass();
 ```
 
 ### `src/optimization/GraphPasses.cpp`
-```
+```cpp
 #include <string_view>
 #include <unordered_map>
 #include <unordered_set>
@@ -3831,7 +3831,7 @@ std::unique_ptr<GraphPass> createLinearBiasActivationFusionPass() {
 ```
 
 ### `include/tensora/optimization/Liveness.h`
-```
+```cpp
 #pragma once
 #include <cstdint>
 #include <unordered_map>
@@ -3882,7 +3882,7 @@ bool exceedsMemoryBudget(const LivenessResult& result, int64_t budgetBytes);
 ```
 
 ### `src/optimization/Liveness.cpp`
-```
+```cpp
 // This file implements the tensor-liveness analysis.
 // It computes each value's live interval and a peak-live-byte estimate
 // from the verified Typed Computation Graph. Codegen's Level-2 tiling
@@ -3967,7 +3967,7 @@ bool exceedsMemoryBudget(const LivenessResult& result, int64_t budgetBytes) {
 ## 10.7 Codegen Listing (Tensora-to-MLIR lowering, Level-2 tiling pass, backend)
 
 ### `include/tensora/codegen/DialectSetup.h`
-```
+```cpp
 #pragma once
 #include "mlir/IR/MLIRContext.h"
 
@@ -3983,7 +3983,7 @@ mlir::DialectRegistry makeTensoraDialectRegistry();
 ```
 
 ### `src/codegen/DialectSetup.cpp`
-```
+```cpp
 // This file builds the shared MLIR dialect registry.
 // Codegen uses this registry to lower the Typed Computation Graph to MLIR.
 #include "tensora/codegen/DialectSetup.h"
@@ -4026,7 +4026,7 @@ mlir::DialectRegistry makeTensoraDialectRegistry() {
 ```
 
 ### `include/tensora/codegen/MlirLowerer.h`
-```
+```cpp
 #pragma once
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/MLIRContext.h"
@@ -4066,7 +4066,7 @@ class MlirLowerer {
 ```
 
 ### `src/codegen/MlirLowerer.cpp`
-```
+```cpp
 // This file implements the codegen phase's lowering step.
 // It converts a verified, optimized Typed Computation Graph to MLIR
 // (func/linalg/tensor/arith/scf). Standard MLIR/LLVM passes take the
@@ -4748,7 +4748,7 @@ ModuleOp MlirLowerer::lower(const TypedProgram& program) {
 ```
 
 ### `include/tensora/codegen/LoopTiling.h`
-```
+```cpp
 #pragma once
 #include <array>
 #include <cstdint>
@@ -4799,7 +4799,7 @@ class TilingDecision {
 ```
 
 ### `src/codegen/LoopTiling.cpp`
-```
+```cpp
 // This file implements the Level-2 tiling decision.
 // It picks a matmul tile size from verified shapes and, when available,
 // the Level-1 liveness estimate. Codegen applies this decision to the
@@ -4844,7 +4844,7 @@ TilingPlan TilingDecision::decide(const GraphNode& matmul, const TypedGraph& gra
 ```
 
 ### `include/tensora/codegen/MatmulTilingPass.h`
-```
+```cpp
 #pragma once
 #include <memory>
 
@@ -4886,7 +4886,7 @@ std::unique_ptr<mlir::Pass> createMatmulTilingPass(TilingPolicy policy = {});
 ```
 
 ### `src/codegen/MatmulTilingPass.cpp`
-```
+```cpp
 // This file implements the Level-2 tiling pass.
 // The pass applies the TilingDecision (LoopTiling.cpp) to each
 // linalg.matmul op in the lowered MLIR, using MLIR's own tiling
@@ -4963,7 +4963,7 @@ std::unique_ptr<mlir::Pass> createMatmulTilingPass(TilingPolicy policy) {
 ```
 
 ### `tools/benchmark_matmul_tiling.cpp`
-```
+```cpp
 // Benchmarks MatmulTilingPass across a few candidate tile sizes on the
 // same 1024x1024x1024 matmul workload test_tiling_e2e.cpp uses, plus an
 // untiled baseline, and prints the measured wall times. This is a
@@ -5164,7 +5164,7 @@ int main() {
 ```
 
 ### `tools/codegen_mlp_native.cpp`
-```
+```cpp
 // CodegenDriver (ARCH-009/ARCHITECTURE.md "BackendPipeline"). This
 // compiles the same hand-built MLP TypedGraph LOW-E2E-MLP uses, all
 // the way to a real native object file, through LLVM's TargetMachine,
@@ -5400,7 +5400,7 @@ int main(int argc, char** argv) {
 ## 10.8 Driver and Build Listing (CLI driver, example programs, CMake)
 
 ### `src/driver/main.cpp`
-```
+```cpp
 // The `tensora` driver: one binary, one flag per compiler phase. This
 // lets each phase run on its own: --emit-tokens for the lexer,
 // --emit-ast for the parser, --check/--emit-graph for semantic
@@ -6300,7 +6300,7 @@ int main(int argc, char** argv) {
 ```
 
 ### `examples/mlp.tns`
-```
+```text
 # A small multilayer perceptron (used to demo the lexer).
 input  x:  Tensor[batch=B, feat=784]
 weight W1: Tensor[in=784, out=256]
@@ -6317,7 +6317,7 @@ graph mlp {
 ```
 
 ### `examples/mlp_concrete.tns`
-```
+```text
 # A small MLP with a concrete batch size (used to demo codegen/--run/-o,
 # which do not yet support symbolic dimensions -- see mlp.tns for the
 # symbolic-batch version used to demo the lexer/parser/semantic phases).
@@ -6336,7 +6336,7 @@ graph mlp {
 ```
 
 ### `examples/matmul_large.tns`
-```
+```text
 # A large matmul (256x256x256, above MatmulTilingPass's default 128
 # threshold) -- used to demo the Level-2 loop-tiling pass through the
 # real compiler, not just its dedicated unit tests.
@@ -6350,7 +6350,7 @@ graph matmul_large {
 ```
 
 ### `examples/cnn.tns`
-```
+```text
 # A small CNN classifier (conv2d -> relu -> flatten -> linear ->
 # softmax), matching tests/codegen/test_cnn_e2e.cpp's shapes so the
 # hand-computed reference there (class-1 probability = 0.539902 with a
@@ -6375,7 +6375,7 @@ graph cnn {
 ```
 
 ### `examples/attention.tns`
-```
+```text
 # Single-head scaled dot-product attention (matmul -> transpose -> scale
 # -> softmax -> matmul), matching tests/codegen/test_attention_e2e.cpp's
 # shapes. This is a rank-2 (no batch/head axes) demonstration: the
@@ -6399,7 +6399,7 @@ graph attention {
 ```
 
 ### `CMakeLists.txt`
-```
+```text
 cmake_minimum_required(VERSION 3.16)
 project(tensora CXX C)
 
@@ -6801,34 +6801,34 @@ endforeach()
 ```
 
 ### `tools/setup-dev.sh`
-```
+```bash
 #!/usr/bin/env bash
-# One-time developer bootstrap (docs/development/07_DEVELOPMENT_
-# ENVIRONMENT.md §7.9). Installs `pre-commit` and registers it as this
-# clone's actual git hook (.git/hooks/pre-commit), so day-to-day
-# `git commit` runs clang-format/Prettier/markdownlint automatically,
-# without every developer needing to remember the individual commands.
+# One-time developer bootstrap. Checks the toolchain this repo actually
+# needs (cmake, a C++20 compiler, Java, LLVM/MLIR 21 -- see
+# docs/development/DEPENDENCIES.md) and prints the next commands to
+# run. There is no git-hook or CI setup here: formatting and linting
+# are a developer's own judgment call, not an enforced gate.
 #
-# This step cannot run itself on `git clone` -- letting a clone
-# auto-execute code would let any repository run arbitrary commands on
-# a developer's machine just by being cloned. Run this once, by hand,
-# right after cloning:
+# Usage, once after cloning:
 #
 #   ./tools/setup-dev.sh
-set -euo pipefail
+set -uo pipefail
 cd "$(dirname "$0")/.."
 
-if ! command -v python3 >/dev/null 2>&1; then
-  echo "error: python3 not found; install Python 3 first" >&2
-  exit 1
+./tools/check-deps.sh
+status=$?
+
+if [ "$status" -ne 0 ]; then
+  echo
+  echo "Install the missing dependencies above, then re-run ./tools/setup-dev.sh."
+  exit "$status"
 fi
 
-python3 -m pip install --user pre-commit
-python3 -m pre_commit install
-
-echo "Tensora development hooks installed."
-echo "git commit now runs clang-format (C/C++) and Prettier + markdownlint (Markdown) automatically."
-echo "Skip a hook run for one commit with: git commit --no-verify (not recommended; CI re-checks anyway)."
+echo
+echo "All required dependencies are present. Next steps:"
+echo "  cmake -S . -B build"
+echo "  cmake --build build -j4"
+echo "  ctest --test-dir build --output-on-failure"
 ```
 
 ## 10.9 Test Listing
@@ -6854,7 +6854,7 @@ tensora/tests/support/TestHarness.h
 ```
 
 ### `tests/optimization/test_passes.cpp` (representative Level-1 pass test)
-```
+```cpp
 // Level-1 graph optimization tests (RM 3.21), matching
 // docs/testing/TEST_MATRIX.md OPT-*. These use hand-built GraphBuilder
 // fixtures (ARCH-008), not the full source pipeline. This is fast and
@@ -7391,7 +7391,7 @@ int main(int argc, char** argv) { return tensora::testing::runRegisteredCases(ar
 ```
 
 ### `tests/codegen/test_cnn_e2e.cpp` (representative MLIR lowering JIT e2e test)
-```
+```cpp
 // E2E-002: a small CNN classifier (conv2d -> relu -> flatten -> linear
 // -> softmax). This combines LOW-001/003/007/008/009 into one real
 // workload. The test lowers it through MlirLowerer, runs it with JIT
@@ -7602,7 +7602,7 @@ int main() {
 ```
 
 ### `tests/codegen/test_tiling_e2e.cpp` (Level-2 loop-tiling test)
-```
+```cpp
 // LOOP-002/003/004: checks the structure and the numbers of the
 // project-authored MatmulTilingPass, applied to a real
 // MlirLowerer-produced module. It also reports timing, but does not
@@ -7870,19 +7870,21 @@ int main() {
 
 This listing was generated by direct shell concatenation of the files
 listed in the manifest above (`find grammar include src tools examples
--type f | sort`, then `cat` per file into a fenced code block; the test
-manifest and three representative test files were generated the same
-way), not by hand-transcription -- so it cannot silently diverge from
-what was actually built and tested.
+-type f | sort`, then `cat` per file into a fenced code block tagged
+with the language matching its extension (for example ` ```cpp ` for
+`.cpp`/`.h`, ` ```bash ` for `.sh`, ` ```cmake ` for `CMakeLists.txt`);
+the test manifest and three representative test files were generated
+the same way), not by hand-transcription -- so it cannot silently
+diverge from what was actually built and tested.
 
 This repository is under git version control, hosted at
 [github.com/Rmuk655/TensoraCompiler](https://github.com/Rmuk655/TensoraCompiler)
 (`origin`, branch `main`). Base commit at generation time:
-`709a83a206f095c0e12a5fa2f9815273242ed6c1`. The concatenation itself
+`f34112831b9f7a69570accb48d0939793bf4aa53`. The concatenation itself
 reflects the working tree at generation time, which may include
 changes made after that commit and not yet committed -- the manifest
 and file contents above are the authoritative record either way, since
 they are read directly from disk, not from git history. Generation
-date: 2026-08-20. The 175 CTest cases passing at generation time are
+date: 2026-08-21. The 175 CTest cases passing at generation time are
 the authoritative record of what this listing implements; see
 `docs/testing/TEST_MATRIX.md` and `docs/development/CHANGELOG.md`.

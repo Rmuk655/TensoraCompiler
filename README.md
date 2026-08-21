@@ -80,8 +80,8 @@ source (.tns)
   -> JIT execution or native object file
 ```
 
-**One-time setup after cloning** (installs the `pre-commit` hook that
-runs `clang-format`/Prettier/`markdownlint` automatically on commit):
+**One-time setup after cloning** (checks the toolchain against
+`docs/development/DEPENDENCIES.md` and prints the next commands):
 
 ``` bash
 ./tools/setup-dev.sh

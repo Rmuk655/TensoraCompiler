@@ -1,27 +1,27 @@
 #!/usr/bin/env bash
-# One-time developer bootstrap (docs/development/07_DEVELOPMENT_
-# ENVIRONMENT.md §7.9). Installs `pre-commit` and registers it as this
-# clone's actual git hook (.git/hooks/pre-commit), so day-to-day
-# `git commit` runs clang-format/Prettier/markdownlint automatically,
-# without every developer needing to remember the individual commands.
+# One-time developer bootstrap. Checks the toolchain this repo actually
+# needs (cmake, a C++20 compiler, Java, LLVM/MLIR 21 -- see
+# docs/development/DEPENDENCIES.md) and prints the next commands to
+# run. There is no git-hook or CI setup here: formatting and linting
+# are a developer's own judgment call, not an enforced gate.
 #
-# This step cannot run itself on `git clone` -- letting a clone
-# auto-execute code would let any repository run arbitrary commands on
-# a developer's machine just by being cloned. Run this once, by hand,
-# right after cloning:
+# Usage, once after cloning:
 #
 #   ./tools/setup-dev.sh
-set -euo pipefail
+set -uo pipefail
 cd "$(dirname "$0")/.."
 
-if ! command -v python3 >/dev/null 2>&1; then
-  echo "error: python3 not found; install Python 3 first" >&2
-  exit 1
+./tools/check-deps.sh
+status=$?
+
+if [ "$status" -ne 0 ]; then
+  echo
+  echo "Install the missing dependencies above, then re-run ./tools/setup-dev.sh."
+  exit "$status"
 fi
 
-python3 -m pip install --user pre-commit
-python3 -m pre_commit install
-
-echo "Tensora development hooks installed."
-echo "git commit now runs clang-format (C/C++) and Prettier + markdownlint (Markdown) automatically."
-echo "Skip a hook run for one commit with: git commit --no-verify (not recommended; CI re-checks anyway)."
+echo
+echo "All required dependencies are present. Next steps:"
+echo "  cmake -S . -B build"
+echo "  cmake --build build -j4"
+echo "  ctest --test-dir build --output-on-failure"
