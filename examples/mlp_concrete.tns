@@ -1,0 +1,15 @@
+# A small MLP with a concrete batch size (used to demo codegen/--run/-o,
+# which do not yet support symbolic dimensions -- see mlp.tns for the
+# symbolic-batch version used to demo the lexer/parser/semantic phases).
+input  x:  Tensor[batch=4, feat=8]
+weight W1: Tensor[in=8, out=16]
+weight b1: Tensor[out=16]
+weight W2: Tensor[in=16, out=4]
+weight b2: Tensor[out=4]
+
+graph mlp {
+    h = linear(x, W1, b1)
+    h = relu(h)
+    y = linear(h, W2, b2)
+    return y
+}

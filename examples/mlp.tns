@@ -1,0 +1,13 @@
+# A small multilayer perceptron (used to demo the lexer).
+input  x:  Tensor[batch=B, feat=784]
+weight W1: Tensor[in=784, out=256]
+weight b1: Tensor[out=256]
+weight W2: Tensor[in=256, out=10]
+weight b2: Tensor[out=10]
+
+graph mlp {
+    h = linear(x, W1, b1)
+    h = relu(h)
+    y = linear(h, W2, b2)
+    return y
+}

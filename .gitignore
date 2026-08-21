@@ -1,0 +1,11 @@
+# Build output (CMake-generated; never commit).
+/build/
+build/
+
+# Editor / OS noise
+*.o
+*.obj
+*.swp
+.DS_Store
+CLAUDE.md
+docs/claude/*
