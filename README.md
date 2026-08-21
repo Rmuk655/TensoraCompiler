@@ -100,7 +100,7 @@ and the `test_passes` CTest binary
 (`tests/optimization/test_passes.cpp`) — not a separate copy of any
 compiler logic.
 
-**Demo commands** (one per phase, `demos/README.md` has the full map):
+**Demo commands** (one per phase; the table below has the full map):
 
 ``` bash
 demos/01_lexer_demo.sh          # --emit-tokens

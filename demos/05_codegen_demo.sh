@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Code generation demo: Typed Computation Graph -> MLIR -> LLVM IR.
-# Requires a concrete-shaped source file (see demos/README.md).
+# Requires a concrete-shaped source file (see README.md).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 FILE="${1:-examples/mlp_concrete.tns}"
