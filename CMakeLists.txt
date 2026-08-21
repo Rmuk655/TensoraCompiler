@@ -1,8 +1,24 @@
 cmake_minimum_required(VERSION 3.16)
+
+# NEW: re-extract FetchContent URL downloads' timestamps at extraction
+# time instead of preserving the archive's own timestamps, so a change
+# to a pinned URL's content is always seen as a change. Set before
+# `project()` per the policy's own documented scope.
+if(POLICY CMP0135)
+  cmake_policy(SET CMP0135 NEW)
+endif()
+
 project(tensora CXX C)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# Give the vendored ANTLR4 runtime's own CMakeLists a build type so it
+# does not warn and fall back to Release itself; Release is also this
+# project's own default when none is requested on the command line.
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+endif()
 
 # Frontend generator: ANTLR4. The build fetches both the generator tool (a
 # jar, run through a system `java`) and the C++ runtime it needs. This
@@ -31,6 +47,19 @@ set(ANTLR_BUILD_SHARED OFF CACHE BOOL "" FORCE)
 FetchContent_Declare(antlr4_runtime
   URL https://www.antlr.org/download/antlr4-cpp-runtime-${ANTLR4_VERSION}-source.zip)
 FetchContent_MakeAvailable(antlr4_runtime)
+
+# antlr4_static's own CMakeLists exports its headers as normal (not
+# SYSTEM) INTERFACE_INCLUDE_DIRECTORIES, so every consumer that links
+# it -- including tensora_lexer/tensora_parser below -- was compiling vendored
+# headers such as RuleContext.h/ParseTree.h as if they were our own
+# code, surfacing -Woverloaded-virtual/-Wunused-parameter warnings from
+# a project we do not own. Re-declaring the same paths as
+# INTERFACE_SYSTEM_INCLUDE_DIRECTORIES (a target property CMake reads
+# specifically for this situation) fixes that without patching the
+# vendored CMakeLists itself.
+set_property(TARGET antlr4_static PROPERTY
+  INTERFACE_SYSTEM_INCLUDE_DIRECTORIES
+  "$<TARGET_PROPERTY:antlr4_static,INTERFACE_INCLUDE_DIRECTORIES>")
 
 # Generate TensoraLexer/TensoraParser (and a visitor base) from
 # grammar/Tensora.g4 into the build tree. Generated code is never
@@ -61,26 +90,43 @@ include_directories(${CMAKE_SOURCE_DIR}/include)
 # this CMakeLists.txt defines below.
 add_compile_options(-Wall -Wextra)
 
-# Frontend library: hand-written C++ (Lexer/Parser adapters, the
-# AstBuilder that walks ANTLR's parse tree, and the parser error
-# listener) plus the generated ANTLR lexer/parser.
-add_library(tensora_frontend
+# Lexer library: the project's own Lexer/Token wrapper (used by the
+# standalone lexer demo/tests only -- Parser.cpp below drives the
+# generated ANTLR lexer directly, per Parser.h's own comment) plus the
+# generated ANTLR lexer. Kept as its own target, separate from
+# tensora_parser below, so `cmake --build build --target lexer` (docs/
+# development/BUILD.md) does not also compile any parser-only source.
+add_library(tensora_lexer
   src/lexer/Lexer.cpp
   src/lexer/TokenAdapter.cpp
-  src/parser/Parser.cpp
-  src/parser/AstBuilder.cpp
-  src/parser/ParserErrorListener.cpp
-  src/parser/ParserErrorStrategy.cpp
-  ${ANTLR4_GENERATED_SRCS})
-add_dependencies(tensora_frontend antlr4_generate)
-target_include_directories(tensora_frontend PUBLIC ${CMAKE_SOURCE_DIR}/include)
-target_include_directories(tensora_frontend PRIVATE ${ANTLR4_GEN_DIR})
-target_link_libraries(tensora_frontend PUBLIC antlr4_static)
+  ${ANTLR4_GEN_DIR}/TensoraLexer.cpp)
+add_dependencies(tensora_lexer antlr4_generate)
+target_include_directories(tensora_lexer PUBLIC ${CMAKE_SOURCE_DIR}/include)
+target_include_directories(tensora_lexer PRIVATE ${ANTLR4_GEN_DIR})
+target_link_libraries(tensora_lexer PUBLIC antlr4_static)
 # The generated headers include <antlr4-runtime.h>. So every consumer of
 # the generated code (this library, and anything that links against it)
 # needs the runtime's public include dir. The PUBLIC link to
 # antlr4_static already carries that dir, through its own
 # INTERFACE_INCLUDE_DIRECTORIES.
+
+# Parser library: AstBuilder (walks ANTLR's parse tree into the AST),
+# the parser error listener/strategy, and the generated ANTLR parser.
+# Parser.cpp instantiates the generated ANTLR lexer itself (Parser.h's
+# own comment: no project Token vector sits between the two here), and
+# calls TokenAdapter's adaptToken() for its one diagnostic path -- both
+# reasons this links tensora_lexer, which is otherwise correct anyway:
+# a parser always needs a lexer.
+add_library(tensora_parser
+  src/parser/Parser.cpp
+  src/parser/AstBuilder.cpp
+  src/parser/ParserErrorListener.cpp
+  src/parser/ParserErrorStrategy.cpp
+  ${ANTLR4_GEN_DIR}/TensoraParser.cpp)
+add_dependencies(tensora_parser antlr4_generate)
+target_include_directories(tensora_parser PUBLIC ${CMAKE_SOURCE_DIR}/include)
+target_include_directories(tensora_parser PRIVATE ${ANTLR4_GEN_DIR})
+target_link_libraries(tensora_parser PUBLIC tensora_lexer)
 
 # Semantic analysis phase. shared/{Type,DimSolver,Ir}.cpp holds the
 # types and the Typed Computation Graph (used by more than one phase).
@@ -95,7 +141,7 @@ add_library(tensora_semantic
   src/semantic/Contracts.cpp
   src/semantic/SemanticAnalyzer.cpp)
 target_include_directories(tensora_semantic PUBLIC ${CMAKE_SOURCE_DIR}/include)
-target_link_libraries(tensora_semantic PUBLIC tensora_frontend)
+target_link_libraries(tensora_semantic PUBLIC tensora_parser)
 
 # Optimization phase (RM 3.21): the Level-1 graph passes, plus the
 # tensor-liveness analysis. Plain C++ over the TCG. No MLIR/LLVM
@@ -150,11 +196,11 @@ target_compile_definitions(tensora PRIVATE MLIR_C_RUNNER_UTILS_PATH="${MLIR_C_RU
 enable_testing()
 
 add_executable(test_lexer tests/lexer/test_lexer.cpp)
-target_link_libraries(test_lexer PRIVATE tensora_frontend)
+target_link_libraries(test_lexer PRIVATE tensora_lexer)
 target_include_directories(test_lexer PRIVATE ${CMAKE_SOURCE_DIR}/tests)
 
 add_executable(test_parser tests/parser/test_parser.cpp)
-target_link_libraries(test_parser PRIVATE tensora_frontend)
+target_link_libraries(test_parser PRIVATE tensora_parser)
 target_include_directories(test_parser PRIVATE ${CMAKE_SOURCE_DIR}/tests)
 
 add_executable(test_semantic tests/semantic/test_semantic.cpp)
@@ -242,7 +288,7 @@ add_test(NAME SMOKE-MLIR COMMAND smoke_mlir)
 # gives the right numbers, through real JIT execution (not just a
 # golden-MLIR-text check).
 add_executable(test_mlp_e2e tests/codegen/test_mlp_e2e.cpp)
-target_include_directories(test_mlp_e2e PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
+target_include_directories(test_mlp_e2e SYSTEM PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
 target_link_libraries(test_mlp_e2e PRIVATE tensora_codegen MLIR MLIRExecutionEngineShared)
 add_test(NAME LOW-E2E-MLP COMMAND test_mlp_e2e)
 
@@ -258,7 +304,7 @@ endforeach()
 # structure, checks that its numbers match the untiled version, and
 # reports timing.
 add_executable(test_tiling_e2e tests/codegen/test_tiling_e2e.cpp)
-target_include_directories(test_tiling_e2e PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
+target_include_directories(test_tiling_e2e SYSTEM PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
 target_link_libraries(test_tiling_e2e PRIVATE tensora_codegen MLIR MLIRExecutionEngineShared)
 target_compile_definitions(test_tiling_e2e PRIVATE MLIR_C_RUNNER_UTILS_PATH="${MLIR_C_RUNNER_UTILS_LIB}")
 add_test(NAME LOOP-002 COMMAND test_tiling_e2e)
@@ -267,7 +313,7 @@ add_test(NAME LOOP-002 COMMAND test_tiling_e2e)
 # (not a hand-built LivenessResult) drives TilingDecision's memory-
 # pressure branch for real, through the real lowering path.
 add_executable(test_liveness_tiling_e2e tests/codegen/test_liveness_tiling_e2e.cpp)
-target_include_directories(test_liveness_tiling_e2e PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
+target_include_directories(test_liveness_tiling_e2e SYSTEM PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
 target_link_libraries(test_liveness_tiling_e2e PRIVATE tensora_codegen MLIR MLIRExecutionEngineShared)
 add_test(NAME LOOP-005 COMMAND test_liveness_tiling_e2e)
 
@@ -307,7 +353,7 @@ add_test(NAME NATIVE-001 COMMAND test_mlp_native)
 # checked on its own through JIT execution, before the CNN and
 # attention end-to-end tests below combine them.
 add_executable(test_new_ops_e2e tests/codegen/test_new_ops_e2e.cpp)
-target_include_directories(test_new_ops_e2e PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
+target_include_directories(test_new_ops_e2e SYSTEM PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
 target_link_libraries(test_new_ops_e2e PRIVATE tensora_codegen MLIR MLIRExecutionEngineShared)
 target_compile_definitions(test_new_ops_e2e PRIVATE MLIR_C_RUNNER_UTILS_PATH="${MLIR_C_RUNNER_UTILS_LIB}")
 add_test(NAME LOW-NEWOPS COMMAND test_new_ops_e2e)
@@ -317,21 +363,21 @@ add_test(NAME LOW-NEWOPS COMMAND test_new_ops_e2e)
 # the language and the backend: semantic analysis accepted ranks that
 # MlirLowerer could not lower.
 add_executable(test_rank_e2e tests/codegen/test_rank_e2e.cpp)
-target_include_directories(test_rank_e2e PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
+target_include_directories(test_rank_e2e SYSTEM PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
 target_link_libraries(test_rank_e2e PRIVATE tensora_codegen MLIR MLIRExecutionEngineShared)
 target_compile_definitions(test_rank_e2e PRIVATE MLIR_C_RUNNER_UTILS_PATH="${MLIR_C_RUNNER_UTILS_LIB}")
 add_test(NAME RANK-E2E COMMAND test_rank_e2e)
 
 # E2E-002: CNN classifier (conv2d->relu->flatten->linear->softmax).
 add_executable(test_cnn_e2e tests/codegen/test_cnn_e2e.cpp)
-target_include_directories(test_cnn_e2e PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
+target_include_directories(test_cnn_e2e SYSTEM PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
 target_link_libraries(test_cnn_e2e PRIVATE tensora_codegen MLIR MLIRExecutionEngineShared)
 target_compile_definitions(test_cnn_e2e PRIVATE MLIR_C_RUNNER_UTILS_PATH="${MLIR_C_RUNNER_UTILS_LIB}")
 add_test(NAME E2E-002 COMMAND test_cnn_e2e)
 
 # E2E-004: single-head scaled dot-product attention.
 add_executable(test_attention_e2e tests/codegen/test_attention_e2e.cpp)
-target_include_directories(test_attention_e2e PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
+target_include_directories(test_attention_e2e SYSTEM PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
 target_link_libraries(test_attention_e2e PRIVATE tensora_codegen MLIR MLIRExecutionEngineShared)
 target_compile_definitions(test_attention_e2e PRIVATE MLIR_C_RUNNER_UTILS_PATH="${MLIR_C_RUNNER_UTILS_LIB}")
 add_test(NAME E2E-004 COMMAND test_attention_e2e)
@@ -339,7 +385,7 @@ add_test(NAME E2E-004 COMMAND test_attention_e2e)
 # E2E-003: Transformer FFN sublayer (linear->relu->linear at FFN
 # shapes). Reuses lowering already proven above. It adds no new ops.
 add_executable(test_ffn_e2e tests/codegen/test_ffn_e2e.cpp)
-target_include_directories(test_ffn_e2e PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
+target_include_directories(test_ffn_e2e SYSTEM PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
 target_link_libraries(test_ffn_e2e PRIVATE tensora_codegen MLIR MLIRExecutionEngineShared)
 add_test(NAME E2E-003 COMMAND test_ffn_e2e)
 
@@ -385,14 +431,53 @@ set_tests_properties(INT-FULL-SYMBOLIC-REJECT PROPERTIES WILL_FAIL TRUE)
 get_property(ALL_TEST_NAMES DIRECTORY PROPERTY TESTS)
 foreach(t ${ALL_TEST_NAMES})
   if(t MATCHES "^BND-")
-    set_tests_properties(${t} PROPERTIES LABELS boundary)
+    set(kind_label boundary)
   elseif(t MATCHES "^SMOKE")
-    set_tests_properties(${t} PROPERTIES LABELS smoke)
+    set(kind_label smoke)
   elseif(t MATCHES "^INT-")
-    set_tests_properties(${t} PROPERTIES LABELS integration)
-  elseif(t MATCHES "^(E2E-|LOW-|NATIVE-|LOOP-|LIVE-)")
-    set_tests_properties(${t} PROPERTIES LABELS integration)
+    set(kind_label integration)
+  elseif(t MATCHES "^(E2E-|LOW-|NATIVE-|LOOP-|LIVE-|RANK-)")
+    set(kind_label integration)
   else()
-    set_tests_properties(${t} PROPERTIES LABELS unit)
+    set(kind_label unit)
   endif()
+
+  # Compiler-phase label (`ctest -L <phase>`), so a phase can be tested
+  # in isolation the same way it can be built in isolation (the
+  # `lexer`/`parser`/`semantic`/`optimization`/`codegen` CMake targets
+  # below). Boundary-case IDs (BND-LEX-*, BND-MM-*, etc.) carry the
+  # same phase prefix rule as the unit-test IDs they extend.
+  if(t MATCHES "^(LEX-|BND-LEX-)")
+    set(phase_label lexer)
+  elseif(t MATCHES "^(PAR-|BND-PAR-)")
+    set(phase_label parser)
+  elseif(t MATCHES "^(SEM-|SYM-|ATT-|GR-|BND-MM-|BND-BC-|BND-RS-|BND-FL-|BND-CV-|BND-RD-|BND-TR-|BND-DIM-)")
+    set(phase_label semantic)
+  elseif(t MATCHES "^(OPT-|LIVE-)")
+    set(phase_label optimization)
+  elseif(t MATCHES "^(SMOKE|LOW-|LOOP-|NATIVE-|RANK-|E2E-|INT-)")
+    set(phase_label codegen)
+  else()
+    set(phase_label unknown)
+  endif()
+
+  set_tests_properties(${t} PROPERTIES LABELS "${kind_label};${phase_label}")
 endforeach()
+
+# Named per-phase build targets (docs/development/BUILD.md "Build one
+# phase at a time"). Each just depends on the executables that phase
+# actually needs, so `cmake --build build --target lexer` (etc.)
+# builds only that slice of the DAG instead of everything -- useful
+# when submitting or demoing one phase at a time.
+add_custom_target(lexer DEPENDS test_lexer)
+add_custom_target(parser DEPENDS test_parser)
+add_custom_target(semantic DEPENDS test_semantic test_graph)
+add_custom_target(optimization DEPENDS test_passes)
+# Named "backend", not "codegen": CMake reserves the target name
+# "codegen" for its own CODEGEN custom-command feature (CMP0171).
+add_custom_target(backend DEPENDS
+  smoke_mlir test_mlp_e2e test_tiling_decision test_tiling_e2e
+  test_liveness_tiling_e2e test_new_ops_e2e test_rank_e2e test_cnn_e2e
+  test_attention_e2e test_ffn_e2e test_mlp_native codegen_mlp_native
+  benchmark_matmul_tiling tensora)
+add_custom_target(full DEPENDS lexer parser semantic optimization backend)

@@ -9,25 +9,11 @@ the whole toolchain installs with one `apt` command. A Windows-native
 build fights the ANTLR and MLIR integration. Everyone develops and
 runs tests on this platform, so results stay reproducible.
 
-Toolchain install (one line):
-
-```bash
-sudo apt update && sudo apt install -y build-essential cmake default-jre
-```
-
-C++ has no single `requirements.txt`-equivalent manifest, because the
-dependencies span several ecosystems (OS packages, LLVM/MLIR, ANTLR).
-`docs/development/DEPENDENCIES.md` lists every one
-of them with its pinned version, and `./tools/check-deps.sh` checks a
-machine against that list -- run it any time to see what is present,
-what is missing, and the exact command to fix each gap, instead of
-re-running the one-liner above and hoping.
-
-**Work inside the WSL native filesystem**, not on a Windows/OneDrive
-path: clone or copy the repo to, for example, `~/tensora` (ext4), not
-`/mnt/c/...`. Building under `/mnt/c` is slow, and OneDrive sync fights
-the generated `build/` directory. Keep `build/` out of git and out of
-OneDrive.
+`docs/development/BUILD.md` has the toolchain install command and the
+actual build/test commands. `docs/development/DEPENDENCIES.md` lists
+every dependency (OS packages, LLVM/MLIR, ANTLR) with its pinned
+version, and `./tools/check-deps.sh` checks a machine against that
+list.
 
 ## 7.1 Language
 
@@ -90,14 +76,9 @@ and allows none — neither has any MLIR/LLVM dependency
 
 ## 7.4 Build
 
-CMake with reproducible configure/build/test commands. A from-scratch
-clone builds and passes the full suite with:
-
-```bash
-cmake -S . -B build
-cmake --build build -j4
-ctest --test-dir build
-```
+CMake, with reproducible configure/build/test commands and one target
+per compiler phase -- see `docs/development/BUILD.md` for the actual
+commands, including how to build or test one phase at a time.
 
 `ctest` currently reports **all tests passing, none failing**, across
 every phase: lexer, parser, semantic analysis, boundary and negative
@@ -122,7 +103,7 @@ to fix, not something to silence.
 
 ## 7.6 Repository
 
-The actual current tree (verified, not aspirational):
+The actual current tree:
 
 ```text
 tensora/

@@ -7,5 +7,7 @@ build/
 *.obj
 *.swp
 .DS_Store
+__pycache__/
+*.pyc
 CLAUDE.md
 docs/claude/*

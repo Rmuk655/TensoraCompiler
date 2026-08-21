@@ -1,12 +1,21 @@
 # Convenience wrapper around CMake. CMake is the authoritative build system;
 # these targets just save typing. Run on WSL2 + Ubuntu (see docs/development).
 BUILD ?= build
+# Parallel build jobs. The vendored ANTLR4 C++ runtime alone is ~100
+# independent .cpp files; building it (or anything else here) with the
+# implicit default of one job at a time wastes every idle core on a
+# multi-core machine. Override with `make build JOBS=1` if needed.
+JOBS ?= $(shell nproc 2>/dev/null || echo 4)
 
-.PHONY: build test example clean
+.PHONY: build test example clean appendix \
+        lexer parser semantic optimization codegen full \
+        test-lexer test-parser test-semantic test-optimization test-codegen
 
-build:
+configure:
 	cmake -S . -B $(BUILD)
-	cmake --build $(BUILD)
+
+build: configure
+	cmake --build $(BUILD) -j$(JOBS)
 
 test: build
 	ctest --test-dir $(BUILD) --output-on-failure
@@ -16,3 +25,51 @@ example: build
 
 clean:
 	rm -rf $(BUILD)
+
+# Regenerate docs/development/10_APPENDIX_SOURCE_LISTING.md from the
+# current source tree (docs/development/10_APPENDIX_SOURCE_LISTING.md
+# §10.10). A doc-maintenance step, run by hand after a source change --
+# not part of `build`/`test`, since it edits a committed file and
+# should not fire on every build.
+appendix:
+	./tools/regen_appendix.py
+
+# Build one compiler phase at a time (docs/development/BUILD.md "Build
+# one phase at a time"). Each depends only on the CMake targets that
+# phase actually needs, so this does not build the whole compiler.
+# "codegen" here means the MLIR/LLVM backend phase; the underlying
+# CMake target is named `backend` because CMake reserves the name
+# "codegen" for its own CODEGEN custom-command feature.
+lexer: configure
+	cmake --build $(BUILD) --target lexer -j$(JOBS)
+
+parser: configure
+	cmake --build $(BUILD) --target parser -j$(JOBS)
+
+semantic: configure
+	cmake --build $(BUILD) --target semantic -j$(JOBS)
+
+optimization: configure
+	cmake --build $(BUILD) --target optimization -j$(JOBS)
+
+codegen: configure
+	cmake --build $(BUILD) --target backend -j$(JOBS)
+
+full: configure
+	cmake --build $(BUILD) --target full -j$(JOBS)
+
+# Build, then run, only that phase's tests (`ctest -L <phase>`).
+test-lexer: lexer
+	ctest --test-dir $(BUILD) --output-on-failure -L lexer
+
+test-parser: parser
+	ctest --test-dir $(BUILD) --output-on-failure -L parser
+
+test-semantic: semantic
+	ctest --test-dir $(BUILD) --output-on-failure -L semantic
+
+test-optimization: optimization
+	ctest --test-dir $(BUILD) --output-on-failure -L optimization
+
+test-codegen: codegen
+	ctest --test-dir $(BUILD) --output-on-failure -L codegen
