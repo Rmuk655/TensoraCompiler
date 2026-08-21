@@ -1,0 +1,20 @@
+# Single-head scaled dot-product attention (matmul -> transpose -> scale
+# -> softmax -> matmul), matching tests/codegen/test_attention_e2e.cpp's
+# shapes. This is a rank-2 (no batch/head axes) demonstration: the
+# backend's matmul lowering is rank-2 only for now (batched matmul is a
+# known limitation -- see docs/testing/TEST_MATRIX.md), so a compiled
+# multi-head version (as shown in docs/language/02_LANGUAGE_TUTORIAL.md
+# Section 2.11) is not runnable through this driver yet, even though it
+# type-checks under semantic analysis.
+input q: Tensor[seq_q=2, d_k=2]
+input k: Tensor[seq_k=2, d_k=2]
+input v: Tensor[seq_k=2, d_v=2]
+
+graph attention {
+    kt      = transpose(k, perm=[1, 0])
+    scores  = q @ kt
+    scaled  = scores * 0.70710678
+    weights = softmax(scaled, axis=seq_k)
+    out     = weights @ v
+    return out
+}

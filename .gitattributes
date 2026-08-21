@@ -1,0 +1,3 @@
+# Normalize line endings to LF so files authored on Windows build cleanly
+# on WSL2/Ubuntu (shell scripts and generated code in particular).
+* text=auto eol=lf

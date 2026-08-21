@@ -1,0 +1,10 @@
+# A large matmul (256x256x256, above MatmulTilingPass's default 128
+# threshold) -- used to demo the Level-2 loop-tiling pass through the
+# real compiler, not just its dedicated unit tests.
+input a: Tensor[m=256, k=256]
+input b: Tensor[k=256, n=256]
+
+graph matmul_large {
+    c = a @ b
+    return c
+}

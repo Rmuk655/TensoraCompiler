@@ -1,0 +1,21 @@
+# A small CNN classifier (conv2d -> relu -> flatten -> linear ->
+# softmax), matching tests/codegen/test_cnn_e2e.cpp's shapes so the
+# hand-computed reference there (class-1 probability = 0.539902 with a
+# specific 1..16 input) can be cross-checked; --run instead uses
+# synthetic all-ones data, so its printed value will differ from that
+# reference (it exercises the full source-to-execution pipeline, not
+# this exact numeric case).
+input  x:     Tensor[n=1, c=1, h=4, w=4]
+weight convW: Tensor[oc=1, ic=1, kh=2, kw=2]
+weight convB: Tensor[oc=1]
+weight fcW:   Tensor[flat=4, classes=2]
+weight fcB:   Tensor[classes=2]
+
+graph cnn {
+    conv   = conv2d(x, convW, convB, stride=2, padding=0)
+    relu1  = relu(conv)
+    flat   = flatten(relu1)
+    logits = linear(flat, fcW, fcB)
+    probs  = softmax(logits, axis=classes)
+    return probs
+}
