@@ -400,7 +400,7 @@ std::pair<ValueId, const Type*> SemanticAnalyzer::analyzeCall(GraphCtx& gc, cons
 
 TypedGraph SemanticAnalyzer::analyzeGraph(const ast::GraphDecl& g) {
   symbols_.enterGraph();
-  GraphCtx gc{GraphBuilder(g.name), DimSolver(), {}, {}};
+  GraphCtx gc{GraphBuilder(g.name), DimSolver(), {}, {}, {}, {}};
   const size_t diagsBeforeGraph = diags_.all().size();
 
   for (const ast::Stmt& stmt : g.stmts) {

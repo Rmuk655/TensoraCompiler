@@ -103,13 +103,14 @@ intermittent-failure lesson that motivated this.
 
 ## 7.5 Warnings
 
-At minimum:
-
-``` text
--Wall -Wextra
-```
-
-Treat additional warnings as errors in CI where practical.
+`CMakeLists.txt` sets `-Wall -Wextra` for every project-owned target
+(placed right after the ANTLR `FetchContent`/generate setup, so it does
+not apply to the vendored ANTLR runtime). This is enforced by the build
+itself, not just recommended here. A from-scratch build currently
+compiles with zero warnings from project code (MLIR/LLVM system headers
+are included with `SYSTEM PRIVATE`, so their own warnings do not show up
+in project targets' output either). Treat new warnings as errors in CI
+where practical.
 
 ## 7.6 Repository
 
@@ -137,40 +138,206 @@ tensora/
 │   ├── lexer/  parser/  semantic/  optimization/  codegen/  smoke/  support/
 ├── tools/
 │   ├── codegen_mlp_native.cpp      ahead-of-time object-file codegen tool (not the JIT path)
-│   └── benchmark_matmul_tiling.cpp measured tile-size timing (untiled/16/32/64), not a CTest case
+│   ├── benchmark_matmul_tiling.cpp measured tile-size timing (untiled/16/32/64), not a CTest case
+│   └── setup-dev.sh                one-time developer bootstrap (installs the pre-commit hook)
 ├── examples/
 │   └── mlp.tns, mlp_concrete.tns, cnn.tns, attention.tns, matmul_large.tns
 ├── docs/
+├── .github/workflows/ci.yml  pull-request CI (build, test, format/lint)
+├── .clang-format / .prettierrc.json / .markdownlint.json  format/lint configs
+├── .pre-commit-config.yaml   what tools/setup-dev.sh registers as the git hook
 └── CMakeLists.txt
 ```
 
-`benchmarks/` and `scripts/` directories do not exist. The one real
-benchmark tool (`tools/benchmark_matmul_tiling.cpp`) lives under
-`tools/`, is built by the normal CMake build, and is run directly
+The one benchmark tool (`tools/benchmark_matmul_tiling.cpp`) is built
+by the normal CMake build and is run directly
 (`build/benchmark_matmul_tiling`), not through CTest -- see
 `docs/testing/TEST_MATRIX.md`'s "Measured tile-size evidence" section
-for what it actually measured on the development machine. This
-repository is not under git version control for this submission
-(`git rev-parse HEAD` fails with "not a git repository"). See
-`docs/development/10_APPENDIX_SOURCE_LISTING.md` for how the team
-generated the source appendix without a commit hash to anchor it to.
+for what it actually measured on the development machine.
 
-## 7.7 CI
+This repository is under git version control, hosted at
+[github.com/Rmuk655/TensoraCompiler](https://github.com/Rmuk655/TensoraCompiler)
+(`origin`, branch `main`). `docs/development/10_APPENDIX_SOURCE_LISTING.md`
+records the commit the appendix was generated against.
 
-CI should build, run unit tests, semantic regression tests, lowering
-tests, and end-to-end smoke tests.
+## 7.7 Developer Git Workflow
 
-## 7.8 Formatting and Static Analysis
+`main` is the stable, tested, integrated branch. No one commits to it
+directly. Every change goes through a personal branch and a pull
+request. Assume the repository is already cloned and `main` is checked
+out.
 
-Use `clang-format`; optionally use `clang-tidy` with a documented
-configuration.
+**1. First-time setup for a new piece of work.**
 
-## 7.9 Debugging
+```bash
+cd ~/Tensora
+git fetch origin
+git checkout main
+git pull origin main
 
-Support debug builds with assertions and symbols. MLIR dumps should be
-available behind compiler flags.
+# Create a personal development branch, e.g.:
+#   <username>/semantic-analysis, <username>/parser, <username>/mlir-lowering
+git checkout -b <username>/my-feature
+git push -u origin <username>/my-feature
+```
 
-## 7.10 Benchmarking
+**2. While developing**, commit to the personal branch, never to `main`
+directly:
+
+```bash
+git status
+git add .
+git commit -m "Add semantic validation for reshape"
+git push
+```
+
+**3. Regularly bring `main` into the branch**, so it does not drift far
+before the PR:
+
+```bash
+git fetch origin
+git checkout <username>/my-feature
+git merge origin/main
+```
+
+Resolve any conflicts in the affected files, then `git add .`,
+`git commit`, `git push`.
+
+**4. Before declaring the branch integration-ready**, merge `main` in
+one more time, then build and run the full suite locally:
+
+```bash
+git fetch origin
+git checkout <username>/my-feature
+git merge origin/main
+
+cmake --build build -j4
+ctest --test-dir build
+```
+
+Also confirm: new tests exist for the change, existing regression
+tests pass, area-specific tests pass, and the designated
+tester/reviewer has tested and signed off. Commit any final changes
+and push.
+
+**5. Raise the pull request** (`<username>/my-feature` -> `main`) on
+GitHub. Merge only after review/testing and the required CI checks
+(§7.8) pass.
+
+**6. After the PR merges**, update local `main` and branch again from
+the new tip for the next piece of work -- do not keep committing to
+the now-merged branch:
+
+```bash
+git checkout main
+git pull origin main
+git checkout -b <username>/next-feature
+git push -u origin <username>/next-feature
+```
+
+The rule this workflow enforces:
+
+```text
+main                       = stable, tested, integrated code
+<username>/<feature>       = work in progress
+origin/main -> personal branch   = do this often
+personal branch -> main          = only through an integration-ready PR
+```
+
+## 7.8 Continuous Integration (CI)
+
+`.github/workflows/ci.yml` runs on every pull request to `main` (not
+every push -- see §7.9 for why), using only GitHub-hosted runners (free
+for a public repository; see the GitHub Actions pricing page for
+private-repository minute quotas). Two jobs:
+
+- **Format and lint check**: `clang-format --dry-run --Werror` over
+  every `.cpp`/`.h` file, plus `prettier --check` and `markdownlint`
+  over every `.md` file.
+- **Build and run the full test suite**: installs the toolchain
+  (`build-essential`, `cmake`, `default-jre`, LLVM/MLIR 21 via
+  `apt.llvm.org`'s install script -- not assumed already present on the
+  runner), then `cmake -S . -B build`, `cmake --build build`, `ctest`.
+
+`./tools/setup-dev.sh`'s pre-commit hook (§7.9) is the primary,
+day-to-day mechanism and catches almost everything before a commit
+even happens, for free. This workflow is the final independent check
+before a merge (§7.7 step 5): a PR with a formatting or test
+regression fails CI, regardless of whether the author ran the hook at
+all -- but it is not the first line of defense for a small team
+watching Actions minutes.
+
+## 7.9 Formatting and Static Analysis
+
+Formatting rules are defined by committed config files, but a config
+file does not format anything by itself -- something has to invoke the
+tool. This project uses three layers. For a small team, the first
+layer below is the primary, day-to-day mechanism (it costs no CI
+minutes and catches almost everything before a commit even happens);
+CI is the final independent check before a merge, not the first line
+of defense:
+
+1. **`pre-commit` hook (primary mechanism, local, skippable).** Run
+   once per clone, right after cloning:
+   ```bash
+   ./tools/setup-dev.sh
+   ```
+   This installs `pre-commit` and registers it as this clone's actual
+   git hook. From then on, a normal `git add` / `git commit` runs
+   `clang-format` on C/C++ and Prettier + `markdownlint` on Markdown
+   automatically, with no extra command to remember. `git clone` alone
+   cannot do this step itself -- letting a clone auto-run code would
+   let any repository execute arbitrary commands on a developer's
+   machine just by being cloned, so this one explicit bootstrap step
+   is required. This layer is cooperative, not guaranteed: it can be
+   skipped with `git commit --no-verify`, or never installed at all if
+   a developer skips `./tools/setup-dev.sh`.
+2. **Editor integration (optional, per developer).** Any editor that
+   supports `clang-format`/Prettier can additionally format on save
+   using the same committed configs. Not required, and not assumed --
+   nothing in the repository depends on a specific editor.
+3. **CI (§7.8, the final independent check).** Runs on every pull
+   request to `main` (not every push, to conserve Actions minutes for
+   a small team) and blocks the merge on failure, independent of
+   whether any developer ran `./tools/setup-dev.sh` at all.
+
+Configs: `.clang-format` (`BasedOnStyle: Google`, 2-space indent, a
+120-column limit, matching the style already used throughout `src/`
+and `include/tensora/`), `.prettierrc.json` (`proseWrap: preserve`, so
+Prettier does not rewrap this project's already hand-wrapped prose),
+and `.markdownlint.json` (default ruleset, with the line-length,
+inline-HTML, and first-line-heading rules turned off -- they conflict
+with this project's existing wide tables and note/blockquote-first
+files, not with genuine problems). Vale (English prose style, the
+`clang-tidy` analog for Markdown) is documented as an option in
+`.pre-commit-config.yaml` but is not enabled yet -- it needs a house
+style pack this repository does not have configured. `clang-tidy` is
+likewise optional and not set up yet.
+
+Neither the format/lint configs nor the CI workflow above have been
+run against this codebase's actual current formatting as of writing
+this section -- the tools were not available in the environment that
+authored these configs. Expect the first real CI run to surface
+pre-existing formatting to fix, which is normal first-adoption work,
+not a sign the configuration is wrong.
+
+## 7.10 Debugging
+
+A debug build (`cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug`) adds `-g`
+and does not define `NDEBUG`, so any `assert()` and debug symbols work
+through ordinary CMake, with no project-specific setup needed (this is
+generic CMake behavior, not something the project configures itself).
+
+Tensora's own intermediate representations already have dedicated dump
+flags on the `tensora` CLI, always available, not hidden behind a
+build-time flag: `--emit-tokens`, `--emit-ast`/`--emit-ast-dot`,
+`--emit-symbols`, `--emit-graph`/`--emit-graph-dot`, `--explain`,
+`--emit-optimized-graph`, `--emit-mlir`, `--emit-llvm` (see
+`docs/language/02_LANGUAGE_TUTORIAL.md` §2.12). MLIR's own per-pass IR
+printing (`mlir::PassManager::enableIRPrinting`) is not wired into the
+driver -- that is future work, not a currently available flag.
+
+## 7.11 Benchmarking
 
 `tools/benchmark_matmul_tiling.cpp` measures real wall-clock time for a
 1024x1024x1024 matmul, untiled and at three candidate tile sizes
@@ -183,12 +350,12 @@ future work. See `docs/testing/TEST_MATRIX.md`'s "Measured tile-size
 evidence" section for the actual numbers this tool produced on the
 development machine.
 
-## 7.11 Reproducibility
+## 7.12 Reproducibility
 
 A fresh machine should be able to follow `docs/development/BUILD.md`
 and reproduce the examples.
 
-## 7.12 Open-Source Hygiene
+## 7.13 Open-Source Hygiene
 
 Before public release include:
 

@@ -1,0 +1,15 @@
+---
+# Matches the style already used throughout src/ and include/tensora/:
+# 2-space indent, a 120-column limit (see docs/development/
+# 07_DEVELOPMENT_ENVIRONMENT.md §7.8), and Google's brace/pointer-
+# alignment conventions. Run `clang-format -i <file>` before committing
+# new or changed C++ files.
+BasedOnStyle: Google
+ColumnLimit: 120
+IndentWidth: 2
+AccessModifierOffset: -1
+AlignAfterOpenBracket: Align
+AllowShortIfStatementsOnASingleLine: false
+DerivePointerAlignment: false
+PointerAlignment: Left
+SortIncludes: false

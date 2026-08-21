@@ -1,0 +1,76 @@
+name: CI
+
+# This is the final, independent check before merging (docs/
+# development/07_DEVELOPMENT_ENVIRONMENT.md §7.8): the pre-commit hook
+# (.pre-commit-config.yaml, installed by tools/setup-dev.sh) is the
+# primary day-to-day mechanism and catches almost everything locally,
+# for free, on every commit. That is cooperative, not guaranteed
+# enforcement -- `git commit --no-verify` skips it, and a clone that
+# never ran the setup script never has it at all. This workflow re-runs
+# the same format/lint checks plus the real build and test suite, and
+# blocks a PR if any step fails.
+#
+# Deliberately pull_request-only, not on every push: with pre-commit
+# already catching most problems locally, running the full toolchain
+# build on every single push (including work-in-progress branches with
+# no PR yet) would burn Actions minutes for little extra benefit for a
+# small team. This still runs before every merge to main, which is the
+# point that actually matters.
+#
+# Both jobs use only GitHub-hosted runners, which are free for public
+# repositories (see the free-tier note in the same doc section) -- no
+# self-hosted runner or paid minutes are required to run this workflow
+# on a public repo.
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    name: Format and lint check
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: clang-format check (C/C++)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-format
+          files=$(find src include tests tools -name '*.cpp' -o -name '*.h')
+          clang-format --dry-run --Werror $files
+
+      - name: Markdown format check (Prettier)
+        run: |
+          npx --yes prettier@3.3.3 --check "**/*.md"
+
+      - name: Markdown lint (markdownlint)
+        run: |
+          npx --yes markdownlint-cli@0.42.0 --config .markdownlint.json "**/*.md"
+
+  build-and-test:
+    name: Build and run the full test suite
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install base toolchain (Java, CMake, build tools)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake default-jre
+
+      - name: Install LLVM/MLIR 21 (docs/development/INTEG_DECISIONS.md INTEG-003)
+        run: |
+          wget https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 21
+          sudo apt-get install -y libmlir-21-dev mlir-21-tools
+
+      - name: Configure
+        run: cmake -S . -B build
+
+      - name: Build
+        run: cmake --build build -j$(nproc)
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
