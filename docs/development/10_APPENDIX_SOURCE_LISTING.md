@@ -60,7 +60,9 @@ tensora/src/shared/DimSolver.cpp
 tensora/src/shared/Ir.cpp
 tensora/src/shared/Type.cpp
 tensora/tools/benchmark_matmul_tiling.cpp
+tensora/tools/check-deps.sh
 tensora/tools/codegen_mlp_native.cpp
+tensora/tools/regen_appendix.py
 tensora/tools/setup-dev.sh
 ```
 
@@ -6399,12 +6401,28 @@ graph attention {
 ```
 
 ### `CMakeLists.txt`
-```text
+```cmake
 cmake_minimum_required(VERSION 3.16)
+
+# NEW: re-extract FetchContent URL downloads' timestamps at extraction
+# time instead of preserving the archive's own timestamps, so a change
+# to a pinned URL's content is always seen as a change. Set before
+# `project()` per the policy's own documented scope.
+if(POLICY CMP0135)
+  cmake_policy(SET CMP0135 NEW)
+endif()
+
 project(tensora CXX C)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# Give the vendored ANTLR4 runtime's own CMakeLists a build type so it
+# does not warn and fall back to Release itself; Release is also this
+# project's own default when none is requested on the command line.
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+endif()
 
 # Frontend generator: ANTLR4. The build fetches both the generator tool (a
 # jar, run through a system `java`) and the C++ runtime it needs. This
@@ -6433,6 +6451,19 @@ set(ANTLR_BUILD_SHARED OFF CACHE BOOL "" FORCE)
 FetchContent_Declare(antlr4_runtime
   URL https://www.antlr.org/download/antlr4-cpp-runtime-${ANTLR4_VERSION}-source.zip)
 FetchContent_MakeAvailable(antlr4_runtime)
+
+# antlr4_static's own CMakeLists exports its headers as normal (not
+# SYSTEM) INTERFACE_INCLUDE_DIRECTORIES, so every consumer that links
+# it -- including tensora_lexer/tensora_parser below -- was compiling vendored
+# headers such as RuleContext.h/ParseTree.h as if they were our own
+# code, surfacing -Woverloaded-virtual/-Wunused-parameter warnings from
+# a project we do not own. Re-declaring the same paths as
+# INTERFACE_SYSTEM_INCLUDE_DIRECTORIES (a target property CMake reads
+# specifically for this situation) fixes that without patching the
+# vendored CMakeLists itself.
+set_property(TARGET antlr4_static PROPERTY
+  INTERFACE_SYSTEM_INCLUDE_DIRECTORIES
+  "$<TARGET_PROPERTY:antlr4_static,INTERFACE_INCLUDE_DIRECTORIES>")
 
 # Generate TensoraLexer/TensoraParser (and a visitor base) from
 # grammar/Tensora.g4 into the build tree. Generated code is never
@@ -6463,26 +6494,43 @@ include_directories(${CMAKE_SOURCE_DIR}/include)
 # this CMakeLists.txt defines below.
 add_compile_options(-Wall -Wextra)
 
-# Frontend library: hand-written C++ (Lexer/Parser adapters, the
-# AstBuilder that walks ANTLR's parse tree, and the parser error
-# listener) plus the generated ANTLR lexer/parser.
-add_library(tensora_frontend
+# Lexer library: the project's own Lexer/Token wrapper (used by the
+# standalone lexer demo/tests only -- Parser.cpp below drives the
+# generated ANTLR lexer directly, per Parser.h's own comment) plus the
+# generated ANTLR lexer. Kept as its own target, separate from
+# tensora_parser below, so `cmake --build build --target lexer` (docs/
+# development/BUILD.md) does not also compile any parser-only source.
+add_library(tensora_lexer
   src/lexer/Lexer.cpp
   src/lexer/TokenAdapter.cpp
-  src/parser/Parser.cpp
-  src/parser/AstBuilder.cpp
-  src/parser/ParserErrorListener.cpp
-  src/parser/ParserErrorStrategy.cpp
-  ${ANTLR4_GENERATED_SRCS})
-add_dependencies(tensora_frontend antlr4_generate)
-target_include_directories(tensora_frontend PUBLIC ${CMAKE_SOURCE_DIR}/include)
-target_include_directories(tensora_frontend PRIVATE ${ANTLR4_GEN_DIR})
-target_link_libraries(tensora_frontend PUBLIC antlr4_static)
+  ${ANTLR4_GEN_DIR}/TensoraLexer.cpp)
+add_dependencies(tensora_lexer antlr4_generate)
+target_include_directories(tensora_lexer PUBLIC ${CMAKE_SOURCE_DIR}/include)
+target_include_directories(tensora_lexer PRIVATE ${ANTLR4_GEN_DIR})
+target_link_libraries(tensora_lexer PUBLIC antlr4_static)
 # The generated headers include <antlr4-runtime.h>. So every consumer of
 # the generated code (this library, and anything that links against it)
 # needs the runtime's public include dir. The PUBLIC link to
 # antlr4_static already carries that dir, through its own
 # INTERFACE_INCLUDE_DIRECTORIES.
+
+# Parser library: AstBuilder (walks ANTLR's parse tree into the AST),
+# the parser error listener/strategy, and the generated ANTLR parser.
+# Parser.cpp instantiates the generated ANTLR lexer itself (Parser.h's
+# own comment: no project Token vector sits between the two here), and
+# calls TokenAdapter's adaptToken() for its one diagnostic path -- both
+# reasons this links tensora_lexer, which is otherwise correct anyway:
+# a parser always needs a lexer.
+add_library(tensora_parser
+  src/parser/Parser.cpp
+  src/parser/AstBuilder.cpp
+  src/parser/ParserErrorListener.cpp
+  src/parser/ParserErrorStrategy.cpp
+  ${ANTLR4_GEN_DIR}/TensoraParser.cpp)
+add_dependencies(tensora_parser antlr4_generate)
+target_include_directories(tensora_parser PUBLIC ${CMAKE_SOURCE_DIR}/include)
+target_include_directories(tensora_parser PRIVATE ${ANTLR4_GEN_DIR})
+target_link_libraries(tensora_parser PUBLIC tensora_lexer)
 
 # Semantic analysis phase. shared/{Type,DimSolver,Ir}.cpp holds the
 # types and the Typed Computation Graph (used by more than one phase).
@@ -6497,7 +6545,7 @@ add_library(tensora_semantic
   src/semantic/Contracts.cpp
   src/semantic/SemanticAnalyzer.cpp)
 target_include_directories(tensora_semantic PUBLIC ${CMAKE_SOURCE_DIR}/include)
-target_link_libraries(tensora_semantic PUBLIC tensora_frontend)
+target_link_libraries(tensora_semantic PUBLIC tensora_parser)
 
 # Optimization phase (RM 3.21): the Level-1 graph passes, plus the
 # tensor-liveness analysis. Plain C++ over the TCG. No MLIR/LLVM
@@ -6552,11 +6600,11 @@ target_compile_definitions(tensora PRIVATE MLIR_C_RUNNER_UTILS_PATH="${MLIR_C_RU
 enable_testing()
 
 add_executable(test_lexer tests/lexer/test_lexer.cpp)
-target_link_libraries(test_lexer PRIVATE tensora_frontend)
+target_link_libraries(test_lexer PRIVATE tensora_lexer)
 target_include_directories(test_lexer PRIVATE ${CMAKE_SOURCE_DIR}/tests)
 
 add_executable(test_parser tests/parser/test_parser.cpp)
-target_link_libraries(test_parser PRIVATE tensora_frontend)
+target_link_libraries(test_parser PRIVATE tensora_parser)
 target_include_directories(test_parser PRIVATE ${CMAKE_SOURCE_DIR}/tests)
 
 add_executable(test_semantic tests/semantic/test_semantic.cpp)
@@ -6644,7 +6692,7 @@ add_test(NAME SMOKE-MLIR COMMAND smoke_mlir)
 # gives the right numbers, through real JIT execution (not just a
 # golden-MLIR-text check).
 add_executable(test_mlp_e2e tests/codegen/test_mlp_e2e.cpp)
-target_include_directories(test_mlp_e2e PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
+target_include_directories(test_mlp_e2e SYSTEM PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
 target_link_libraries(test_mlp_e2e PRIVATE tensora_codegen MLIR MLIRExecutionEngineShared)
 add_test(NAME LOW-E2E-MLP COMMAND test_mlp_e2e)
 
@@ -6660,7 +6708,7 @@ endforeach()
 # structure, checks that its numbers match the untiled version, and
 # reports timing.
 add_executable(test_tiling_e2e tests/codegen/test_tiling_e2e.cpp)
-target_include_directories(test_tiling_e2e PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
+target_include_directories(test_tiling_e2e SYSTEM PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
 target_link_libraries(test_tiling_e2e PRIVATE tensora_codegen MLIR MLIRExecutionEngineShared)
 target_compile_definitions(test_tiling_e2e PRIVATE MLIR_C_RUNNER_UTILS_PATH="${MLIR_C_RUNNER_UTILS_LIB}")
 add_test(NAME LOOP-002 COMMAND test_tiling_e2e)
@@ -6669,7 +6717,7 @@ add_test(NAME LOOP-002 COMMAND test_tiling_e2e)
 # (not a hand-built LivenessResult) drives TilingDecision's memory-
 # pressure branch for real, through the real lowering path.
 add_executable(test_liveness_tiling_e2e tests/codegen/test_liveness_tiling_e2e.cpp)
-target_include_directories(test_liveness_tiling_e2e PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
+target_include_directories(test_liveness_tiling_e2e SYSTEM PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
 target_link_libraries(test_liveness_tiling_e2e PRIVATE tensora_codegen MLIR MLIRExecutionEngineShared)
 add_test(NAME LOOP-005 COMMAND test_liveness_tiling_e2e)
 
@@ -6709,7 +6757,7 @@ add_test(NAME NATIVE-001 COMMAND test_mlp_native)
 # checked on its own through JIT execution, before the CNN and
 # attention end-to-end tests below combine them.
 add_executable(test_new_ops_e2e tests/codegen/test_new_ops_e2e.cpp)
-target_include_directories(test_new_ops_e2e PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
+target_include_directories(test_new_ops_e2e SYSTEM PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
 target_link_libraries(test_new_ops_e2e PRIVATE tensora_codegen MLIR MLIRExecutionEngineShared)
 target_compile_definitions(test_new_ops_e2e PRIVATE MLIR_C_RUNNER_UTILS_PATH="${MLIR_C_RUNNER_UTILS_LIB}")
 add_test(NAME LOW-NEWOPS COMMAND test_new_ops_e2e)
@@ -6719,21 +6767,21 @@ add_test(NAME LOW-NEWOPS COMMAND test_new_ops_e2e)
 # the language and the backend: semantic analysis accepted ranks that
 # MlirLowerer could not lower.
 add_executable(test_rank_e2e tests/codegen/test_rank_e2e.cpp)
-target_include_directories(test_rank_e2e PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
+target_include_directories(test_rank_e2e SYSTEM PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
 target_link_libraries(test_rank_e2e PRIVATE tensora_codegen MLIR MLIRExecutionEngineShared)
 target_compile_definitions(test_rank_e2e PRIVATE MLIR_C_RUNNER_UTILS_PATH="${MLIR_C_RUNNER_UTILS_LIB}")
 add_test(NAME RANK-E2E COMMAND test_rank_e2e)
 
 # E2E-002: CNN classifier (conv2d->relu->flatten->linear->softmax).
 add_executable(test_cnn_e2e tests/codegen/test_cnn_e2e.cpp)
-target_include_directories(test_cnn_e2e PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
+target_include_directories(test_cnn_e2e SYSTEM PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
 target_link_libraries(test_cnn_e2e PRIVATE tensora_codegen MLIR MLIRExecutionEngineShared)
 target_compile_definitions(test_cnn_e2e PRIVATE MLIR_C_RUNNER_UTILS_PATH="${MLIR_C_RUNNER_UTILS_LIB}")
 add_test(NAME E2E-002 COMMAND test_cnn_e2e)
 
 # E2E-004: single-head scaled dot-product attention.
 add_executable(test_attention_e2e tests/codegen/test_attention_e2e.cpp)
-target_include_directories(test_attention_e2e PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
+target_include_directories(test_attention_e2e SYSTEM PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
 target_link_libraries(test_attention_e2e PRIVATE tensora_codegen MLIR MLIRExecutionEngineShared)
 target_compile_definitions(test_attention_e2e PRIVATE MLIR_C_RUNNER_UTILS_PATH="${MLIR_C_RUNNER_UTILS_LIB}")
 add_test(NAME E2E-004 COMMAND test_attention_e2e)
@@ -6741,7 +6789,7 @@ add_test(NAME E2E-004 COMMAND test_attention_e2e)
 # E2E-003: Transformer FFN sublayer (linear->relu->linear at FFN
 # shapes). Reuses lowering already proven above. It adds no new ops.
 add_executable(test_ffn_e2e tests/codegen/test_ffn_e2e.cpp)
-target_include_directories(test_ffn_e2e PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
+target_include_directories(test_ffn_e2e SYSTEM PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
 target_link_libraries(test_ffn_e2e PRIVATE tensora_codegen MLIR MLIRExecutionEngineShared)
 add_test(NAME E2E-003 COMMAND test_ffn_e2e)
 
@@ -6787,17 +6835,56 @@ set_tests_properties(INT-FULL-SYMBOLIC-REJECT PROPERTIES WILL_FAIL TRUE)
 get_property(ALL_TEST_NAMES DIRECTORY PROPERTY TESTS)
 foreach(t ${ALL_TEST_NAMES})
   if(t MATCHES "^BND-")
-    set_tests_properties(${t} PROPERTIES LABELS boundary)
+    set(kind_label boundary)
   elseif(t MATCHES "^SMOKE")
-    set_tests_properties(${t} PROPERTIES LABELS smoke)
+    set(kind_label smoke)
   elseif(t MATCHES "^INT-")
-    set_tests_properties(${t} PROPERTIES LABELS integration)
-  elseif(t MATCHES "^(E2E-|LOW-|NATIVE-|LOOP-|LIVE-)")
-    set_tests_properties(${t} PROPERTIES LABELS integration)
+    set(kind_label integration)
+  elseif(t MATCHES "^(E2E-|LOW-|NATIVE-|LOOP-|LIVE-|RANK-)")
+    set(kind_label integration)
   else()
-    set_tests_properties(${t} PROPERTIES LABELS unit)
+    set(kind_label unit)
   endif()
+
+  # Compiler-phase label (`ctest -L <phase>`), so a phase can be tested
+  # in isolation the same way it can be built in isolation (the
+  # `lexer`/`parser`/`semantic`/`optimization`/`codegen` CMake targets
+  # below). Boundary-case IDs (BND-LEX-*, BND-MM-*, etc.) carry the
+  # same phase prefix rule as the unit-test IDs they extend.
+  if(t MATCHES "^(LEX-|BND-LEX-)")
+    set(phase_label lexer)
+  elseif(t MATCHES "^(PAR-|BND-PAR-)")
+    set(phase_label parser)
+  elseif(t MATCHES "^(SEM-|SYM-|ATT-|GR-|BND-MM-|BND-BC-|BND-RS-|BND-FL-|BND-CV-|BND-RD-|BND-TR-|BND-DIM-)")
+    set(phase_label semantic)
+  elseif(t MATCHES "^(OPT-|LIVE-)")
+    set(phase_label optimization)
+  elseif(t MATCHES "^(SMOKE|LOW-|LOOP-|NATIVE-|RANK-|E2E-|INT-)")
+    set(phase_label codegen)
+  else()
+    set(phase_label unknown)
+  endif()
+
+  set_tests_properties(${t} PROPERTIES LABELS "${kind_label};${phase_label}")
 endforeach()
+
+# Named per-phase build targets (docs/development/BUILD.md "Build one
+# phase at a time"). Each just depends on the executables that phase
+# actually needs, so `cmake --build build --target lexer` (etc.)
+# builds only that slice of the DAG instead of everything -- useful
+# when submitting or demoing one phase at a time.
+add_custom_target(lexer DEPENDS test_lexer)
+add_custom_target(parser DEPENDS test_parser)
+add_custom_target(semantic DEPENDS test_semantic test_graph)
+add_custom_target(optimization DEPENDS test_passes)
+# Named "backend", not "codegen": CMake reserves the target name
+# "codegen" for its own CODEGEN custom-command feature (CMP0171).
+add_custom_target(backend DEPENDS
+  smoke_mlir test_mlp_e2e test_tiling_decision test_tiling_e2e
+  test_liveness_tiling_e2e test_new_ops_e2e test_rank_e2e test_cnn_e2e
+  test_attention_e2e test_ffn_e2e test_mlp_native codegen_mlp_native
+  benchmark_matmul_tiling tensora)
+add_custom_target(full DEPENDS lexer parser semantic optimization backend)
 ```
 
 ### `tools/setup-dev.sh`
@@ -6830,6 +6917,279 @@ echo "  cmake -S . -B build"
 echo "  cmake --build build -j4"
 echo "  ctest --test-dir build --output-on-failure"
 ```
+
+### `tools/check-deps.sh`
+```bash
+#!/usr/bin/env bash
+# The closest C++-project equivalent to a Python requirements.txt:
+# there is no single manifest file, because the dependencies come from
+# several different ecosystems (OS packages, LLVM/MLIR, Java; ANTLR is
+# CMake-managed and does not belong here at all -- see below). This
+# script is the check, not the installer: it reports what is present,
+# what is missing, and the exact command to fix each gap, rather than
+# blindly running `sudo apt install` on a machine it does not control.
+# See docs/development/DEPENDENCIES.md for the full pinned-version
+# reference this script checks against.
+#
+# Usage: ./tools/check-deps.sh
+# Exit status: 0 if every dependency is present, 1 otherwise.
+
+set -uo pipefail
+cd "$(dirname "$0")/.."
+
+ok=0
+missing=0
+
+pass() { printf '  [ok]      %s\n' "$1"; ok=$((ok + 1)); }
+fail() { printf '  [MISSING] %s\n' "$1"; missing=$((missing + 1)); }
+
+echo "=== Required: build toolchain ==="
+
+if command -v cmake >/dev/null 2>&1; then
+  pass "cmake ($(cmake --version | head -1))"
+else
+  fail "cmake -- install with: sudo apt install -y cmake"
+fi
+
+if command -v g++ >/dev/null 2>&1; then
+  cxx_version=$(g++ -dumpversion)
+  if [ "${cxx_version%%.*}" -ge 10 ] 2>/dev/null; then
+    pass "g++ ($cxx_version, supports C++20 per CMakeLists.txt CMAKE_CXX_STANDARD)"
+  else
+    fail "g++ $cxx_version is too old for C++20 -- install a newer one, e.g.: sudo apt install -y g++-13"
+  fi
+else
+  fail "g++ -- install with: sudo apt install -y build-essential"
+fi
+
+if command -v java >/dev/null 2>&1; then
+  pass "java ($(java -version 2>&1 | head -1)) -- runs the ANTLR generator jar CMake fetches"
+else
+  fail "java -- install with: sudo apt install -y default-jre"
+fi
+
+echo
+echo "=== Required: LLVM/MLIR 21.1.8 (pinned, INTEG-003) ==="
+
+if command -v llvm-config-21 >/dev/null 2>&1; then
+  pass "llvm-config-21 ($(llvm-config-21 --version))"
+else
+  fail "llvm-21-dev -- install with: sudo apt install -y llvm-21-dev"
+fi
+
+if [ -d /usr/lib/llvm-21/lib/cmake/mlir ]; then
+  pass "MLIR 21 CMake package (/usr/lib/llvm-21/lib/cmake/mlir)"
+else
+  fail "libmlir-21-dev -- install with: sudo apt install -y libmlir-21-dev mlir-21-tools"
+fi
+
+if [ -f /usr/lib/llvm-21/lib/libmlir_c_runner_utils.so ]; then
+  pass "libmlir_c_runner_utils.so (needed by every JIT-executed test)"
+else
+  fail "libmlir_c_runner_utils.so not found -- reinstall libmlir-21-dev"
+fi
+
+echo
+echo "=== Not checked here on purpose ==="
+echo "  ANTLR (jar + C++ runtime): fetched reproducibly by CMake's"
+echo "  FetchContent on first configure, not an OS package -- do not"
+echo "  install it system-wide."
+
+echo
+echo "$ok ok, $missing missing"
+if [ "$missing" -gt 0 ]; then
+  echo "Fix the [MISSING] items above before running cmake -S . -B build."
+  exit 1
+fi
+exit 0
+```
+
+### `tools/regen_appendix.py`
+````python
+#!/usr/bin/env python3
+"""Regenerate docs/development/10_APPENDIX_SOURCE_LISTING.md.
+
+The appendix is a mechanical concatenation of the real source tree
+(see its own Section 10.10), not a hand-maintained document. Run this
+after any change to a file the appendix already lists, so the listing
+never silently drifts from what was actually built and tested:
+
+    ./tools/regen_appendix.py
+
+What it does:
+  - Refreshes every "### `path`" file dump already in the appendix
+    (Sections 10.3-10.9) from the file's current content on disk,
+    tagged with the language matching its extension.
+  - Regenerates the Section 10.2 repository manifest (`find grammar
+    include src tools examples -type f | sort`) and the Section 10.9
+    test manifest (`find tests -type f | sort`) from scratch.
+  - Updates Section 10.10's base commit hash and generation date.
+  - Reports, but does not silently fix, two situations that need a
+    human decision: a manifest entry with no "### `path`" dump
+    anywhere (a newly added file -- decide which of Sections 10.3-10.8
+    it belongs in), and a "### `path`" dump whose file no longer
+    exists on disk (a removed or renamed file -- decide whether to
+    delete the section or update the path).
+
+This script does not add or remove "### `path`" headers itself: the
+grouping into Sections 10.3-10.8 is a curated-by-topic breakdown (one
+section per compiler phase), not something a manifest diff can infer
+on its own.
+"""
+import re
+import subprocess
+import sys
+from datetime import date
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parent.parent
+APPENDIX = REPO / "docs/development/10_APPENDIX_SOURCE_LISTING.md"
+
+LANG_BY_EXT = {
+    ".h": "cpp",
+    ".hpp": "cpp",
+    ".cpp": "cpp",
+    ".cc": "cpp",
+    ".c": "c",
+    ".g4": "antlr",
+    ".cmake": "cmake",
+    ".txt": "text",
+    ".sh": "bash",
+    ".py": "python",
+    ".json": "json",
+    ".yml": "yaml",
+    ".yaml": "yaml",
+    ".md": "markdown",
+    ".tns": "text",
+}
+
+
+def lang_for(path: str) -> str:
+    if path.rsplit("/", 1)[-1] == "CMakeLists.txt":
+        return "cmake"
+    for ext, lang in LANG_BY_EXT.items():
+        if path.endswith(ext):
+            return lang
+    return "text"
+
+
+def find_sorted(*dirs: str) -> list[str]:
+    out = subprocess.run(
+        ["find", *dirs, "-type", "f", "-not", "-path", "*/__pycache__/*"],
+        cwd=REPO, check=True, capture_output=True, text=True,
+    ).stdout
+    return sorted(out.splitlines())
+
+
+_CLOSE_FENCE_RE = re.compile(r"^`{3,}[ \t]*$", re.MULTILINE)
+
+
+def fence_marker_for(content: str) -> str:
+    """A backtick run one longer than any run already in `content`, so the
+    fence itself can never be confused with a literal ``` inside content
+    that itself talks about markdown fences (this script's own source,
+    dumped into the appendix, is exactly that case)."""
+    runs = re.findall(r"`+", content)
+    longest = max((len(r) for r in runs), default=0)
+    return "`" * max(3, longest + 1)
+
+
+def replace_fenced_block(text: str, start: int, new_lines: list[str]) -> tuple[str, int]:
+    fence_start = text.index("```", start)
+    line_end = text.index("\n", fence_start)
+    body_start = line_end + 1
+    close_match = _CLOSE_FENCE_RE.search(text, body_start)
+    fence_end = close_match.end()
+    new_body = "\n".join(new_lines)
+    marker = fence_marker_for(new_body)
+    replaced_block = f"{marker}text\n{new_body}\n{marker}"
+    replaced = text[:fence_start] + replaced_block + text[fence_end:]
+    return replaced, fence_start + len(replaced_block)
+
+
+def refresh_file_dumps(text: str, end_idx: int) -> tuple[str, int, list[str]]:
+    body, rest = text[:end_idx], text[end_idx:]
+    header_re = re.compile(r"^### `([^`]+)`.*$", re.MULTILINE)
+    matches = list(header_re.finditer(body))
+    missing_on_disk = []
+    for m in reversed(matches):
+        rel_path = m.group(1)
+        full_path = REPO / rel_path
+        if not full_path.is_file():
+            missing_on_disk.append(rel_path)
+            continue
+        content = full_path.read_text().rstrip("\n")
+        lang = lang_for(rel_path)
+        marker = fence_marker_for(content)
+        header_end = m.end()
+        fence_start = body.index("```", header_end)
+        line_end = body.index("\n", fence_start)
+        close_match = _CLOSE_FENCE_RE.search(body, line_end + 1)
+        body = body[:fence_start] + f"{marker}{lang}\n{content}\n{marker}" + body[close_match.end() :]
+    return body + rest, len(matches), sorted(missing_on_disk)
+
+
+def find_heading(text: str, heading: str) -> int:
+    """Locate `heading` as a whole line, not a substring match. A plain
+    `text.index(heading)` would also match this same heading text
+    quoted inside this script's own docstring/source once this script
+    dumps itself into the appendix (Section 10.8) -- anchoring to a
+    full line rules that false match out, since the quoted occurrences
+    are substrings of a longer source-code line, never a whole line by
+    themselves."""
+    m = re.search(r"^" + re.escape(heading) + r"$", text, re.MULTILINE)
+    if m is None:
+        raise ValueError(f"heading not found as a whole line: {heading!r}")
+    return m.start()
+
+
+def main() -> int:
+    text = APPENDIX.read_text()
+    end_idx = find_heading(text, "## 10.10 Mechanical Generation")
+    text, n_dumps, missing_on_disk = refresh_file_dumps(text, end_idx)
+
+    repo_manifest = [f"tensora/{p}" for p in find_sorted("grammar", "include", "src", "tools", "examples")]
+    test_manifest = [f"tensora/{p}" for p in find_sorted("tests")]
+
+    manifest_start = find_heading(text, "## 10.2 Repository Manifest")
+    text, _ = replace_fenced_block(text, manifest_start, repo_manifest)
+
+    test_manifest_start = find_heading(text, "## 10.9 Test Listing")
+    text, _ = replace_fenced_block(text, test_manifest_start, test_manifest)
+
+    end_idx = find_heading(text, "## 10.10 Mechanical Generation")
+    dumped_paths = {m.group(1) for m in re.finditer(r"^### `([^`]+)`.*$", text[:end_idx], re.MULTILINE)}
+    manifest_paths = {p.removeprefix("tensora/") for p in repo_manifest}
+    undumped = sorted(manifest_paths - dumped_paths)
+
+    commit = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=REPO, check=True, capture_output=True, text=True
+    ).stdout.strip()
+    text = re.sub(r"Base commit at generation time:\n`[0-9a-f]+`", f"Base commit at generation time:\n`{commit}`", text)
+    text = re.sub(r"Generation\ndate: \d{4}-\d{2}-\d{2}", f"Generation\ndate: {date.today().isoformat()}", text)
+    text = re.sub(r"Generation date: \d{4}-\d{2}-\d{2}", f"Generation date: {date.today().isoformat()}", text)
+
+    APPENDIX.write_text(text)
+
+    print(f"Refreshed {n_dumps} file dumps.")
+    print(f"Repository manifest: {len(repo_manifest)} files. Test manifest: {len(test_manifest)} files.")
+    if missing_on_disk:
+        print(f"\nNEEDS ATTENTION -- {len(missing_on_disk)} dumped path(s) no longer exist on disk:")
+        for p in missing_on_disk:
+            print(f"  {p}")
+    if undumped:
+        print(f"\nNEEDS ATTENTION -- {len(undumped)} manifest path(s) have no ### dump in Sections 10.3-10.8 yet:")
+        for p in undumped:
+            print(f"  {p}")
+    if missing_on_disk or undumped:
+        print("\nPlace/remove these by hand in the right Section 10.3-10.8, then re-run this script.")
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+````
 
 ## 10.9 Test Listing
 
@@ -7880,7 +8240,7 @@ diverge from what was actually built and tested.
 This repository is under git version control, hosted at
 [github.com/Rmuk655/TensoraCompiler](https://github.com/Rmuk655/TensoraCompiler)
 (`origin`, branch `main`). Base commit at generation time:
-`f34112831b9f7a69570accb48d0939793bf4aa53`. The concatenation itself
+`96e1aaa485e279ccb123659c58be83229c4fda0b`. The concatenation itself
 reflects the working tree at generation time, which may include
 changes made after that commit and not yet committed -- the manifest
 and file contents above are the authoritative record either way, since

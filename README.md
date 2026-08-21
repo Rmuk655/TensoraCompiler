@@ -97,11 +97,12 @@ ctest --test-dir build --output-on-failure
 
 (or `make build` / `make test`). First configure needs internet access:
 CMake fetches the ANTLR jar and C++ runtime via `FetchContent`. See
+[docs/development/BUILD.md](docs/development/BUILD.md) for the full
+build/test commands, including building or testing one compiler phase
+at a time (`make test-lexer`, `make test-parser`, etc.), and
 [docs/development/07_DEVELOPMENT_ENVIRONMENT.md](docs/development/07_DEVELOPMENT_ENVIRONMENT.md)
-for the full toolchain (platform, compiler, LLVM/MLIR version, warnings,
-formatting, debugging) and
-[docs/development/BUILD.md](docs/development/BUILD.md) for build
-troubleshooting.
+for the toolchain policy (platform, compiler, LLVM/MLIR version,
+warnings, debugging, git workflow).
 
 # Tensora Phase Demos
 
