@@ -95,19 +95,46 @@ Treat PyTorch, JAX, TensorFlow, XLA, MLIR, LLVM, TVM, Triton, and tensor
 languages as related systems to learn from and compare against, not as
 strawmen.
 
-## 7. Contribution Strategy
+## 7. Open-Source-to-Paper Path
 
-A strong post-course path may be:
+This section ties Section 2 (open-source release), Section 4 (paper
+questions), and Section 5 (experimental discipline) into one explicit,
+ordered path, so "release it as open source" and "write a paper" are
+not two separate, disconnected tracks:
 
 ``` text
-Tensora v0.1
-   -> understand MLIR/LLVM deeply
-   -> identify one measured limitation
-   -> discuss with faculty
-   -> prototype pass/analysis
-   -> compare against baseline
-   -> upstream reusable infrastructure where appropriate
+v0.1 (course, graded, frozen)
+   |
+v0.2 open-source release (Section 2)
+   -> real users, real issues, real usage patterns -- not guessed ones
+   |
+mine v0.2 feedback for evidence
+   -> which paper-shaped question (Section 4) does real usage actually
+      support? e.g. a spike of shape/axis bugs in reported issues
+      strengthens question 4.B; a request for layout control strengthens
+      4.C
+   |
+pick ONE question with faculty, informed by that evidence
+   -> do not pick blind before v0.2 exists; real adoption data is the
+      whole point of releasing first
+   |
+define baseline + methodology (Section 5) for that one question
+   |
+prototype the pass/analysis needed (often 8.1/8.3, since most questions
+depend on semantic facts surviving into the IR)
+   |
+run the experiment, compare against baseline
+   |
+write the paper; upstream reusable infrastructure where appropriate
 ```
+
+The open-source release is not just a distribution step -- it is the
+mechanism that turns Section 4's five candidate questions into one
+evidence-backed choice, instead of a guess made before any real user
+exists. Skipping v0.2 and picking a paper question directly from v0.1
+is possible but loses this evidence; only do that if the timeline does
+not allow for a real release-and-feedback cycle before the faculty
+conversation.
 
 ## 8. Future Language Constructs (post-v0.1)
 

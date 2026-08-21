@@ -80,6 +80,13 @@ source (.tns)
   -> JIT execution or native object file
 ```
 
+**One-time setup after cloning** (installs the `pre-commit` hook that
+runs `clang-format`/Prettier/`markdownlint` automatically on commit):
+
+``` bash
+./tools/setup-dev.sh
+```
+
 **Canonical build and test:**
 
 ``` bash
@@ -89,7 +96,12 @@ ctest --test-dir build --output-on-failure
 ```
 
 (or `make build` / `make test`). First configure needs internet access:
-CMake fetches the ANTLR jar and C++ runtime via `FetchContent`.
+CMake fetches the ANTLR jar and C++ runtime via `FetchContent`. See
+[docs/development/07_DEVELOPMENT_ENVIRONMENT.md](docs/development/07_DEVELOPMENT_ENVIRONMENT.md)
+for the full toolchain (platform, compiler, LLVM/MLIR version, warnings,
+formatting, debugging) and
+[docs/development/BUILD.md](docs/development/BUILD.md) for build
+troubleshooting.
 
 # Tensora Phase Demos
 

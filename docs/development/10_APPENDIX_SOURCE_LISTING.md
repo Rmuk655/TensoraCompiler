@@ -61,6 +61,7 @@ tensora/src/shared/Ir.cpp
 tensora/src/shared/Type.cpp
 tensora/tools/benchmark_matmul_tiling.cpp
 tensora/tools/codegen_mlp_native.cpp
+tensora/tools/setup-dev.sh
 ```
 
 ## 10.3 Frontend Listing (`grammar/`, lexer/parser headers and sources)
@@ -2876,7 +2877,7 @@ std::pair<ValueId, const Type*> SemanticAnalyzer::analyzeCall(GraphCtx& gc, cons
 
 TypedGraph SemanticAnalyzer::analyzeGraph(const ast::GraphDecl& g) {
   symbols_.enterGraph();
-  GraphCtx gc{GraphBuilder(g.name), DimSolver(), {}, {}};
+  GraphCtx gc{GraphBuilder(g.name), DimSolver(), {}, {}, {}, {}};
   const size_t diagsBeforeGraph = diags_.all().size();
 
   for (const ast::Stmt& stmt : g.stmts) {
@@ -6455,6 +6456,13 @@ add_custom_target(antlr4_generate DEPENDS ${ANTLR4_GENERATED_SRCS})
 
 include_directories(${CMAKE_SOURCE_DIR}/include)
 
+# -Wall -Wextra for project-owned targets only (docs/development/
+# 07_DEVELOPMENT_ENVIRONMENT.md §7.5). Placed after the ANTLR
+# FetchContent/generate setup above, so it does not apply to the
+# vendored ANTLR runtime target, only to the libraries and executables
+# this CMakeLists.txt defines below.
+add_compile_options(-Wall -Wextra)
+
 # Frontend library: hand-written C++ (Lexer/Parser adapters, the
 # AstBuilder that walks ANTLR's parse tree, and the parser error
 # listener) plus the generated ANTLR lexer/parser.
@@ -6528,14 +6536,14 @@ add_library(tensora_codegen
   src/codegen/LoopTiling.cpp
   src/codegen/MatmulTilingPass.cpp)
 target_include_directories(tensora_codegen PUBLIC ${CMAKE_SOURCE_DIR}/include)
-target_include_directories(tensora_codegen PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
+target_include_directories(tensora_codegen SYSTEM PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
 target_link_libraries(tensora_codegen PUBLIC tensora_optimization PRIVATE MLIR)
 
 # Command-line driver: one flag per compiler phase, plus --run/-o,
 # which run the full pipeline (docs/language/02_LANGUAGE_TUTORIAL.md
 # §2.12).
 add_executable(tensora src/driver/main.cpp)
-target_include_directories(tensora PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
+target_include_directories(tensora SYSTEM PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
 target_link_libraries(tensora PRIVATE tensora_codegen MLIR MLIRExecutionEngineShared)
 target_compile_definitions(tensora PRIVATE MLIR_C_RUNNER_UTILS_PATH="${MLIR_C_RUNNER_UTILS_LIB}")
 
@@ -6628,7 +6636,7 @@ endforeach()
 # before any real lowering code is built on it. This is not a CTest
 # case. It has no checks beyond "did it crash." Run it directly.
 add_executable(smoke_mlir tests/smoke/smoke_mlir.cpp)
-target_include_directories(smoke_mlir PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
+target_include_directories(smoke_mlir SYSTEM PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
 target_link_libraries(smoke_mlir PRIVATE MLIR MLIRExecutionEngineShared)
 add_test(NAME SMOKE-MLIR COMMAND smoke_mlir)
 
@@ -6672,14 +6680,14 @@ add_test(NAME LOOP-005 COMMAND test_liveness_tiling_e2e)
 # and linked against that object file by the system toolchain. This
 # makes a standalone executable that CTest runs directly.
 add_executable(codegen_mlp_native tools/codegen_mlp_native.cpp)
-target_include_directories(codegen_mlp_native PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
+target_include_directories(codegen_mlp_native SYSTEM PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
 target_link_libraries(codegen_mlp_native PRIVATE tensora_codegen MLIR LLVM)
 
 # Reporting tool, not a CTest case: measures real wall-clock time for a
 # few candidate matmul tile sizes so the tiling policy's defaults are an
 # evidence-based choice, not an assumed one.
 add_executable(benchmark_matmul_tiling tools/benchmark_matmul_tiling.cpp)
-target_include_directories(benchmark_matmul_tiling PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
+target_include_directories(benchmark_matmul_tiling SYSTEM PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
 target_link_libraries(benchmark_matmul_tiling PRIVATE tensora_codegen MLIR MLIRExecutionEngineShared)
 target_compile_definitions(benchmark_matmul_tiling PRIVATE MLIR_C_RUNNER_UTILS_PATH="${MLIR_C_RUNNER_UTILS_LIB}")
 
@@ -6790,6 +6798,37 @@ foreach(t ${ALL_TEST_NAMES})
     set_tests_properties(${t} PROPERTIES LABELS unit)
   endif()
 endforeach()
+```
+
+### `tools/setup-dev.sh`
+```
+#!/usr/bin/env bash
+# One-time developer bootstrap (docs/development/07_DEVELOPMENT_
+# ENVIRONMENT.md §7.9). Installs `pre-commit` and registers it as this
+# clone's actual git hook (.git/hooks/pre-commit), so day-to-day
+# `git commit` runs clang-format/Prettier/markdownlint automatically,
+# without every developer needing to remember the individual commands.
+#
+# This step cannot run itself on `git clone` -- letting a clone
+# auto-execute code would let any repository run arbitrary commands on
+# a developer's machine just by being cloned. Run this once, by hand,
+# right after cloning:
+#
+#   ./tools/setup-dev.sh
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "error: python3 not found; install Python 3 first" >&2
+  exit 1
+fi
+
+python3 -m pip install --user pre-commit
+python3 -m pre_commit install
+
+echo "Tensora development hooks installed."
+echo "git commit now runs clang-format (C/C++) and Prettier + markdownlint (Markdown) automatically."
+echo "Skip a hook run for one commit with: git commit --no-verify (not recommended; CI re-checks anyway)."
 ```
 
 ## 10.9 Test Listing
@@ -7836,9 +7875,14 @@ manifest and three representative test files were generated the same
 way), not by hand-transcription -- so it cannot silently diverge from
 what was actually built and tested.
 
-This repository has no Git history for this submission
-(`git rev-parse HEAD` reports "not a git repository"), so there is no
-commit hash to record. Generation date: 2026-08-20. The 175 CTest cases
-passing at generation time are the authoritative record of what this
-listing implements; see `docs/testing/TEST_MATRIX.md` and
-`docs/development/CHANGELOG.md`.
+This repository is under git version control, hosted at
+[github.com/Rmuk655/TensoraCompiler](https://github.com/Rmuk655/TensoraCompiler)
+(`origin`, branch `main`). Base commit at generation time:
+`709a83a206f095c0e12a5fa2f9815273242ed6c1`. The concatenation itself
+reflects the working tree at generation time, which may include
+changes made after that commit and not yet committed -- the manifest
+and file contents above are the authoritative record either way, since
+they are read directly from disk, not from git history. Generation
+date: 2026-08-20. The 175 CTest cases passing at generation time are
+the authoritative record of what this listing implements; see
+`docs/testing/TEST_MATRIX.md` and `docs/development/CHANGELOG.md`.
