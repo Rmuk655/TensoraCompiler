@@ -8251,7 +8251,7 @@ diverge from what was actually built and tested.
 This repository is under git version control, hosted at
 [github.com/Rmuk655/TensoraCompiler](https://github.com/Rmuk655/TensoraCompiler)
 (`origin`, branch `main`). Base commit at generation time:
-`17de94d9e33eece77510850aab425a4ad9fa660a`. The concatenation itself
+`4812b9742784e8378cad741de1ad71d5c6f2efbf`. The concatenation itself
 reflects the working tree at generation time, which may include
 changes made after that commit and not yet committed -- the manifest
 and file contents above are the authoritative record either way, since

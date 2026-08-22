@@ -9,11 +9,11 @@ the whole toolchain installs with one `apt` command. A Windows-native
 build fights the ANTLR and MLIR integration. Everyone develops and
 runs tests on this platform, so results stay reproducible.
 
-`docs/development/BUILD.md` has the toolchain install command and the
-actual build/test commands. `docs/development/DEPENDENCIES.md` lists
-every dependency (OS packages, LLVM/MLIR, ANTLR) with its pinned
-version, and `./tools/check-deps.sh` checks a machine against that
-list.
+[BUILD.md](BUILD.md) has the toolchain install command and the actual
+build/test commands. [DEPENDENCIES.md](DEPENDENCIES.md) lists every
+dependency (OS packages, LLVM/MLIR, ANTLR) with its pinned version, and
+[`./tools/check-deps.sh`](../../tools/check-deps.sh) checks a machine
+against that list.
 
 ## 7.1 Language
 
@@ -129,22 +129,23 @@ tensora/
 │   ├── codegen_mlp_native.cpp      ahead-of-time object-file codegen tool (not the JIT path)
 │   ├── benchmark_matmul_tiling.cpp measured tile-size timing (untiled/16/32/64), not a CTest case
 │   ├── check-deps.sh               checks the toolchain against DEPENDENCIES.md, installs nothing
-│   └── setup-dev.sh                one-time bootstrap: runs check-deps.sh, prints next steps
+│   ├── setup-dev.sh                one-time bootstrap: runs check-deps.sh, prints next steps
+│   └── regen_appendix.py           regenerates 10_APPENDIX_SOURCE_LISTING.md (`make appendix`)
 ├── examples/
 │   └── mlp.tns, mlp_concrete.tns, cnn.tns, attention.tns, matmul_large.tns
 ├── docs/
 └── CMakeLists.txt
 ```
 
-The one benchmark tool (`tools/benchmark_matmul_tiling.cpp`) is built
-by the normal CMake build and is run directly
-(`build/benchmark_matmul_tiling`), not through CTest -- see
-`docs/testing/TEST_MATRIX.md`'s "Measured tile-size evidence" section
-for what it actually measured on the development machine.
+The one benchmark tool ([`tools/benchmark_matmul_tiling.cpp`](../../tools/benchmark_matmul_tiling.cpp))
+is a plain CMake executable, not a CTest case; run it with
+`make benchmark` -- see `docs/testing/TEST_MATRIX.md`'s "Measured
+tile-size evidence" section for what it actually measured on the
+development machine.
 
 This repository is under git version control, hosted at
 [github.com/Rmuk655/TensoraCompiler](https://github.com/Rmuk655/TensoraCompiler)
-(`origin`, branch `main`). `docs/development/10_APPENDIX_SOURCE_LISTING.md`
+(`origin`, branch `main`). [docs/development/10_APPENDIX_SOURCE_LISTING.md](10_APPENDIX_SOURCE_LISTING.md)
 records the commit the appendix was generated against.
 
 ## 7.7 Developer Git Workflow
@@ -260,7 +261,8 @@ driver -- that is future work, not a currently available flag.
 
 ## 7.10 Benchmarking
 
-`tools/benchmark_matmul_tiling.cpp` measures real wall-clock time for a
+[`tools/benchmark_matmul_tiling.cpp`](../../tools/benchmark_matmul_tiling.cpp)
+(run with `make benchmark`) measures real wall-clock time for a
 1024x1024x1024 matmul, untiled and at three candidate tile sizes
 (16/16/16, 32/32/32, 64/64/64), best of 5 runs each. It records the
 workload size and reports the measured seconds and the speedup over

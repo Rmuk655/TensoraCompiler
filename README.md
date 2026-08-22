@@ -2,11 +2,17 @@
 
 This repository contains the Tensora compiler project.
 
-Tensora is a small declarative language for describing machine-learning
-computation graphs. The compiler statically checks ML
-computation, keeps verified semantic information in a typed graph IR,
-optimizes that graph, and lowers valid programs through MLIR and LLVM
-for native execution.
+Tensora is a small, standalone declarative language — a teaching
+compiler's DSL, not a production framework — for describing
+machine-learning computation graphs over a fixed, closed set of
+built-in tensor operators (`matmul`, `linear`, `relu`, `softmax`,
+`conv2d`, etc.). It is not a PyTorch front-end: it does not read
+PyTorch or any other existing framework's code, has no loops or
+user-defined functions, and cannot express anything outside that fixed
+operator set. What it does do for a `.tns` program written directly in
+this DSL: statically check the computation, keep verified semantic
+information in a typed graph IR, optimize that graph, and lower valid
+programs through MLIR and LLVM for native execution.
 
 The expected high-level pipeline is:
 
@@ -91,10 +97,11 @@ warnings, debugging, git workflow).
 
 There are six scripts: one per compiler phase, plus one that runs the
 whole pipeline together. Each is a thin wrapper around the real,
-tested artifacts — the `tensora` CLI driver (`src/driver/main.cpp`)
-and the `test_passes` CTest binary
-(`tests/optimization/test_passes.cpp`) — not a separate copy of any
-compiler logic.
+tested artifacts — the `tensora` CLI driver
+([`src/driver/main.cpp`](src/driver/main.cpp)) and the `test_passes`
+CTest binary
+([`tests/optimization/test_passes.cpp`](tests/optimization/test_passes.cpp))
+— not a separate copy of any compiler logic.
 
 **Demo commands** (one per phase; the table below has the full map):
 

@@ -282,7 +282,8 @@ machine, 1024x1024x1024 f32 matmul):
 | 32x32x32 | ~1.32–1.37 | ~2.2–2.5x |
 | 64x64x64 | ~1.32–1.35 | ~2.2–2.6x |
 
-Run `build/benchmark_matmul_tiling` to reproduce on your own machine —
+Run `make benchmark` (or `build/benchmark_matmul_tiling` directly) to
+reproduce on your own machine —
 these are real measurements, not assumed numbers, and this project does
 not claim they generalize beyond this workload/machine. All three tile
 sizes beat untiled by roughly the same margin here; the differences
