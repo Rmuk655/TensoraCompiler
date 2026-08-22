@@ -43,22 +43,9 @@ distributed training, and production serving possible future extensions.
 is `tensora` (built at `build/tensora`).
 
 **Repository architecture.** `include/tensora/` and `src/` are organized
-by compiler phase, with cross-phase representations in one
-`shared/` location:
-
-``` text
-include/tensora/            src/
-├── lexer/                  ├── lexer/          Token, Lexer (wraps ANTLR)
-├── parser/                 ├── parser/         Parser, AstBuilder, error strategy/listener
-├── semantic/                ├── semantic/       SemanticAnalyzer, Symbol, Contracts
-├── optimization/            ├── optimization/   GraphPass, Level-1 passes, Liveness
-├── codegen/                  ├── codegen/        MlirLowerer, DialectSetup, tiling pass
-└── shared/                  └── shared/         SourceSpan, Diagnostic, AST, IR, Type
-
-grammar/Tensora.g4    one ANTLR4 grammar (lexer + parser rules)
-src/driver/main.cpp   the `tensora` CLI: one flag per compiler phase
-tests/                mirrors the phases above, plus smoke/ and support/
-```
+by compiler phase, with cross-phase representations in one `shared/`
+location. See [§7.6 Repository](docs/development/07_DEVELOPMENT_ENVIRONMENT.md#76-repository)
+for the actual current tree.
 
 **Compiler pipeline (as implemented):**
 

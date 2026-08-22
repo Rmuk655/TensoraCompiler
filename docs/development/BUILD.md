@@ -15,14 +15,10 @@ whole toolchain in one command:
 sudo apt update && sudo apt install -y build-essential cmake default-jre
 ```
 
-This gives you a C++20 compiler (g++), CMake, and a Java runtime. You
-need the Java runtime to run the ANTLR4 generator (ARCH-011,
-INTEG-004). CMake fetches the ANTLR jar and the ANTLR C++ runtime
-itself, reproducibly, through `FetchContent` — you do not need a
-separate ANTLR install step. [docs/development/DEPENDENCIES.md](DEPENDENCIES.md)
-has the full pinned-version reference (including LLVM/MLIR 21), and
-[`./tools/check-deps.sh`](../../tools/check-deps.sh) checks a machine
-against it.
+Then run [`./tools/check-deps.sh`](../../tools/check-deps.sh). See
+[docs/development/DEPENDENCIES.md](DEPENDENCIES.md) for the full
+pinned-version reference (including LLVM/MLIR 21) and what each
+dependency is for.
 
 **Important:** work inside the WSL native filesystem. Copy the repo
 to, for example, `~/tensora` (ext4), and build there. Do **not** build
@@ -46,19 +42,6 @@ make build     # configure + build everything
 make test      # build + run the full ctest suite
 make example   # build + run the full pipeline (demos/06_final_compiler_demo.sh)
 make clean
-```
-
-`make example` runs the whole pipeline, not one phase. For a single
-phase's demo (source in, phase output out — the same `demos/*.sh`
-scripts README.md's Phase Demos section describes), use the matching
-`-example` target instead:
-
-```bash
-make lexer-example         # demos/01_lexer_demo.sh
-make parser-example        # demos/02_parser_demo.sh
-make semantic-example      # demos/03_semantic_demo.sh
-make optimization-example  # demos/04_optimization_demo.sh
-make codegen-example       # demos/05_codegen_demo.sh
 ```
 
 ## Build one phase at a time
@@ -107,6 +90,19 @@ identifiers and literals). The compiler reports an illegal character
 on stderr and sets a non-zero exit code. `docs/language/02_LANGUAGE_
 TUTORIAL.md` §2.12 lists every other `--emit-*` flag, one per phase.
 
+`make example` runs the whole pipeline, not one phase. For a single
+phase's demo (source in, phase output out — the same `demos/*.sh`
+scripts README.md's Phase Demos section describes), use the matching
+`-example` target instead:
+
+```bash
+make lexer-example         # demos/01_lexer_demo.sh
+make parser-example        # demos/02_parser_demo.sh
+make semantic-example      # demos/03_semantic_demo.sh
+make optimization-example  # demos/04_optimization_demo.sh
+make codegen-example       # demos/05_codegen_demo.sh
+```
+
 ## Run the tests
 
 ```bash
@@ -124,11 +120,11 @@ ctest --test-dir build --output-on-failure -L semantic
 Or with the `make` wrapper, which builds only that phase first:
 
 ```bash
-make test-lexer
-make test-parser
-make test-semantic
-make test-optimization
-make test-codegen
+make test-lexer         # build + ctest -L lexer
+make test-parser        # build + ctest -L parser
+make test-semantic      # build + ctest -L semantic
+make test-optimization  # build + ctest -L optimization
+make test-codegen       # build + ctest -L codegen
 ```
 
 ## Notes / known build caveats
@@ -165,19 +161,25 @@ make test-codegen
 
 ## Regenerate the source-listing appendix
 
-`docs/development/10_APPENDIX_SOURCE_LISTING.md` is a mechanical
-concatenation of the real source tree, not a hand-maintained document
-(see its own Section 10.10). After changing a file it already lists,
-run:
+[docs/development/10_APPENDIX_SOURCE_LISTING.md](10_APPENDIX_SOURCE_LISTING.md)
+is a mechanical concatenation of the real source tree, not a
+hand-maintained document (see its own Section 10.10). After changing a
+file it already lists, run:
 
 ```bash
 make appendix
 ```
 
-(or `./tools/regen_appendix.py` directly). This is a doc-maintenance
-step, run by hand when needed -- it is not part of `make build`/`make
-test`, since it rewrites a committed file and should not fire on every
-build. It reports, rather than silently guessing, a newly added file
-with no entry yet or an entry whose file no longer exists; place a new
-file into the right Section 10.3-10.8 by hand, since that grouping is
-by compiler phase, not something a manifest diff can infer on its own.
+(or [`./tools/regen_appendix.py`](../../tools/regen_appendix.py)
+directly). This is a doc-maintenance step, run by hand when needed --
+it is not part of `make build`/`make test`, since it rewrites a
+committed file and should not fire on every build.
+
+The script only refreshes dumps of files it already has an entry for;
+it does not decide where a *new* file's dump goes. Sections 10.3-10.8
+group files by compiler phase (a curated breakdown, not something a
+manifest diff can infer), so if you add a new source file, add its
+`### \`path\`` entry to the right section by hand once, then re-run
+the script -- it will keep that entry's content in sync from then on.
+The script's own output tells you exactly which files still need this
+(a new file with no entry yet, or an entry whose file was deleted).
