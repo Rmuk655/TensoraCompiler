@@ -458,3 +458,74 @@ behavior) genuinely misses it. Full suite green after the change
 **Tests.** `OPT-FIX-001` (multi-sweep interaction: `DeadOpElimination`
 enables `LinearBiasActivationFusion`), `OPT-FIX-002` (near-miss: one
 sweep only, pair stays untagged).
+
+---
+
+## ARCH-016 — Runtime data I/O for `--run` (`.npy` load/store)
+
+**Problem.** `--run` filled every input and weight with synthetic
+all-ones data, so a compiled program produced no meaningful result.
+There was no way to run a real trained model on real inputs, which the
+real-world inference demos (MLP / CNN / attention) require.
+
+**Options.**
+
+- (a) Add a tensor-literal syntax to the language so values live in
+  `.tns` source. Rejected: megabytes of trained floats do not belong in
+  a text grammar, and it would be a language change (LANG-XXX) for a
+  purely runtime concern.
+- (b) Bake weights into the compiled artifact as `arith.constant`s.
+  Rejected for now: needs new `MlirLowerer` logic to intercept weight
+  params before lowering; larger than the demos need.
+- (c) Load real values at run time from files, keeping `.tns` source
+  value-free (shapes only, as the language already intends).
+
+**Decision.** (c). Two additive driver flags on `--run`: `--data-dir
+DIR` loads one float32 `.npy` file per declared input/weight
+(`DIR/<name>.npy`, matched by the param's declared name), and `--output
+FILE.npy` writes the full result tensor. A small reader/writer
+(`src/driver/Npy.{h,cpp}`) handles the NumPy v1.0 format, little-endian
+float32 only (the one element type Tensora uses, RM 3.23).
+
+**Rationale.** File paths are environment-specific values, so they stay
+out of `.tns` source and off at the CLI boundary — the same separation
+ONNX Runtime / TVM / TensorRT use (the model is static; inputs are
+supplied per call). The fill site already iterated `graph.params` with
+each param's declared name, shape, and Origin, so binding a file to the
+right buffer needed no new IR. All-ones stays the default, so behavior
+without `--data-dir` is unchanged and no existing test is affected.
+This is additive and backward-compatible, so it is recorded as an ADR
+rather than a language change.
+
+**Affected.** `src/driver/main.cpp` (flag parsing, the `--run` fill
+loop, full-output writer), new `src/driver/Npy.{h,cpp}`, `CMakeLists.txt`
+(driver sources, four `INT-DATALOAD-*` tests), `docs/development/BUILD.md`,
+`docs/language/02_LANGUAGE_TUTORIAL.md`.
+
+**Consequences.** stdout is unchanged whether or not `--data-dir` is
+given (the full tensor goes only to `--output`), so no large-tensor
+dumps and every `INT-FULL-*-RUN` test still matches. `-o` (AOT) still
+emits only the graph function and supplies no data; real-data AOT would
+need a separate per-graph runtime-argument convention and is left as
+future work.
+
+**Fixed-arity call limitation removed (packed invocation).** `--run`
+originally called `_mlir_ciface_<graph>` by casting the function pointer
+to a concrete `void(*)(void*, ...)` chosen from a `switch` on argument
+count, which capped a runnable graph at 7 inputs/weights. That cap is
+gone: the driver now calls MLIR's own packed C-interface entry via
+`ExecutionEngine::invokePacked("_mlir_ciface_" + name, argAddrs)` (the
+same path the library's `invoke()` helper uses), where `argAddrs[i]`
+points to the i-th descriptor pointer in `packedArgs` (result first,
+then params in declared order). There is no per-arity code and no
+ceiling. A `>7`-param graph (a two-layer attention classifier head,
+`examples/attn_text_classifier.tns`) now runs and matches its numpy
+reference exactly. Verified: full suite green, and existing example
+results (`INT-FULL-*-RUN`) unchanged.
+
+**Tests.** `INT-DATALOAD-EQUIV` (all-ones `.npy` reproduces the built-in
+all-ones result — the loader is transparent), plus `INT-DATALOAD-MISSING`,
+`INT-DATALOAD-BADSHAPE`, `INT-DATALOAD-BADDTYPE` (each diagnostic
+rejects bad input). The three real-world demos are the end-to-end
+evidence that genuine trained parameters produce PyTorch-matching
+results.

@@ -345,6 +345,7 @@ Every RM 3.x frozen operator except general reshape is now lowered.
 | E2E-004 | V | (single-head) scaled dot-product attention vs reference | within tol (1e-4) | done for single head — `test_attention_e2e.cpp`: matmul->transpose->scale->softmax->matmul, checked against a Python-double-computed reference (1.660477); multi-head specifically is not started (needs batched matmul) |
 | E2E-005 | V | matmul-heavy model, tiled vs untiled vs reference | within tol + timing | done — `LOOP-002/003/004` (single 8x8x8 matmul; timing reported, not asserted, since the workload is too small for tiling to pay off) |
 | E2E-006 | V | differential random small graphs | — | not started |
+| E2E-007 | V | real-world inference demos vs PyTorch (MLP placement / CIFAR-100 20-class CNN / self-attention text) | within tol (1e-3/1e-4) | done — `make demo-mlp-placement`/`demo-cnn-image-classifier`/`demo-attn-text-classifier`: each runs PyTorch-trained weights on real held-out inputs through the real CLI (`--run --data-dir`) and checks against a saved PyTorch reference. These exercise **multi-channel** conv2d/maxpool (CIFAR-100 @96x96: 3->16->32->64->64 channels, 4 conv/pool blocks) and batched rank-3 attention end-to-end — coverage the C++ e2e tests above (single-channel conv, rank-2 attention) do not. They also exercise graphs with >7 inputs/weights (the CNN has 11), i.e. the packed JIT invocation (ARCH-016). Not CTest cases (need PyTorch to prepare artifacts); the loader path they rely on is CTest-covered by `INT-DATALOAD-*` |
 
 E2E-001/002/004/005 use a hand-computed (or, for E2E-002/004, a
 Python-double-precision-computed) reference value rather than a literal
@@ -377,6 +378,10 @@ either way.
 | INT-FULL-MM | full pipeline | matmul-heavy source → executable | runs | done — `examples/matmul_large.tns` (256x256x256, above `MatmulTilingPass`'s default tiling threshold) compiles and JIT-runs through the same CLI (`INT-FULL-MM-RUN`); `--emit-mlir` shows 3 nested `scf.for` loops confirming the tiling pass actually fired, and the result (256, the contracted dimension, for all-ones inputs) is hand-verified |
 | INT-FULL-CNN | full pipeline | CNN source → executable | runs | done — `examples/cnn.tns` compiles and JIT-runs through the same CLI (`INT-FULL-CNN-RUN`), hand-verified result 0.5/0.5 (symmetric logits from an all-ones conv+linear stack) |
 | INT-FULL-SYMBOLS | Sema (RM 3.6) | `--emit-symbols` on a non-trivial program | golden symbol-table text | done — `INT-FULL-SYMBOLS`: `examples/mlp.tns` through the real CLI, checked against a `PASS_REGULAR_EXPRESSION` golden fragment; full determinism/scope/shadowing/error-path coverage is in `SYM-001`..`008` above |
+| INT-DATALOAD-EQUIV | Driver `--data-dir` (ARCH-016) | all-ones `.npy` inputs reproduce the built-in all-ones result | element[0] = 145 | done — `examples/mlp_concrete.tns` with `--data-dir tests/driver/mlp_ones` gives the same result as the default all-ones `--run` (`INT-FULL-MLP-RUN`), proving the `.npy` loader is transparent |
+| INT-DATALOAD-MISSING | Driver `--data-dir` | a declared param has no `.npy` file | reject: clear error, nonzero exit | done — `WILL_FAIL` |
+| INT-DATALOAD-BADSHAPE | Driver `--data-dir` | a param's `.npy` shape != declared shape | reject: clear error, nonzero exit | done — `WILL_FAIL` |
+| INT-DATALOAD-BADDTYPE | Driver `--data-dir` | a param's `.npy` dtype is not float32 | reject: clear error, nonzero exit | done — `WILL_FAIL` |
 
 The CLI driver (`tensora --emit-tokens/--emit-ast/--check/--emit-symbols/--emit-graph/--explain/--emit-mlir/--emit-llvm/--run/-o`)
 did not exist before this pass; building and testing it against real `.tns` source is what surfaced the LOW-005

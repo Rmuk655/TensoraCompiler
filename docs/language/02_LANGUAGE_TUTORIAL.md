@@ -267,6 +267,10 @@ tensora --emit-mlir            file.tns   # lowering: MLIR (Level-2 tiling inclu
 tensora --emit-llvm            file.tns   # backend: translated LLVM IR
 tensora --run                  file.tns   # full pipeline: JIT-execute
 tensora file.tns -o file.o                # full pipeline: ahead-of-time native object file
+
+# With --run, load real values instead of synthetic all-ones data:
+tensora --run file.tns --data-dir DIR     # load DIR/<name>.npy per input/weight (float32)
+tensora --run file.tns --output OUT.npy   # write the full result tensor to a .npy file
 ```
 
 Each flag maps to one compiler phase, and each phase has its own
@@ -286,10 +290,17 @@ size. Lowering a symbolic dimension past type-checking is a known
 limit (see `docs/testing/TEST_MATRIX.md` LOW-005). This limit is not a
 silent bug: the driver rejects a symbolic shape with a clear error,
 instead of compiling it wrong. `--run` uses the same synthetic value,
-1, for every declared input and weight. Tensora source states shapes,
-not values — the language has no tensor-literal syntax. This choice is
-still easy to check by hand: for a matmul, every output element equals
-the size of the contracted dimension.
+1, for every declared input and weight, unless `--data-dir` is given.
+Tensora source states shapes, not values — the language has no
+tensor-literal syntax. The all-ones choice is still easy to check by
+hand: for a matmul, every output element equals the size of the
+contracted dimension. To run a real trained model instead, pass
+`--data-dir DIR`, which loads a float32 `.npy` file per declared input
+and weight (`DIR/<name>.npy`), checking each file's shape and dtype
+against the declared tensor; `--output OUT.npy` writes the whole result
+tensor. The real-world demos in `tools/models/` and `demos/` use these
+to run genuine PyTorch-trained parameters through Tensora and compare
+against a PyTorch reference (see `docs/development/BUILD.md`).
 
 The `examples/` directory has runnable, concrete-shaped versions of
 the programs in this tutorial: `mlp_concrete.tns`, `matmul_large.tns`

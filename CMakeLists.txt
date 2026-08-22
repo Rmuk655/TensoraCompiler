@@ -197,7 +197,7 @@ target_link_libraries(tensora_codegen PUBLIC tensora_optimization PRIVATE MLIR)
 # Command-line driver: one flag per compiler phase, plus --run/-o,
 # which run the full pipeline (docs/language/02_LANGUAGE_TUTORIAL.md
 # §2.12).
-add_executable(tensora src/driver/main.cpp)
+add_executable(tensora src/driver/main.cpp src/driver/Npy.cpp)
 target_include_directories(tensora SYSTEM PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
 target_link_libraries(tensora PRIVATE tensora_codegen MLIR MLIRExecutionEngineShared)
 target_compile_definitions(tensora PRIVATE MLIR_C_RUNNER_UTILS_PATH="${MLIR_C_RUNNER_UTILS_LIB}")
@@ -433,6 +433,29 @@ set_tests_properties(INT-FULL-ATTN-RUN PROPERTIES PASS_REGULAR_EXPRESSION "eleme
 # not crash, and it must not silently give a wrong answer.
 add_test(NAME INT-FULL-SYMBOLIC-REJECT COMMAND tensora --run ${CMAKE_SOURCE_DIR}/examples/mlp.tns)
 set_tests_properties(INT-FULL-SYMBOLIC-REJECT PROPERTIES WILL_FAIL TRUE)
+
+# INT-DATALOAD-*: --data-dir real-data loading (ARCH-015). The
+# equivalence case is the core check: feeding all-ones .npy files
+# (tests/driver/mlp_ones/) must reproduce the exact result the built-in
+# all-ones default gives for the same graph (element[0] = 145, same as
+# INT-FULL-MLP-RUN) -- proof the loader is transparent. The three
+# negative cases confirm each diagnostic rejects bad input (nonzero
+# exit) instead of running with wrong or missing data.
+add_test(NAME INT-DATALOAD-EQUIV COMMAND tensora --run ${CMAKE_SOURCE_DIR}/examples/mlp_concrete.tns
+         --data-dir ${CMAKE_SOURCE_DIR}/tests/driver/mlp_ones)
+set_tests_properties(INT-DATALOAD-EQUIV PROPERTIES PASS_REGULAR_EXPRESSION "element\\[0\\] = 145")
+
+add_test(NAME INT-DATALOAD-MISSING COMMAND tensora --run ${CMAKE_SOURCE_DIR}/examples/mlp_concrete.tns
+         --data-dir ${CMAKE_SOURCE_DIR}/tests/driver/does_not_exist)
+set_tests_properties(INT-DATALOAD-MISSING PROPERTIES WILL_FAIL TRUE)
+
+add_test(NAME INT-DATALOAD-BADSHAPE COMMAND tensora --run ${CMAKE_SOURCE_DIR}/examples/mlp_concrete.tns
+         --data-dir ${CMAKE_SOURCE_DIR}/tests/driver/mlp_badshape)
+set_tests_properties(INT-DATALOAD-BADSHAPE PROPERTIES WILL_FAIL TRUE)
+
+add_test(NAME INT-DATALOAD-BADDTYPE COMMAND tensora --run ${CMAKE_SOURCE_DIR}/examples/mlp_concrete.tns
+         --data-dir ${CMAKE_SOURCE_DIR}/tests/driver/mlp_baddtype)
+set_tests_properties(INT-DATALOAD-BADDTYPE PROPERTIES WILL_FAIL TRUE)
 
 # Category labels for `ctest -L <category>` filtering. These come from
 # the same ID-prefix rule the C++ harness uses

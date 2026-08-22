@@ -1,0 +1,15 @@
+# Python packages for the real-inference demo PREPARATION scripts
+# (tools/models/prepare_*.py) only. These train the models and produce
+# the trusted PyTorch reference outputs; they are NOT a dependency of
+# the Tensora compiler itself, which has no Python runtime dependency.
+#
+# The demo RUNNER scripts (demos/*_demo.sh) need only numpy at run time
+# (to compare Tensora's output against the saved reference), not torch.
+#
+# Install once, on the machine that prepares the demos:
+#   pip install -r tools/models/requirements.txt   (prefer a venv/pipx)
+torch
+torchvision
+numpy
+pandas
+matplotlib

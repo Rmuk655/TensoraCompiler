@@ -310,9 +310,16 @@ With these three, a complete Transformer encoder/decoder layer (layernorm
 -> multi-head self-attention -> residual -> layernorm -> gelu FFN ->
 residual) becomes expressible entirely from operators — no type-system
 change required. They are the natural **first** open-source additions after
-v0.1, ahead of the heavier integer-tensor tier below. (V0.1 still shows a
-multi-head attention *block* as its Transformer showcase; only the full
-wrapped layer moves here.)
+v0.1, ahead of the heavier integer-tensor tier below. (V0.1's Transformer
+showcase is `examples/attn_text_classifier.tns` — a real self-attention
+**classifier** with PyTorch-trained weights, running end to end through
+Tensora; see `tools/models/prepare_text_attn_demo.py`. A full pretrained
+**BERT/DistilBERT extractive-QA** model is specifically what needs this
+tier plus §8.9: `gelu` + `layernorm` + `rename` for the encoder layers,
+and the integer element type + `gather` below for the token-embedding
+input path. Until then, no pretrained QA model can be reproduced
+faithfully, since every one uses LayerNorm, GELU, and integer-indexed
+embeddings.)
 
 ### 8.9 Integer-tensor + gather tier (the LLM input path) — open-source future
 

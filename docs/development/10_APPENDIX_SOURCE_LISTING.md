@@ -11,10 +11,13 @@ from what was built and tested.
 
 ```text
 tensora/examples/attention.tns
+tensora/examples/attn_text_classifier.tns
 tensora/examples/cnn.tns
+tensora/examples/cnn_cifar.tns
 tensora/examples/matmul_large.tns
 tensora/examples/mlp.tns
 tensora/examples/mlp_concrete.tns
+tensora/examples/mlp_placement.tns
 tensora/grammar/Tensora.g4
 tensora/include/tensora/codegen/DialectSetup.h
 tensora/include/tensora/codegen/LoopTiling.h
@@ -41,6 +44,8 @@ tensora/src/codegen/DialectSetup.cpp
 tensora/src/codegen/LoopTiling.cpp
 tensora/src/codegen/MatmulTilingPass.cpp
 tensora/src/codegen/MlirLowerer.cpp
+tensora/src/driver/Npy.cpp
+tensora/src/driver/Npy.h
 tensora/src/driver/main.cpp
 tensora/src/lexer/Lexer.cpp
 tensora/src/lexer/TokenAdapter.cpp
@@ -62,6 +67,10 @@ tensora/src/shared/Type.cpp
 tensora/tools/benchmark_matmul_tiling.cpp
 tensora/tools/check-deps.sh
 tensora/tools/codegen_mlp_native.cpp
+tensora/tools/models/prepare_cifar_demo.py
+tensora/tools/models/prepare_mlp_demo.py
+tensora/tools/models/prepare_text_attn_demo.py
+tensora/tools/models/requirements.txt
 tensora/tools/regen_appendix.py
 tensora/tools/setup-dev.sh
 ```
@@ -5438,6 +5447,7 @@ int main(int argc, char** argv) {
 #include "mlir/Target/LLVMIR/Export.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/MC/TargetRegistry.h"
+#include "llvm/Support/Error.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/raw_ostream.h"
@@ -5448,6 +5458,8 @@ int main(int argc, char** argv) {
 #include "tensora/codegen/DialectSetup.h"
 #include "tensora/codegen/MatmulTilingPass.h"
 #include "tensora/codegen/MlirLowerer.h"
+
+#include "Npy.h"
 
 using namespace tensora;
 
@@ -5887,10 +5899,34 @@ float readMemRefElement0(const MemRefBuffer& buf, int rank) {
   }
 }
 
+// Copies all `total` result elements out of a result descriptor, for
+// --output. Like readMemRefElement0, it reads the callee's own `data`
+// pointer (not the caller's original buffer). The result of these
+// graphs is a fresh C-contiguous allocation, so reading data[0..total)
+// gives the values in row-major order.
+void readMemRefData(const MemRefBuffer& buf, int rank, int64_t total, float* out) {
+  const float* data = nullptr;
+  switch (rank) {
+    case 1: data = reinterpret_cast<const StridedMemRefType<float, 1>*>(buf.bytes.data())->data; break;
+    case 2: data = reinterpret_cast<const StridedMemRefType<float, 2>*>(buf.bytes.data())->data; break;
+    case 3: data = reinterpret_cast<const StridedMemRefType<float, 3>*>(buf.bytes.data())->data; break;
+    case 4: data = reinterpret_cast<const StridedMemRefType<float, 4>*>(buf.bytes.data())->data; break;
+    default: return;
+  }
+  for (int64_t i = 0; i < total; ++i) out[static_cast<size_t>(i)] = data[i];
+}
+
 std::vector<int64_t> shapeOf(const TensorType* t) {
   std::vector<int64_t> shape;
   for (const Axis& ax : t->axes()) shape.push_back(ax.size.constant);
   return shape;
+}
+
+// Formats a shape as "[a, b, c]" for diagnostics.
+std::string shapeStr(const std::vector<int64_t>& shape) {
+  std::string s = "[";
+  for (size_t i = 0; i < shape.size(); ++i) s += (i ? ", " : "") + std::to_string(shape[i]);
+  return s + "]";
 }
 
 // Runs the Level-1, team-authored graph optimization passes on every
@@ -5942,7 +5978,11 @@ void printUsage(const char* prog) {
             << "  --emit-mlir            lowering: print the MLIR module\n"
             << "  --emit-llvm            backend: print the translated LLVM IR\n"
             << "  --run                  full pipeline: JIT-execute with synthetic all-ones input data\n"
-            << "  -o <out.o>             full pipeline: emit a native object file (ahead-of-time)\n";
+            << "  -o <out.o>             full pipeline: emit a native object file (ahead-of-time)\n"
+            << "\n"
+            << "  --data-dir <dir>       with --run: load each input/weight from <dir>/<name>.npy\n"
+            << "                         (float32) instead of synthetic all-ones data\n"
+            << "  --output <out.npy>     with --run: write the full result tensor to a .npy file\n";
 }
 
 }  // namespace
@@ -5951,11 +5991,17 @@ int main(int argc, char** argv) {
   std::string stage;
   std::string path;
   std::string outPath;
+  std::string dataDir;   // --data-dir: where to read real input/weight .npy files
+  std::string outputNpy; // --output: where to write the result tensor as .npy
   for (int i = 1; i < argc; ++i) {
     std::string arg = argv[i];
     if (arg == "-o" && i + 1 < argc) {
       stage = "-o";
       outPath = argv[++i];
+    } else if (arg == "--data-dir" && i + 1 < argc) {
+      dataDir = argv[++i];
+    } else if (arg == "--output" && i + 1 < argc) {
+      outputNpy = argv[++i];
     } else if (!arg.empty() && arg[0] == '-') {
       stage = arg;
     } else {
@@ -6208,13 +6254,14 @@ int main(int argc, char** argv) {
     }
     auto engine = std::move(*maybeEngine);
 
-    // Uses synthetic all-ones data for every declared input and
-    // weight. Tensora source declares shapes, not values (there is no
-    // tensor-literal syntax), so a CLI demo run has no other source of
-    // data. All-ones is a deliberate, checkable choice, not an
-    // arbitrary one: for example, in a matmul, every output element
-    // then equals the contracted dimension K, which you can check by
-    // hand.
+    // Without --data-dir, uses synthetic all-ones data for every
+    // declared input and weight. Tensora source declares shapes, not
+    // values (there is no tensor-literal syntax), so a plain CLI run
+    // has no other source of data. All-ones is a deliberate, checkable
+    // choice, not an arbitrary one: for example, in a matmul, every
+    // output element then equals the contracted dimension K, which you
+    // can check by hand. With --data-dir, each param's real values are
+    // read from <dir>/<name>.npy instead (see the loop below).
     std::vector<std::vector<float>> storage;
     std::vector<MemRefBuffer> argBufs;
     std::vector<void*> packedArgs;
@@ -6233,72 +6280,285 @@ int main(int argc, char** argv) {
     for (ValueId p : graph.params) {
       const auto* pType = static_cast<const TensorType*>(graph.value(p).type);
       std::vector<int64_t> pShape = shapeOf(pType);
-      storage.emplace_back(static_cast<size_t>(elementCount(pType)), 1.0f);
+      const std::string& pName = graph.value(p).debugName;
+      if (dataDir.empty()) {
+        storage.emplace_back(static_cast<size_t>(elementCount(pType)), 1.0f);
+      } else {
+        // Load this param's real values from <dir>/<name>.npy and check
+        // the file's shape matches what the .tns program declared.
+        std::string npyPath = dataDir + "/" + pName + ".npy";
+        npy::NpyArray arr;
+        std::string npyErr;
+        if (!npy::read(npyPath, arr, npyErr)) {
+          std::cerr << "error: --data-dir: " << npyErr << "\n";
+          return 1;
+        }
+        if (arr.shape != pShape) {
+          std::cerr << "error: --data-dir: '" << pName << "' shape mismatch: declared " << shapeStr(pShape)
+                     << ", file " << npyPath << " has " << shapeStr(arr.shape) << "\n";
+          return 1;
+        }
+        storage.emplace_back(std::move(arr.data));
+      }
       MemRefBuffer buf = makeMemRefBuffer(storage.back().data(), pShape, rankOk);
       if (!rankOk) {
-        std::cerr << "error: --run only supports rank 1-4 tensors; '" << graph.value(p).debugName << "' has rank "
-                   << pShape.size() << "\n";
+        std::cerr << "error: --run only supports rank 1-4 tensors; '" << pName << "' has rank " << pShape.size()
+                   << "\n";
         return 1;
       }
       argBufs.push_back(std::move(buf));
     }
     for (MemRefBuffer& buf : argBufs) packedArgs.push_back(buf.ptr());
 
-    // Calls the ciface wrapper directly, as a plain function pointer
-    // with one void* per argument, in declared order, result first.
-    // This does not go through ExecutionEngine::invokePacked. This is
-    // the same raw-lookup-and-cast pattern this project's other JIT
-    // tests already use reliably, generalized over argument count
-    // with a switch, since a CLI driver cannot know the parameter
-    // count at compile time the way a hand-written test can.
-    auto maybeFn = engine->lookup("_mlir_ciface_" + graph.name);
-    if (!maybeFn) {
-      std::cerr << "error: could not look up '_mlir_ciface_" << graph.name << "'\n";
+    // Invokes the compiled graph through MLIR's own packed calling
+    // convention (ExecutionEngine::invokePacked), the same path the
+    // library's `invoke()` helper uses. The packed C-interface wrapper
+    // reads its arguments from one `void*[]`, so there is no per-arity
+    // code and no cap on the number of inputs/weights: each element
+    // points to one descriptor pointer in `packedArgs` (result first,
+    // then params in declared order), matching how `invoke()` passes
+    // the address of each argument value.
+    std::vector<void*> argAddrs;
+    argAddrs.reserve(packedArgs.size());
+    for (void*& p : packedArgs) argAddrs.push_back(&p);
+    if (llvm::Error err = engine->invokePacked("_mlir_ciface_" + graph.name, argAddrs)) {
+      std::cerr << "error: JIT invocation of '" << graph.name << "' failed: " << llvm::toString(std::move(err)) << "\n";
       return 1;
-    }
-    void* fnPtr = *maybeFn;
-    switch (packedArgs.size()) {
-      case 2: reinterpret_cast<void (*)(void*, void*)>(fnPtr)(packedArgs[0], packedArgs[1]); break;
-      case 3: reinterpret_cast<void (*)(void*, void*, void*)>(fnPtr)(packedArgs[0], packedArgs[1], packedArgs[2]); break;
-      case 4:
-        reinterpret_cast<void (*)(void*, void*, void*, void*)>(fnPtr)(packedArgs[0], packedArgs[1], packedArgs[2],
-                                                                       packedArgs[3]);
-        break;
-      case 5:
-        reinterpret_cast<void (*)(void*, void*, void*, void*, void*)>(fnPtr)(
-            packedArgs[0], packedArgs[1], packedArgs[2], packedArgs[3], packedArgs[4]);
-        break;
-      case 6:
-        reinterpret_cast<void (*)(void*, void*, void*, void*, void*, void*)>(fnPtr)(
-            packedArgs[0], packedArgs[1], packedArgs[2], packedArgs[3], packedArgs[4], packedArgs[5]);
-        break;
-      case 7:
-        reinterpret_cast<void (*)(void*, void*, void*, void*, void*, void*, void*)>(fnPtr)(
-            packedArgs[0], packedArgs[1], packedArgs[2], packedArgs[3], packedArgs[4], packedArgs[5], packedArgs[6]);
-        break;
-      case 8:
-        reinterpret_cast<void (*)(void*, void*, void*, void*, void*, void*, void*, void*)>(fnPtr)(
-            packedArgs[0], packedArgs[1], packedArgs[2], packedArgs[3], packedArgs[4], packedArgs[5], packedArgs[6],
-            packedArgs[7]);
-        break;
-      default:
-        std::cerr << "error: --run only supports up to 7 declared inputs/weights (found "
-                   << (packedArgs.size() - 1) << ")\n";
-        return 1;
     }
 
     int64_t total = elementCount(outType);
     float first = readMemRefElement0(resultBuf, static_cast<int>(outShape.size()));
-    std::cout << "ran '" << graph.name << "' with synthetic all-ones inputs\n";
+    if (dataDir.empty()) {
+      std::cout << "ran '" << graph.name << "' with synthetic all-ones inputs\n";
+    } else {
+      std::cout << "ran '" << graph.name << "' with inputs from " << dataDir << "\n";
+    }
     std::cout << "output shape: [";
     for (size_t i = 0; i < outShape.size(); ++i) std::cout << (i ? ", " : "") << outShape[i];
     std::cout << "], " << total << " elements; element[0] = " << first << "\n";
+
+    // --output writes the whole result tensor (not just element[0]) so a
+    // demo wrapper can read the full logit vector and compare against a
+    // reference. stdout above is unchanged either way.
+    if (!outputNpy.empty()) {
+      std::vector<float> result(static_cast<size_t>(total));
+      readMemRefData(resultBuf, static_cast<int>(outShape.size()), total, result.data());
+      std::string npyErr;
+      if (!npy::write(outputNpy, result.data(), outShape, npyErr)) {
+        std::cerr << "error: --output: " << npyErr << "\n";
+        return 1;
+      }
+    }
     return 0;
   }
 
   printUsage(argv[0]);
   return 2;
 }
+```
+
+### `src/driver/Npy.h`
+```cpp
+#pragma once
+#include <cstdint>
+#include <string>
+#include <vector>
+
+// A small reader and writer for the NumPy `.npy` array format (version
+// 1.0). The `tensora` driver uses this to load real input/weight
+// values for `--run --data-dir` and to write the result tensor for
+// `--output`. It supports only little-endian float32 (`<f4`),
+// C-contiguous arrays -- the one element type Tensora uses (RM 3.23).
+// This is a driver-only helper; no compiler phase depends on it.
+namespace tensora::npy {
+
+// A loaded array: flat C-contiguous float data plus its shape.
+struct NpyArray {
+  std::vector<float> data;
+  std::vector<int64_t> shape;
+};
+
+// Reads a float32 `.npy` file. Returns true on success. On failure,
+// returns false and puts a human-readable reason in `err` (for example,
+// a wrong dtype, a Fortran-order array, or a missing file).
+bool read(const std::string& path, NpyArray& out, std::string& err);
+
+// Writes `data` (row-major, length = product of `shape`) as a float32
+// `.npy` file. Returns true on success; on failure returns false and
+// sets `err`.
+bool write(const std::string& path, const float* data, const std::vector<int64_t>& shape, std::string& err);
+
+}  // namespace tensora::npy
+```
+
+### `src/driver/Npy.cpp`
+```cpp
+#include "Npy.h"
+
+#include <cstdint>
+#include <cstring>
+#include <fstream>
+#include <sstream>
+
+namespace tensora::npy {
+
+namespace {
+
+// The 6-byte magic string every .npy file starts with.
+const char kMagic[6] = {'\x93', 'N', 'U', 'M', 'P', 'Y'};
+
+// Extracts the substring after `key` up to the next `,` or `}`. Used to
+// read one value out of the header's Python-dict text. Returns "" if
+// the key is absent.
+std::string fieldAfter(const std::string& header, const std::string& key) {
+  size_t k = header.find(key);
+  if (k == std::string::npos) return "";
+  size_t start = k + key.size();
+  size_t end = header.find_first_of(",}", start);
+  if (end == std::string::npos) end = header.size();
+  return header.substr(start, end - start);
+}
+
+// Removes spaces, single quotes, and parentheses from `s`.
+std::string strip(const std::string& s) {
+  std::string out;
+  for (char c : s) {
+    if (c != ' ' && c != '\'' && c != '(' && c != ')') out += c;
+  }
+  return out;
+}
+
+}  // namespace
+
+bool read(const std::string& path, NpyArray& out, std::string& err) {
+  std::ifstream in(path, std::ios::binary);
+  if (!in) {
+    err = "cannot open '" + path + "'";
+    return false;
+  }
+
+  char magic[6];
+  in.read(magic, 6);
+  if (in.gcount() != 6 || std::memcmp(magic, kMagic, 6) != 0) {
+    err = "'" + path + "' is not a .npy file (bad magic)";
+    return false;
+  }
+
+  unsigned char version[2];
+  in.read(reinterpret_cast<char*>(version), 2);
+  if (in.gcount() != 2 || version[0] != 1) {
+    err = "'" + path + "' is not a version 1.0 .npy file";
+    return false;
+  }
+
+  unsigned char lenBytes[2];
+  in.read(reinterpret_cast<char*>(lenBytes), 2);
+  if (in.gcount() != 2) {
+    err = "'" + path + "' has a truncated header";
+    return false;
+  }
+  // HEADER_LEN is a little-endian uint16.
+  size_t headerLen = static_cast<size_t>(lenBytes[0]) | (static_cast<size_t>(lenBytes[1]) << 8);
+
+  std::string header(headerLen, '\0');
+  in.read(header.data(), static_cast<std::streamsize>(headerLen));
+  if (static_cast<size_t>(in.gcount()) != headerLen) {
+    err = "'" + path + "' has a truncated header";
+    return false;
+  }
+
+  // Only little-endian float32 is supported. `<f4` is what numpy writes
+  // on a little-endian machine; `=f4` is the native-order spelling.
+  std::string descr = strip(fieldAfter(header, "'descr':"));
+  if (descr != "<f4" && descr != "=f4") {
+    err = "'" + path + "' has dtype '" + descr + "'; only float32 ('<f4') is supported";
+    return false;
+  }
+
+  std::string fortran = strip(fieldAfter(header, "'fortran_order':"));
+  if (fortran != "False") {
+    err = "'" + path + "' is Fortran-ordered; only C-contiguous arrays are supported";
+    return false;
+  }
+
+  // Parse the shape tuple, for example `(4, 8)` -> {4, 8}. The tuple
+  // itself contains commas, so read the text between its parentheses
+  // rather than up to the next comma. A 0-d array has an empty tuple
+  // and one element.
+  std::string shapeText;
+  {
+    size_t k = header.find("'shape':");
+    size_t lp = (k == std::string::npos) ? std::string::npos : header.find('(', k);
+    size_t rp = (lp == std::string::npos) ? std::string::npos : header.find(')', lp);
+    if (lp == std::string::npos || rp == std::string::npos) {
+      err = "'" + path + "' has an unreadable shape field";
+      return false;
+    }
+    shapeText = strip(header.substr(lp + 1, rp - lp - 1));
+  }
+  out.shape.clear();
+  int64_t count = 1;
+  std::stringstream ss(shapeText);
+  std::string dim;
+  while (std::getline(ss, dim, ',')) {
+    if (dim.empty()) continue;
+    int64_t d = std::stoll(dim);
+    out.shape.push_back(d);
+    count *= d;
+  }
+
+  out.data.resize(static_cast<size_t>(count));
+  in.read(reinterpret_cast<char*>(out.data.data()), static_cast<std::streamsize>(count) * 4);
+  if (in.gcount() != static_cast<std::streamsize>(count) * 4) {
+    err = "'" + path + "' has fewer data bytes than its shape declares";
+    return false;
+  }
+  return true;
+}
+
+bool write(const std::string& path, const float* data, const std::vector<int64_t>& shape, std::string& err) {
+  std::ofstream os(path, std::ios::binary);
+  if (!os) {
+    err = "cannot write '" + path + "'";
+    return false;
+  }
+
+  // Build the shape tuple. numpy writes a trailing comma for a 1-tuple,
+  // e.g. `(4,)`; a plain `(4)` also parses, so a uniform `n,` per dim
+  // is safe.
+  std::string shapeText = "(";
+  int64_t count = 1;
+  for (int64_t d : shape) {
+    shapeText += std::to_string(d) + ",";
+    count *= d;
+  }
+  shapeText += ")";
+
+  std::string dict = "{'descr': '<f4', 'fortran_order': False, 'shape': " + shapeText + ", }";
+  // The total header (10 fixed bytes + dict + newline) must be a
+  // multiple of 64; pad the dict with spaces before the newline.
+  size_t unpadded = 10 + dict.size() + 1;
+  size_t pad = (64 - (unpadded % 64)) % 64;
+  dict += std::string(pad, ' ');
+  dict += '\n';
+
+  os.write(kMagic, 6);
+  unsigned char version[2] = {1, 0};
+  os.write(reinterpret_cast<char*>(version), 2);
+  size_t headerLen = dict.size();
+  unsigned char lenBytes[2] = {static_cast<unsigned char>(headerLen & 0xFF),
+                               static_cast<unsigned char>((headerLen >> 8) & 0xFF)};
+  os.write(reinterpret_cast<char*>(lenBytes), 2);
+  os.write(dict.data(), static_cast<std::streamsize>(dict.size()));
+  os.write(reinterpret_cast<const char*>(data), static_cast<std::streamsize>(count) * 4);
+  if (!os) {
+    err = "failed while writing '" + path + "'";
+    return false;
+  }
+  return true;
+}
+
+}  // namespace tensora::npy
 ```
 
 ### `examples/mlp.tns`
@@ -6380,12 +6640,12 @@ graph cnn {
 ```text
 # Single-head scaled dot-product attention (matmul -> transpose -> scale
 # -> softmax -> matmul), matching tests/codegen/test_attention_e2e.cpp's
-# shapes. This is a rank-2 (no batch/head axes) demonstration: the
-# backend's matmul lowering is rank-2 only for now (batched matmul is a
-# known limitation -- see docs/testing/TEST_MATRIX.md), so a compiled
-# multi-head version (as shown in docs/language/02_LANGUAGE_TUTORIAL.md
-# Section 2.11) is not runnable through this driver yet, even though it
-# type-checks under semantic analysis.
+# shapes. This is a rank-2 (no batch/head axes) demonstration. Batched
+# matmul is supported (RANK-003/004 in docs/testing/TEST_MATRIX.md), so
+# a rank-4 multi-head version type-checks and lowers too; it is just not
+# written as an example here. For a runnable attention model with real
+# trained weights, see examples/attn_text_classifier.tns and
+# tools/models/prepare_text_attn_demo.py.
 input q: Tensor[seq_q=2, d_k=2]
 input k: Tensor[seq_k=2, d_k=2]
 input v: Tensor[seq_k=2, d_v=2]
@@ -6397,6 +6657,143 @@ graph attention {
     weights = softmax(scaled, axis=seq_k)
     out     = weights @ v
     return out
+}
+```
+
+### `examples/mlp_placement.tns`
+```text
+# Student placement-eligibility MLP (real-inference demo).
+#
+# Predicts whether a student is on track to pass ("placement-eligible")
+# from 8 academic features, using a small MLP trained once in PyTorch on
+# the UCI Student Performance dataset (Cortez & Silva, 2008). The
+# trained weights and 3 real held-out student records are produced by
+# tools/models/prepare_mlp_demo.py and loaded at run time with
+# `--data-dir` (see docs/development/BUILD.md). This is a compiler
+# demonstration, not a real placement or grading system.
+#
+# Architecture: features -> linear -> relu -> linear -> 2 class logits.
+# The batch axis is 100: the demo classifies a whole held-out set of 100
+# students in one run and compares every row against PyTorch, so the
+# agreement is statistically meaningful rather than anecdotal.
+input  x:  Tensor[batch=100, feat=8]
+weight W1: Tensor[in=8, out=16]
+weight b1: Tensor[out=16]
+weight W2: Tensor[in=16, out=2]
+weight b2: Tensor[out=2]
+
+graph mlp {
+    h = linear(x, W1, b1)
+    h = relu(h)
+    y = linear(h, W2, b2)
+    return y
+}
+```
+
+### `examples/cnn_cifar.tns`
+```text
+# CIFAR-100 image-classifier CNN (real-inference demo).
+#
+# A convolutional classifier for 96x96 RGB images over the 20 CIFAR-100
+# coarse "superclasses", trained once in PyTorch (images upscaled to
+# 96x96 so they are large and clearly viewable) by
+# tools/models/prepare_cifar_demo.py. The trained weights and several
+# real held-out test images are loaded at run time with `--data-dir`
+# (see docs/development/BUILD.md). The graph returns raw class logits;
+# the demo runner applies softmax for display and compares logits
+# against the PyTorch reference.
+#
+# Architecture: four [conv -> relu -> maxpool] blocks (96 -> 48 -> 24 ->
+# 12 -> 6 spatially) then flatten -> linear -> 20 class logits. Conv
+# weights are [oc, ic, kh, kw] (matching PyTorch); the linear weight is
+# [flat, classes] (the transpose of PyTorch's [out, in]).
+#
+# The batch axis n is 40: the demo classifies 40 held-out images in one
+# run and compares every row against PyTorch, for a statistically
+# meaningful agreement check (a few are shown with their pictures).
+input  x:      Tensor[n=40, c=3, h=96, w=96]
+weight convW1: Tensor[oc=16, ic=3, kh=3, kw=3]
+weight convB1: Tensor[oc=16]
+weight convW2: Tensor[oc=32, ic=16, kh=3, kw=3]
+weight convB2: Tensor[oc=32]
+weight convW3: Tensor[oc=64, ic=32, kh=3, kw=3]
+weight convB3: Tensor[oc=64]
+weight convW4: Tensor[oc=64, ic=64, kh=3, kw=3]
+weight convB4: Tensor[oc=64]
+weight fcW:    Tensor[flat=2304, classes=20]
+weight fcB:    Tensor[classes=20]
+
+graph cnn {
+    c1     = conv2d(x, convW1, convB1, stride=1, padding=1)
+    r1     = relu(c1)
+    p1     = maxpool(r1, size=2)
+    c2     = conv2d(p1, convW2, convB2, stride=1, padding=1)
+    r2     = relu(c2)
+    p2     = maxpool(r2, size=2)
+    c3     = conv2d(p2, convW3, convB3, stride=1, padding=1)
+    r3     = relu(c3)
+    p3     = maxpool(r3, size=2)
+    c4     = conv2d(p3, convW4, convB4, stride=1, padding=1)
+    r4     = relu(c4)
+    p4     = maxpool(r4, size=2)
+    flat   = flatten(p4)
+    logits = linear(flat, fcW, fcB)
+    return logits
+}
+```
+
+### `examples/attn_text_classifier.tns`
+```text
+# Self-attention text classifier (real-inference demo).
+#
+# A single-head self-attention classifier over a fixed-length sequence
+# of word embeddings, trained once in PyTorch by
+# tools/models/prepare_text_attn_demo.py on a small labelled corpus
+# (3 topics). Tensora runs the whole forward path -- the Q/K/V
+# projections, scaled dot-product attention, mean pooling, and a
+# two-layer classifier head (linear -> relu -> linear) -- using only
+# its existing operators. The word embeddings are looked up in Python
+# (embedding lookup is preprocessing, like tokenization) and fed in as
+# the float input X.
+#
+# The same embedding sequence is supplied under two axis names, Xq and
+# Xk (identical values): self-attention needs the query and key
+# positions to be distinct axes (seq_q vs seq_k), which one input tensor
+# cannot express (an axis name is unique within a tensor). This is a
+# naming accommodation, not a change to the computation -- Xq and Xk
+# hold the same data.
+#
+# Scale = 1/sqrt(dk) = 1/sqrt(32); the prep script uses the same
+# constant so the reference matches.
+#
+# The batch axis b is 30: the demo classifies 30 held-out sentences in
+# one run and compares every row against PyTorch, for a statistically
+# meaningful agreement check. The shared projection weights keep b=1 and
+# broadcast over the batch (RM 3.7 leading-axis broadcast).
+input  Xq: Tensor[b=30, seq_q=16, d=32]
+input  Xk: Tensor[b=30, seq_k=16, d=32]
+weight Wq:  Tensor[b=1, d=32, dk=32]
+weight Wk:  Tensor[b=1, d=32, dk=32]
+weight Wv:  Tensor[b=1, d=32, dv=32]
+weight Wc1: Tensor[dv=32, hid=16]
+weight bc1: Tensor[hid=16]
+weight Wc2: Tensor[hid=16, classes=3]
+weight bc2: Tensor[classes=3]
+
+graph attn {
+    Q      = Xq @ Wq
+    K      = Xk @ Wk
+    V      = Xk @ Wv
+    Kt     = transpose(K, perm=[0, 2, 1])
+    scores = Q @ Kt
+    scaled = scores * 0.1767767
+    A      = softmax(scaled, axis=seq_k)
+    ctx    = A @ V
+    pooled = mean(ctx, axis=seq_q)
+    h      = linear(pooled, Wc1, bc1)
+    h      = relu(h)
+    logits = linear(h, Wc2, bc2)
+    return logits
 }
 ```
 
@@ -6601,7 +6998,7 @@ target_link_libraries(tensora_codegen PUBLIC tensora_optimization PRIVATE MLIR)
 # Command-line driver: one flag per compiler phase, plus --run/-o,
 # which run the full pipeline (docs/language/02_LANGUAGE_TUTORIAL.md
 # §2.12).
-add_executable(tensora src/driver/main.cpp)
+add_executable(tensora src/driver/main.cpp src/driver/Npy.cpp)
 target_include_directories(tensora SYSTEM PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
 target_link_libraries(tensora PRIVATE tensora_codegen MLIR MLIRExecutionEngineShared)
 target_compile_definitions(tensora PRIVATE MLIR_C_RUNNER_UTILS_PATH="${MLIR_C_RUNNER_UTILS_LIB}")
@@ -6838,6 +7235,29 @@ set_tests_properties(INT-FULL-ATTN-RUN PROPERTIES PASS_REGULAR_EXPRESSION "eleme
 add_test(NAME INT-FULL-SYMBOLIC-REJECT COMMAND tensora --run ${CMAKE_SOURCE_DIR}/examples/mlp.tns)
 set_tests_properties(INT-FULL-SYMBOLIC-REJECT PROPERTIES WILL_FAIL TRUE)
 
+# INT-DATALOAD-*: --data-dir real-data loading (ARCH-015). The
+# equivalence case is the core check: feeding all-ones .npy files
+# (tests/driver/mlp_ones/) must reproduce the exact result the built-in
+# all-ones default gives for the same graph (element[0] = 145, same as
+# INT-FULL-MLP-RUN) -- proof the loader is transparent. The three
+# negative cases confirm each diagnostic rejects bad input (nonzero
+# exit) instead of running with wrong or missing data.
+add_test(NAME INT-DATALOAD-EQUIV COMMAND tensora --run ${CMAKE_SOURCE_DIR}/examples/mlp_concrete.tns
+         --data-dir ${CMAKE_SOURCE_DIR}/tests/driver/mlp_ones)
+set_tests_properties(INT-DATALOAD-EQUIV PROPERTIES PASS_REGULAR_EXPRESSION "element\\[0\\] = 145")
+
+add_test(NAME INT-DATALOAD-MISSING COMMAND tensora --run ${CMAKE_SOURCE_DIR}/examples/mlp_concrete.tns
+         --data-dir ${CMAKE_SOURCE_DIR}/tests/driver/does_not_exist)
+set_tests_properties(INT-DATALOAD-MISSING PROPERTIES WILL_FAIL TRUE)
+
+add_test(NAME INT-DATALOAD-BADSHAPE COMMAND tensora --run ${CMAKE_SOURCE_DIR}/examples/mlp_concrete.tns
+         --data-dir ${CMAKE_SOURCE_DIR}/tests/driver/mlp_badshape)
+set_tests_properties(INT-DATALOAD-BADSHAPE PROPERTIES WILL_FAIL TRUE)
+
+add_test(NAME INT-DATALOAD-BADDTYPE COMMAND tensora --run ${CMAKE_SOURCE_DIR}/examples/mlp_concrete.tns
+         --data-dir ${CMAKE_SOURCE_DIR}/tests/driver/mlp_baddtype)
+set_tests_properties(INT-DATALOAD-BADDTYPE PROPERTIES WILL_FAIL TRUE)
+
 # Category labels for `ctest -L <category>` filtering. These come from
 # the same ID-prefix rule the C++ harness uses
 # (tests/support/TestHarness.h categoryOf). This block sets the label
@@ -6909,9 +7329,23 @@ add_custom_target(full DEPENDS lexer parser semantic optimization backend)
 #
 # Usage, once after cloning:
 #
-#   ./tools/setup-dev.sh
+#   ./tools/setup-dev.sh            # check the build toolchain only
+#   ./tools/setup-dev.sh --demos    # also set up the Python venv for the
+#                                    # real-world inference demos (torch etc.)
+#
+# The compiler itself needs no Python. `--demos` is only for the
+# tools/models/prepare_*.py scripts, so it is opt-in: it pulls in torch
+# and torchvision, which are large and most compiler work does not need.
 set -uo pipefail
 cd "$(dirname "$0")/.."
+
+WITH_DEMOS=0
+for arg in "$@"; do
+  case "$arg" in
+    --demos) WITH_DEMOS=1 ;;
+    *) echo "unknown option: $arg (usage: ./tools/setup-dev.sh [--demos])" >&2; exit 2 ;;
+  esac
+done
 
 ./tools/check-deps.sh
 status=$?
@@ -6927,6 +7361,37 @@ echo "All required dependencies are present. Next steps:"
 echo "  cmake -S . -B build"
 echo "  cmake --build build -j4"
 echo "  ctest --test-dir build --output-on-failure"
+
+if [ "$WITH_DEMOS" -eq 0 ]; then
+  echo
+  echo "To also run the real-world inference demos (needs torch), set up the"
+  echo "Python venv with:  ./tools/setup-dev.sh --demos"
+  exit 0
+fi
+
+# --demos: create a project-local virtual environment and install the
+# demo dependencies INTO it. Modern Debian/Ubuntu block `pip install`
+# against the system Python (PEP 668, "externally-managed-environment");
+# a venv is the supported fix -- never use `pip --break-system-packages`
+# for this project.
+echo
+echo "Setting up the Python venv for the demos (.venv/) ..."
+if ! python3 -m venv .venv 2>/tmp/tensora-venv.log; then
+  echo "error: could not create .venv. You may need the venv package:" >&2
+  echo "  sudo apt install -y python3-venv" >&2
+  echo "(details in /tmp/tensora-venv.log)" >&2
+  exit 1
+fi
+
+.venv/bin/python -m pip install --upgrade pip >/dev/null
+.venv/bin/python -m pip install -r tools/models/requirements.txt
+
+echo
+echo "Demo dependencies installed in .venv/. To use the demos:"
+echo "  source .venv/bin/activate      # then 'which python' -> .venv/bin/python"
+echo "  python tools/models/prepare_mlp_demo.py        # (and prepare_cifar_demo.py, prepare_text_attn_demo.py)"
+echo "  make demo-mlp-placement        # demo-cnn-image-classifier, demo-attn-text-classifier"
+echo "  deactivate                     # when finished"
 ```
 
 ### `tools/check-deps.sh`
@@ -7202,6 +7667,582 @@ if __name__ == "__main__":
     sys.exit(main())
 ````
 
+### `tools/models/requirements.txt`
+```text
+# Python packages for the real-inference demo PREPARATION scripts
+# (tools/models/prepare_*.py) only. These train the models and produce
+# the trusted PyTorch reference outputs; they are NOT a dependency of
+# the Tensora compiler itself, which has no Python runtime dependency.
+#
+# The demo RUNNER scripts (demos/*_demo.sh) need only numpy at run time
+# (to compare Tensora's output against the saved reference), not torch.
+#
+# Install once, on the machine that prepares the demos:
+#   pip install -r tools/models/requirements.txt   (prefer a venv/pipx)
+torch
+torchvision
+numpy
+pandas
+matplotlib
+```
+
+### `tools/models/prepare_mlp_demo.py`
+```python
+#!/usr/bin/env python3
+"""Prepare the MLP student-placement real-inference demo.
+
+Trains a small MLP once in PyTorch on the UCI Student Performance
+dataset (Cortez & Silva, 2008; https://archive.ics.uci.edu/dataset/320)
+to predict placement-eligibility (on track to pass, G3 >= 10) from 8
+academic features, then exports:
+
+  demos/artifacts/mlp/eval/
+      x.npy W1.npy b1.npy W2.npy b2.npy   -> a self-contained --data-dir
+                                             (x is a batch of 100 students)
+      expected.npy                        -> the PyTorch reference logits [100,2]
+      meta.json                           -> true labels + a few readable rows
+
+The eval dir is directly usable as `tensora --run examples/mlp_placement.tns
+--data-dir <dir>`: one run classifies all 100 held-out students, and the
+demo compares every row against PyTorch. This is a compiler demonstration,
+not a real placement or grading system.
+
+Run once, on a machine with PyTorch (see tools/models/requirements.txt):
+    python3 tools/models/prepare_mlp_demo.py
+"""
+import io
+import json
+import os
+import urllib.request
+import zipfile
+
+import numpy as np
+
+try:
+    import torch
+    import torch.nn as nn
+except ImportError:
+    raise SystemExit("error: PyTorch is required. Install with: pip install -r tools/models/requirements.txt")
+
+SEED = 0
+BATCH = 100  # held-out records evaluated in one run; matches examples/mlp_placement.tns
+FEATURES = ["age", "Medu", "Fedu", "studytime", "failures", "absences", "G1", "G2"]
+DATASET_URL = "https://archive.ics.uci.edu/ml/machine-learning-databases/00320/student.zip"
+OUT_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "demos", "artifacts", "mlp")
+
+
+class MLP(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.fc1 = nn.Linear(8, 16)
+        self.fc2 = nn.Linear(16, 2)
+
+    def forward(self, x):
+        return self.fc2(torch.relu(self.fc1(x)))
+
+
+def load_dataset():
+    """Downloads and parses student-por.csv (semicolon-separated)."""
+    print("Downloading UCI Student Performance dataset ...")
+    try:
+        raw = urllib.request.urlopen(DATASET_URL, timeout=30).read()
+    except Exception as e:
+        raise SystemExit(f"error: could not download the dataset ({e}). Check your network and retry.")
+    with zipfile.ZipFile(io.BytesIO(raw)) as z:
+        with z.open("student-por.csv") as f:
+            lines = f.read().decode("utf-8").splitlines()
+    header = lines[0].split(";")
+    rows = [dict(zip(header, [c.strip('"') for c in ln.split(";")])) for ln in lines[1:]]
+    return rows
+
+
+def main():
+    torch.manual_seed(SEED)
+    np.random.seed(SEED)
+    rows = load_dataset()
+
+    X = np.array([[float(r[f]) for f in FEATURES] for r in rows], dtype=np.float32)
+    y = np.array([1 if float(r["G3"]) >= 10 else 0 for r in rows], dtype=np.int64)
+
+    # Deterministic train/test split.
+    rng = np.random.default_rng(SEED)
+    perm = rng.permutation(len(X))
+    X, y = X[perm], y[perm]
+    n_test = max(30, len(X) // 5)
+    Xtr, ytr = X[:-n_test], y[:-n_test]
+    Xte, yte = X[-n_test:], y[-n_test:]
+
+    # Standardize on train statistics; the same transform is applied to
+    # the demo inputs (preprocessing lives here, not in the .tns program).
+    mean = Xtr.mean(axis=0)
+    std = Xtr.std(axis=0) + 1e-6
+    Xtr_s = (Xtr - mean) / std
+    Xte_s = (Xte - mean) / std
+
+    model = MLP()
+    opt = torch.optim.Adam(model.parameters(), lr=1e-2)
+    loss_fn = nn.CrossEntropyLoss()
+    xt = torch.tensor(Xtr_s)
+    yt = torch.tensor(ytr)
+    for epoch in range(300):
+        opt.zero_grad()
+        loss = loss_fn(model(xt), yt)
+        loss.backward()
+        opt.step()
+    model.eval()
+    with torch.no_grad():
+        acc = (model(torch.tensor(Xte_s)).argmax(1).numpy() == yte).mean()
+    print(f"Trained MLP: held-out accuracy = {acc:.3f}")
+
+    # Export weights in Tensora's linear layout: y = x @ W + b, so W is
+    # [in, out] -- the transpose of PyTorch's [out, in] nn.Linear.weight.
+    with torch.no_grad():
+        weights = {
+            "W1": model.fc1.weight.t().contiguous().numpy().astype(np.float32),
+            "b1": model.fc1.bias.numpy().astype(np.float32),
+            "W2": model.fc2.weight.t().contiguous().numpy().astype(np.float32),
+            "b2": model.fc2.bias.numpy().astype(np.float32),
+        }
+
+    # Evaluate a whole batch of held-out students in one Tensora run, so
+    # the Tensora-vs-PyTorch agreement is statistically meaningful. BATCH
+    # matches the batch axis in examples/mlp_placement.tns.
+    if len(Xte_s) < BATCH:
+        raise SystemExit(f"error: only {len(Xte_s)} held-out records; need {BATCH}")
+    # The held-out records are already in shuffled order (from the split
+    # permutation above), so the batch is not sorted by label.
+    xb = Xte_s[:BATCH].astype(np.float32)  # [BATCH, 8], standardized
+    yb = yte[:BATCH]
+    Xraw = Xte[:BATCH]  # unstandardized features, for display
+    with torch.no_grad():
+        logits = model(torch.tensor(xb)).numpy().astype(np.float32)  # [BATCH, 2]
+        probs = torch.softmax(torch.tensor(logits), dim=1).numpy()
+
+    # Show three genuinely different students -- a confident pass, the
+    # most borderline, and a confident fail -- at their real (spread-out)
+    # positions in the batch, not reordered to the front.
+    pass_conf = probs[:, 1]
+    disp = sorted({int(np.argmax(pass_conf)), int(np.argmin(np.abs(pass_conf - 0.5))), int(np.argmin(pass_conf))})
+
+    os.makedirs(OUT_DIR, exist_ok=True)
+    d = os.path.join(OUT_DIR, "eval")
+    os.makedirs(d, exist_ok=True)
+    np.save(os.path.join(d, "x.npy"), xb)
+    for name, arr in weights.items():
+        np.save(os.path.join(d, f"{name}.npy"), arr)
+    np.save(os.path.join(d, "expected.npy"), logits)  # [BATCH, 2]
+    meta = {
+        "count": BATCH,
+        "true_labels": ["placement-eligible" if y == 1 else "not eligible" for y in yb.tolist()],
+        "display": [
+            {
+                "index": i,
+                "features": {f: float(Xraw[i][k]) for k, f in enumerate(FEATURES)},
+                "true_label": "placement-eligible" if yb[i] == 1 else "not eligible",
+                "pytorch_prob_eligible": float(probs[i][1]),
+            }
+            for i in disp
+        ],
+    }
+    with open(os.path.join(d, "meta.json"), "w") as f:
+        json.dump(meta, f, indent=2)
+
+    pt_acc = float((logits.argmax(1) == yb).mean())
+    print(f"Wrote {BATCH}-record eval batch to {os.path.normpath(OUT_DIR)} "
+          f"(PyTorch accuracy on this batch = {pt_acc:.3f})")
+
+
+if __name__ == "__main__":
+    main()
+```
+
+### `tools/models/prepare_cifar_demo.py`
+```python
+#!/usr/bin/env python3
+"""Prepare the CNN CIFAR-100 image-classifier real-inference demo.
+
+Trains a CNN once in PyTorch on CIFAR-100's 20 coarse "superclasses"
+(images upscaled to 96x96 so they are large and clearly viewable), then
+exports the trained weights and several real held-out test images:
+
+  demos/artifacts/cnn/
+      classes.json            -> the 20 superclass names (for the runner)
+      sample{0..N}/
+          x.npy convW1..4.npy convB1..4.npy fcW.npy fcB.npy
+                              -> a self-contained --data-dir
+          expected.npy        -> the PyTorch reference logits
+          image.png           -> the image, for GUI display
+          thumb.npy           -> an RGB thumbnail, for a terminal preview
+          meta.json           -> true class + PyTorch prediction
+
+Each sample dir is directly usable as `tensora --run examples/cnn_cifar.tns
+--data-dir <dir>`. Run once, on a machine with PyTorch + torchvision
+(see tools/models/requirements.txt):
+    python3 tools/models/prepare_cifar_demo.py
+"""
+import json
+import os
+
+import numpy as np
+
+try:
+    import torch
+    import torch.nn as nn
+    import torch.nn.functional as F
+    import torchvision
+    import torchvision.transforms as T
+except ImportError:
+    raise SystemExit("error: PyTorch + torchvision are required. "
+                     "Install with: pip install -r tools/models/requirements.txt")
+
+SEED = 0
+EPOCHS = 12
+# CIFAR-100 images are natively 32x32; we upscale to 96x96 so the demo
+# image is large and clearly viewable. The model is trained at 96x96
+# too, so PyTorch and Tensora run the identical computation.
+SIZE = 96
+EVAL_N = 40   # held-out images classified in one run; matches examples/cnn_cifar.tns
+DISPLAY = 5   # how many of them to show with their pictures (distinct superclasses)
+# CIFAR-100 per-channel normalization (standard values).
+MEAN = (0.5071, 0.4866, 0.4409)
+STD = (0.2673, 0.2564, 0.2762)
+DATA_ROOT = os.path.join(os.path.dirname(__file__), "..", "..", "demos", "artifacts", "cifar-data")
+OUT_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "demos", "artifacts", "cnn")
+# Cache the trained model so re-running prep (e.g. to change the demo
+# display) does not retrain from scratch. Delete this file to retrain.
+MODEL_PT = os.path.join(os.path.dirname(__file__), "..", "..", "demos", "artifacts", "cnn-model.pt")
+
+# The 20 CIFAR-100 coarse superclasses, and the standard fine(0-99) ->
+# coarse(0-19) mapping.
+SUPERCLASSES = [
+    "aquatic mammals", "fish", "flowers", "food containers", "fruit and vegetables",
+    "household electrical devices", "household furniture", "insects", "large carnivores",
+    "large man-made outdoor things", "large natural outdoor scenes",
+    "large omnivores and herbivores", "medium mammals", "non-insect invertebrates",
+    "people", "reptiles", "small mammals", "trees", "vehicles 1", "vehicles 2",
+]
+FINE_TO_COARSE = [
+    4, 1, 14, 8, 0, 6, 7, 7, 18, 3, 3, 14, 9, 18, 7, 11, 3, 9, 7, 11,
+    6, 11, 5, 10, 7, 6, 13, 15, 3, 15, 0, 11, 1, 10, 12, 14, 16, 9, 11, 5,
+    5, 19, 8, 8, 15, 13, 14, 17, 18, 10, 16, 4, 17, 4, 2, 0, 17, 4, 18, 17,
+    10, 3, 2, 12, 12, 16, 12, 1, 9, 19, 2, 10, 0, 1, 16, 12, 9, 13, 15, 13,
+    16, 19, 2, 4, 6, 19, 5, 5, 8, 19, 18, 1, 2, 15, 6, 0, 17, 8, 14, 13,
+]
+
+
+class CNN(nn.Module):
+    # Four conv/pool blocks: 96 -> 48 -> 24 -> 12 -> 6 spatially, then a
+    # linear head over 64*6*6 = 2304 features. Mirrors
+    # examples/cnn_cifar.tns exactly.
+    def __init__(self):
+        super().__init__()
+        self.conv1 = nn.Conv2d(3, 16, 3, padding=1)
+        self.conv2 = nn.Conv2d(16, 32, 3, padding=1)
+        self.conv3 = nn.Conv2d(32, 64, 3, padding=1)
+        self.conv4 = nn.Conv2d(64, 64, 3, padding=1)
+        self.fc = nn.Linear(64 * 6 * 6, 20)
+
+    def forward(self, x):
+        x = F.max_pool2d(torch.relu(self.conv1(x)), 2)
+        x = F.max_pool2d(torch.relu(self.conv2(x)), 2)
+        x = F.max_pool2d(torch.relu(self.conv3(x)), 2)
+        x = F.max_pool2d(torch.relu(self.conv4(x)), 2)
+        return self.fc(x.flatten(1))
+
+
+def main():
+    torch.manual_seed(SEED)
+    np.random.seed(SEED)
+    coarse = torch.tensor(FINE_TO_COARSE)
+    tf = T.Compose([T.Resize(SIZE), T.ToTensor(), T.Normalize(MEAN, STD)])
+    print("Downloading / loading CIFAR-100 ...")
+    train = torchvision.datasets.CIFAR100(DATA_ROOT, train=True, download=True, transform=tf)
+    test = torchvision.datasets.CIFAR100(DATA_ROOT, train=False, download=True, transform=tf)
+    loader = torch.utils.data.DataLoader(train, batch_size=128, shuffle=True)
+
+    model = CNN()
+    if os.path.exists(MODEL_PT):
+        model.load_state_dict(torch.load(MODEL_PT))
+        print(f"Loaded cached model from {os.path.normpath(MODEL_PT)} (delete it to retrain)")
+    else:
+        opt = torch.optim.Adam(model.parameters(), lr=1e-3)
+        loss_fn = nn.CrossEntropyLoss()
+        for epoch in range(EPOCHS):
+            model.train()
+            for xb, yb in loader:
+                opt.zero_grad()
+                loss_fn(model(xb), coarse[yb]).backward()
+                opt.step()
+            print(f"  epoch {epoch + 1}/{EPOCHS} done")
+        torch.save(model.state_dict(), MODEL_PT)
+    model.eval()
+
+    # Held-out accuracy over the 20 superclasses.
+    correct = total = 0
+    with torch.no_grad():
+        for xb, yb in torch.utils.data.DataLoader(test, batch_size=256):
+            correct += (model(xb).argmax(1) == coarse[yb]).sum().item()
+            total += yb.size(0)
+    print(f"CNN (20 superclasses): held-out accuracy = {correct / total:.3f}")
+
+    with torch.no_grad():
+        weights = {
+            "convW1": model.conv1.weight.numpy().astype(np.float32),
+            "convB1": model.conv1.bias.numpy().astype(np.float32),
+            "convW2": model.conv2.weight.numpy().astype(np.float32),
+            "convB2": model.conv2.bias.numpy().astype(np.float32),
+            "convW3": model.conv3.weight.numpy().astype(np.float32),
+            "convB3": model.conv3.bias.numpy().astype(np.float32),
+            "convW4": model.conv4.weight.numpy().astype(np.float32),
+            "convB4": model.conv4.bias.numpy().astype(np.float32),
+            # linear: y = x @ W + b, so W is [in, out] (PyTorch is [out, in]).
+            "fcW": model.fc.weight.t().contiguous().numpy().astype(np.float32),
+            "fcB": model.fc.bias.numpy().astype(np.float32),
+        }
+
+    raw = torchvision.datasets.CIFAR100(DATA_ROOT, train=False, download=False)  # unnormalized, for display
+
+    # Evaluate a batch of EVAL_N random held-out images in one Tensora run
+    # (batch axis n in examples/cnn_cifar.tns), so Tensora-vs-PyTorch
+    # agreement is statistically meaningful. A random draw keeps the
+    # accuracy honest (a real mix of right and wrong).
+    rng = np.random.default_rng(SEED)
+    idxs = rng.choice(len(test), size=EVAL_N, replace=False).tolist()
+    xb = torch.stack([test[i][0] for i in idxs])  # [EVAL_N, 3, SIZE, SIZE]
+    true_coarse = [int(coarse[test[i][1]]) for i in idxs]
+    with torch.no_grad():
+        logits = model(xb).numpy().astype(np.float32)  # [EVAL_N, 20]
+
+    # Choose DISPLAY images to show with pictures: evenly spaced across
+    # the batch, so they are spread out (not adjacent) and land on a
+    # variety of superclasses (the batch is a random draw).
+    display = sorted({round(k * (EVAL_N - 1) / (DISPLAY - 1)) for k in range(DISPLAY)})
+
+    os.makedirs(OUT_DIR, exist_ok=True)
+    d = os.path.join(OUT_DIR, "eval")
+    os.makedirs(d, exist_ok=True)
+    json.dump(SUPERCLASSES, open(os.path.join(OUT_DIR, "classes.json"), "w"), indent=2)
+    np.save(os.path.join(d, "x.npy"), xb.numpy().astype(np.float32))
+    for wname, arr in weights.items():
+        np.save(os.path.join(d, f"{wname}.npy"), arr)
+    np.save(os.path.join(d, "expected.npy"), logits)  # [EVAL_N, 20]
+
+    for b in display:
+        # Upscale the native 32x32 to SIZE so the shown image is viewable.
+        pil_img = raw[idxs[b]][0].resize((SIZE, SIZE))
+        pil_img.save(os.path.join(d, f"image_{b}.png"))
+        np.save(os.path.join(d, f"thumb_{b}.npy"), np.asarray(pil_img, dtype=np.uint8))
+
+    meta = {
+        "count": EVAL_N,
+        "true_classes": [SUPERCLASSES[c] for c in true_coarse],
+        "display": [{"index": b, "true_class": SUPERCLASSES[true_coarse[b]]} for b in display],
+    }
+    json.dump(meta, open(os.path.join(d, "meta.json"), "w"), indent=2)
+    pt_acc = float((logits.argmax(1) == np.array(true_coarse)).mean())
+    print(f"Wrote {EVAL_N}-image eval batch to {os.path.normpath(OUT_DIR)} "
+          f"(PyTorch accuracy on this batch = {pt_acc:.3f}); showing {len(display)} images")
+
+
+if __name__ == "__main__":
+    main()
+```
+
+### `tools/models/prepare_text_attn_demo.py`
+```python
+#!/usr/bin/env python3
+"""Prepare the self-attention text-classifier real-inference demo.
+
+Trains a small single-head self-attention classifier once in PyTorch on
+a generated 3-topic corpus (weather / food / sports), using ONLY the
+operators Tensora supports (matmul, softmax, transpose, mean, linear --
+no layernorm or GELU), so PyTorch and Tensora compute the same function
+and agree within tolerance. Then exports a batch of 30 held-out
+sentences:
+
+  demos/artifacts/attn/eval/
+      Xq.npy Xk.npy Wq.npy Wk.npy Wv.npy Wc1.npy bc1.npy Wc2.npy bc2.npy
+                          -> a self-contained --data-dir (Xq == Xk,
+                             each a batch of 30 sentence embeddings)
+      expected.npy        -> the PyTorch reference logits [30, 3]
+      meta.json           -> the 30 sentences and their true topics
+
+The eval dir is directly usable as `tensora --run
+examples/attn_text_classifier.tns --data-dir <dir>`: one run classifies
+all 30 held-out sentences and the demo compares every row against
+PyTorch. Run once, on a machine with PyTorch (see
+tools/models/requirements.txt):
+    python3 tools/models/prepare_text_attn_demo.py
+"""
+import json
+import os
+
+import numpy as np
+
+try:
+    import torch
+    import torch.nn as nn
+except ImportError:
+    raise SystemExit("error: PyTorch is required. Install with: pip install -r tools/models/requirements.txt")
+
+SEED = 0
+SEQ = 16
+DIM = 32
+SCALE = 0.1767767  # must match the literal in examples/attn_text_classifier.tns
+TOPICS = ["weather", "food", "sports"]
+OUT_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "demos", "artifacts", "attn")
+
+TRAIN_PER_TOPIC = 60
+HELDOUT_PER_TOPIC = 10  # 3 topics -> 30 held-out, matching b=30 in the .tns
+
+# Topic-specific vocabularies (the signal) plus shared neutral connector
+# words (no signal). Sentences are composed by sampling from these, so
+# the corpus is reproducible and large enough for a statistically
+# meaningful Tensora-vs-PyTorch comparison. Real learned parameters,
+# understandable inputs -- not a pretrained model.
+TOPIC_WORDS = {
+    0: "rain snow wind clouds fog sunny storm forecast drizzle cold heat humid thunder frost sky "
+       "temperature blizzard breeze overcast hail".split(),
+    1: "bread curry pizza salad soup noodles cake pastries cheese rice beans grilled baked roasted "
+       "lemon sauce dinner recipe spicy dessert".split(),
+    2: "goal race track ball match championship team player sprint marathon tennis basketball score "
+       "win kick coach league striker referee tournament".split(),
+}
+CONNECTORS = "the a and with of in on for was were will today we she he they".split()
+
+
+def make_sentence(topic, rng):
+    n_topic = rng.integers(6, 11)
+    words = list(rng.choice(TOPIC_WORDS[topic], size=n_topic)) + list(rng.choice(CONNECTORS, size=3))
+    rng.shuffle(words)
+    return " ".join(words)
+
+
+def make_corpus(per_topic, rng):
+    return [(make_sentence(t, rng), t) for t in TOPICS_IDX for _ in range(per_topic)]
+
+
+TOPICS_IDX = [0, 1, 2]
+
+
+def build_vocab(sentences):
+    vocab = {"<pad>": 0}
+    for s in sentences:
+        for w in s.split():
+            vocab.setdefault(w, len(vocab))
+    return vocab
+
+
+def encode(sentence, vocab):
+    ids = [vocab.get(w, 0) for w in sentence.split()][:SEQ]
+    ids += [0] * (SEQ - len(ids))
+    return ids
+
+
+HID = 16
+
+
+class Attn(nn.Module):
+    def __init__(self, vocab_size):
+        super().__init__()
+        self.emb = nn.Embedding(vocab_size, DIM)
+        self.Wq = nn.Linear(DIM, DIM, bias=False)
+        self.Wk = nn.Linear(DIM, DIM, bias=False)
+        self.Wv = nn.Linear(DIM, DIM, bias=False)
+        self.Wc1 = nn.Linear(DIM, HID)
+        self.Wc2 = nn.Linear(HID, 3)
+
+    def embed(self, ids):
+        # Pad/truncate to SEQ, then look up embeddings -> [1, SEQ, DIM].
+        return self.emb(ids)
+
+    def forward_from_x(self, x):
+        # x: [1, SEQ, DIM]; mirrors examples/attn_text_classifier.tns exactly.
+        Q, K, V = self.Wq(x), self.Wk(x), self.Wv(x)
+        scores = (Q @ K.transpose(-1, -2)) * SCALE
+        A = torch.softmax(scores, dim=-1)
+        pooled = (A @ V).mean(dim=1)
+        return self.Wc2(torch.relu(self.Wc1(pooled)))
+
+    def forward(self, ids):
+        return self.forward_from_x(self.embed(ids))
+
+
+def main():
+    torch.manual_seed(SEED)
+    np.random.seed(SEED)
+    rng = np.random.default_rng(SEED)
+    corpus = make_corpus(TRAIN_PER_TOPIC, rng)
+    heldout = make_corpus(HELDOUT_PER_TOPIC, rng)  # distinct RNG draws -> distinct sentences
+    # make_corpus groups by topic; shuffle so the held-out batch interleaves
+    # topics (the demo then shows spread-out, varied rows).
+    heldout = [heldout[i] for i in rng.permutation(len(heldout))]
+    vocab = build_vocab([s for s, _ in corpus] + [s for s, _ in heldout])
+    model = Attn(len(vocab))
+    opt = torch.optim.Adam(model.parameters(), lr=5e-3)
+    loss_fn = nn.CrossEntropyLoss()
+
+    ids = torch.tensor([encode(s, vocab) for s, _ in corpus])
+    labels = torch.tensor([y for _, y in corpus])
+    for epoch in range(300):
+        opt.zero_grad()
+        loss = loss_fn(model(ids), labels)
+        loss.backward()
+        opt.step()
+    model.eval()
+    with torch.no_grad():
+        acc = (model(ids).argmax(1) == labels).float().mean().item()
+    print(f"Trained attention classifier: training accuracy = {acc:.3f}")
+
+    # Export projection/classifier weights in Tensora's layout: Tensora
+    # computes X @ W, so each W is [in, out] -- the transpose of PyTorch's
+    # [out, in] nn.Linear.weight. The batched-matmul projections carry a
+    # leading batch axis of 1 to match the .tns weight shapes.
+    with torch.no_grad():
+        weights = {
+            "Wq": model.Wq.weight.t().contiguous().numpy().reshape(1, DIM, DIM).astype(np.float32),
+            "Wk": model.Wk.weight.t().contiguous().numpy().reshape(1, DIM, DIM).astype(np.float32),
+            "Wv": model.Wv.weight.t().contiguous().numpy().reshape(1, DIM, DIM).astype(np.float32),
+            "Wc1": model.Wc1.weight.t().contiguous().numpy().astype(np.float32),
+            "bc1": model.Wc1.bias.numpy().astype(np.float32),
+            "Wc2": model.Wc2.weight.t().contiguous().numpy().astype(np.float32),
+            "bc2": model.Wc2.bias.numpy().astype(np.float32),
+        }
+
+    # Embed all held-out sentences and classify the whole batch in one
+    # Tensora run (batch axis b in examples/attn_text_classifier.tns), so
+    # the Tensora-vs-PyTorch agreement is statistically meaningful.
+    sents = [s for s, _ in heldout]
+    topics = [t for _, t in heldout]
+    tok = torch.tensor([encode(s, vocab) for s in sents])
+    with torch.no_grad():
+        x = model.embed(tok).numpy().astype(np.float32)  # [N, SEQ, DIM]
+        logits = model.forward_from_x(torch.tensor(x)).numpy().astype(np.float32)  # [N, 3]
+
+    os.makedirs(OUT_DIR, exist_ok=True)
+    d = os.path.join(OUT_DIR, "eval")
+    os.makedirs(d, exist_ok=True)
+    # Xq and Xk are the same embedding batch (see the .tns header).
+    np.save(os.path.join(d, "Xq.npy"), x)
+    np.save(os.path.join(d, "Xk.npy"), x)
+    for name, arr in weights.items():
+        np.save(os.path.join(d, f"{name}.npy"), arr)
+    np.save(os.path.join(d, "expected.npy"), logits)
+    meta = {
+        "count": len(sents),
+        "sentences": sents,
+        "true_topics": [TOPICS[t] for t in topics],
+    }
+    json.dump(meta, open(os.path.join(d, "meta.json"), "w"), indent=2)
+    pt_acc = float((logits.argmax(1) == np.array(topics)).mean())
+    print(f"Wrote {len(sents)}-sentence eval batch to {os.path.normpath(OUT_DIR)} "
+          f"(PyTorch accuracy on this batch = {pt_acc:.3f})")
+
+
+if __name__ == "__main__":
+    main()
+```
+
 ## 10.9 Test Listing
 
 ```text
@@ -7215,6 +8256,13 @@ tensora/tests/codegen/test_new_ops_e2e.cpp
 tensora/tests/codegen/test_rank_e2e.cpp
 tensora/tests/codegen/test_tiling_decision.cpp
 tensora/tests/codegen/test_tiling_e2e.cpp
+tensora/tests/driver/mlp_baddtype/x.npy
+tensora/tests/driver/mlp_badshape/x.npy
+tensora/tests/driver/mlp_ones/W1.npy
+tensora/tests/driver/mlp_ones/W2.npy
+tensora/tests/driver/mlp_ones/b1.npy
+tensora/tests/driver/mlp_ones/b2.npy
+tensora/tests/driver/mlp_ones/x.npy
 tensora/tests/lexer/test_lexer.cpp
 tensora/tests/optimization/test_passes.cpp
 tensora/tests/parser/test_parser.cpp
@@ -8251,11 +9299,12 @@ diverge from what was actually built and tested.
 This repository is under git version control, hosted at
 [github.com/Rmuk655/TensoraCompiler](https://github.com/Rmuk655/TensoraCompiler)
 (`origin`, branch `main`). Base commit at generation time:
-`4812b9742784e8378cad741de1ad71d5c6f2efbf`. The concatenation itself
+`ae9c3b617700818e63c542b4490f9e6060138f28`. The concatenation itself
 reflects the working tree at generation time, which may include
 changes made after that commit and not yet committed -- the manifest
 and file contents above are the authoritative record either way, since
 they are read directly from disk, not from git history. Generation
 date: 2026-08-22. The 175 CTest cases passing at generation time are
 the authoritative record of what this listing implements; see
-`docs/testing/TEST_MATRIX.md` and `docs/development/CHANGELOG.md`.
+[docs/testing/TEST_MATRIX.md](../testing/TEST_MATRIX.md) and
+[docs/development/CHANGELOG.md](CHANGELOG.md).

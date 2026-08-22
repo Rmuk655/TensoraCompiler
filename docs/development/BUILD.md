@@ -103,6 +103,64 @@ make optimization-example  # demos/04_optimization_demo.sh
 make codegen-example       # demos/05_codegen_demo.sh
 ```
 
+## Run inference with real data
+
+By default `--run` fills inputs and weights with synthetic all-ones data
+(Tensora source declares shapes, not values). To run with real trained
+parameters and real inputs, put one float32 `.npy` file per declared
+input/weight, named `<name>.npy`, in a directory and pass `--data-dir`;
+`--output` writes the full result tensor to a `.npy` file:
+
+```bash
+./build/tensora --run examples/mlp_placement.tns \
+    --data-dir path/to/data \      # loads data/x.npy, data/W1.npy, ...
+    --output   result.npy          # writes the full result tensor
+```
+
+Each file's shape and dtype are checked against the program's declared
+tensor; a mismatch or missing file is a clear error. This is how the
+real-world demos below feed genuine weights and inputs.
+
+## Run the real-world inference demos
+
+Three demos take recognizable real inputs through the full pipeline and
+check the result against a PyTorch reference (see README.md and
+`tools/models/`):
+
+```bash
+make demo-mlp-placement        # student placement-eligibility (tabular MLP)
+make demo-cnn-image-classifier # CIFAR-100 image classification, 20 classes (CNN)
+make demo-attn-text-classifier # topic classification (self-attention)
+```
+
+Each needs its artifacts prepared once first, using PyTorch. Modern
+Debian/Ubuntu block `pip install` against the system Python (PEP 668),
+so the demo dependencies go in a project-local virtual environment, not
+the system Python and never `pip --break-system-packages`.
+`./tools/setup-dev.sh --demos` creates `.venv/` and installs
+`tools/models/requirements.txt` into it:
+
+```bash
+./tools/setup-dev.sh --demos     # one time: creates .venv, installs torch etc.
+source .venv/bin/activate        # 'which python' -> .venv/bin/python
+python tools/models/prepare_mlp_demo.py
+python tools/models/prepare_cifar_demo.py
+python tools/models/prepare_text_attn_demo.py
+deactivate                       # when finished
+```
+
+(Or set the venv up by hand: `python3 -m venv .venv` -- add
+`sudo apt install python3-venv` first if needed -- then
+`source .venv/bin/activate` and `pip install -r
+tools/models/requirements.txt`.) Artifacts land in `demos/artifacts/`
+(git-ignored, reproduced on demand). The demo runners themselves need
+only numpy, so `make demo-*` works without the venv active once the
+artifacts exist. Each demo classifies a whole held-out batch in one run
+(100 students / 40 images / 30 sentences) and reports Tensora-vs-PyTorch
+agreement over the whole batch, showing a few examples in detail. The
+CNN prep caches its trained model at `demos/artifacts/cnn-model.pt` (the
+slow step); delete that file to retrain from scratch.
+
 ## Run the tests
 
 ```bash

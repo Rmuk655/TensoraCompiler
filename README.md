@@ -141,16 +141,50 @@ Computation Graph before and after optimization
 debugging one phase, or for a demo, without running the whole
 pipeline.
 
+# Real-World Inference Demos
+
+Three demos take recognizable real inputs, use genuine PyTorch-trained
+parameters, run the whole computation through Tensora (source → TCG →
+optimization → MLIR → LLVM → native execution), and check the result
+against a PyTorch reference:
+
+``` bash
+make demo-mlp-placement        # student placement-eligibility (tabular MLP)
+make demo-cnn-image-classifier # CIFAR-100 image classification, 20 classes (CNN, shows the image)
+make demo-attn-text-classifier # weather / food / sports topic (self-attention)
+```
+
+Prepare each demo's weights and inputs once first, on a machine with
+PyTorch (`tools/models/requirements.txt`); the demo runners themselves
+need only numpy:
+
+``` bash
+python3 tools/models/prepare_mlp_demo.py
+python3 tools/models/prepare_cifar_demo.py
+python3 tools/models/prepare_text_attn_demo.py
+```
+
+Real values reach the compiled graph through `tensora --run --data-dir`
+(one float32 `.npy` per input/weight); see
+[docs/development/BUILD.md](docs/development/BUILD.md). The Transformer
+demo is a self-attention **classifier** built from Tensora's existing
+operators — a full pretrained BERT/DistilBERT QA model needs operators
+Tensora does not yet have (embedding/gather, layernorm, GELU, integer
+tensors), tracked in
+[docs/ProjectMgmt/11_OPEN_SOURCE_AND_RESEARCH_ROADMAP.md](docs/ProjectMgmt/11_OPEN_SOURCE_AND_RESEARCH_ROADMAP.md)
+§8.9a/§8.9.
+
 ## Known limitations these demos will hit if misused
 
 - `--emit-mlir`/`--emit-llvm`/`--run`/`-o` need **concrete**
   (non-symbolic) shapes (see `docs/testing/TEST_MATRIX.md` LOW-005).
   Use `examples/mlp_concrete.tns`, not `examples/mlp.tns`, for those
   stages.
-- `--run` always uses synthetic all-ones input data (Tensora source
+- `--run` uses synthetic all-ones input data by default (Tensora source
   declares shapes, not values). This is still a checkable choice, not
   an arbitrary one — for example, a matmul's result is exactly the
-  contracted dimension.
+  contracted dimension. Pass `--data-dir` to load real `.npy` values
+  instead (see the real-world demos above).
 - `examples/attention.tns` is single-head (rank-2); batched matmul is
   lowered (RANK-003/004), so a rank-4 multi-head version is simply not
   yet written as an example, not blocked on missing lowering support.

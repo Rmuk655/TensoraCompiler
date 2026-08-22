@@ -10,7 +10,8 @@ JOBS ?= $(shell nproc 2>/dev/null || echo 4)
 .PHONY: build test example clean appendix benchmark \
         lexer parser semantic optimization codegen full \
         test-lexer test-parser test-semantic test-optimization test-codegen \
-        lexer-example parser-example semantic-example optimization-example codegen-example
+        lexer-example parser-example semantic-example optimization-example codegen-example \
+        demo-mlp-placement demo-cnn-image-classifier demo-attn-text-classifier
 
 configure:
 	cmake -S . -B $(BUILD)
@@ -48,6 +49,23 @@ codegen-example: build
 
 clean:
 	rm -rf $(BUILD)
+
+# Real-world inference demos (docs/development/BUILD.md). Each runs a
+# model trained/prepared once in PyTorch on real data through the full
+# Tensora pipeline and checks the result against the PyTorch reference.
+# Prepare the artifacts first (needs PyTorch, one time):
+#   python3 tools/models/prepare_mlp_demo.py
+#   python3 tools/models/prepare_cifar_demo.py
+#   python3 tools/models/prepare_text_attn_demo.py
+# The demo runners themselves need only numpy (no torch).
+demo-mlp-placement: build
+	./demos/mlp_placement_demo.sh $(BUILD)
+
+demo-cnn-image-classifier: build
+	./demos/cnn_image_classifier_demo.sh $(BUILD)
+
+demo-attn-text-classifier: build
+	./demos/attn_text_classifier_demo.sh $(BUILD)
 
 # tools/benchmark_matmul_tiling.cpp measures matmul tiling speedup; it
 # is a plain CMake executable, not a CTest case (see docs/development/
