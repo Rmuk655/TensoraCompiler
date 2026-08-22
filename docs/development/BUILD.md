@@ -1,10 +1,10 @@
 # Building Tensora
 
 This is the canonical reference for the actual build/test/run commands.
-`docs/development/07_DEVELOPMENT_ENVIRONMENT.md` covers environment
-policy and process (why WSL2, why C++20, warnings policy, git
-workflow, debugging, benchmarking) and links back here instead of
-repeating these commands.
+[docs/development/07_DEVELOPMENT_ENVIRONMENT.md](07_DEVELOPMENT_ENVIRONMENT.md)
+covers environment policy and process (why WSL2, why C++20, warnings
+policy, git workflow, debugging, benchmarking) and links back here
+instead of repeating these commands.
 
 ## Canonical platform: WSL2 + Ubuntu (INTEG-001)
 
@@ -19,9 +19,10 @@ This gives you a C++20 compiler (g++), CMake, and a Java runtime. You
 need the Java runtime to run the ANTLR4 generator (ARCH-011,
 INTEG-004). CMake fetches the ANTLR jar and the ANTLR C++ runtime
 itself, reproducibly, through `FetchContent` — you do not need a
-separate ANTLR install step. `docs/development/DEPENDENCIES.md` has the
-full pinned-version reference (including LLVM/MLIR 21), and
-`./tools/check-deps.sh` checks a machine against it.
+separate ANTLR install step. [docs/development/DEPENDENCIES.md](DEPENDENCIES.md)
+has the full pinned-version reference (including LLVM/MLIR 21), and
+[`./tools/check-deps.sh`](../../tools/check-deps.sh) checks a machine
+against it.
 
 **Important:** work inside the WSL native filesystem. Copy the repo
 to, for example, `~/tensora` (ext4), and build there. Do **not** build
@@ -34,8 +35,8 @@ supported (see INTEG-001).
 ## Build everything
 
 ```bash
-cmake -S . -B build
-cmake --build build -j4
+cmake -S . -B build           # Configure project and generate build files
+cmake --build build -j4       # Compile and link using 4 parallel jobs
 ```
 
 Or use the convenience wrapper (same thing, less typing):
@@ -43,8 +44,21 @@ Or use the convenience wrapper (same thing, less typing):
 ```bash
 make build     # configure + build everything
 make test      # build + run the full ctest suite
-make example   # build + run the lexer on examples/mlp.tns
+make example   # build + run the full pipeline (demos/06_final_compiler_demo.sh)
 make clean
+```
+
+`make example` runs the whole pipeline, not one phase. For a single
+phase's demo (source in, phase output out — the same `demos/*.sh`
+scripts README.md's Phase Demos section describes), use the matching
+`-example` target instead:
+
+```bash
+make lexer-example         # demos/01_lexer_demo.sh
+make parser-example        # demos/02_parser_demo.sh
+make semantic-example      # demos/03_semantic_demo.sh
+make optimization-example  # demos/04_optimization_demo.sh
+make codegen-example       # demos/05_codegen_demo.sh
 ```
 
 ## Build one phase at a time
@@ -96,7 +110,7 @@ TUTORIAL.md` §2.12 lists every other `--emit-*` flag, one per phase.
 ## Run the tests
 
 ```bash
-ctest --test-dir build --output-on-failure
+ctest --test-dir build --output-on-failure # Run tests and show output for failed tests
 ```
 
 Filter to one phase with `-L <label>` (`lexer`, `parser`, `semantic`,

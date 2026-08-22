@@ -9,7 +9,8 @@ JOBS ?= $(shell nproc 2>/dev/null || echo 4)
 
 .PHONY: build test example clean appendix \
         lexer parser semantic optimization codegen full \
-        test-lexer test-parser test-semantic test-optimization test-codegen
+        test-lexer test-parser test-semantic test-optimization test-codegen \
+        lexer-example parser-example semantic-example optimization-example codegen-example
 
 configure:
 	cmake -S . -B $(BUILD)
@@ -20,8 +21,30 @@ build: configure
 test: build
 	ctest --test-dir $(BUILD) --output-on-failure
 
+# The `tensora` CLI is one binary with one flag per phase (--emit-
+# tokens, --emit-ast, --check, --emit-mlir, --run, ...) -- there is no
+# phase-specific executable to build here, unlike `lexer`/`parser`/etc.
+# above, so every target below depends on the full `build`, and each
+# just runs the matching demos/*.sh script (the existing "one demo per
+# phase" mechanism -- see README.md's Phase Demos section) instead of
+# duplicating its logic here.
 example: build
-	./$(BUILD)/tensora --emit-tokens examples/mlp.tns
+	./demos/06_final_compiler_demo.sh
+
+lexer-example: build
+	./demos/01_lexer_demo.sh
+
+parser-example: build
+	./demos/02_parser_demo.sh
+
+semantic-example: build
+	./demos/03_semantic_demo.sh
+
+optimization-example: build
+	./demos/04_optimization_demo.sh
+
+codegen-example: build
+	./demos/05_codegen_demo.sh
 
 clean:
 	rm -rf $(BUILD)

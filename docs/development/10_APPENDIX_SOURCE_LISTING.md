@@ -6443,6 +6443,10 @@ FetchContent_Declare(antlr4_jar
 FetchContent_MakeAvailable(antlr4_jar)
 set(ANTLR4_JAR_PATH ${antlr4_jar_SOURCE_DIR}/antlr-${ANTLR4_VERSION}-complete.jar)
 
+# FORCE here always wins over a `-D...` passed on the `cmake` command
+# line, on purpose: none of these are options we want a developer to
+# be able to turn on by accident (WITH_DEMO in particular builds
+# ANTLR's own vendored demo CLI, not anything of ours).
 set(ANTLR4_INSTALL OFF CACHE BOOL "" FORCE)
 set(WITH_DEMO OFF CACHE BOOL "" FORCE)
 set(WITH_LIBCXX OFF CACHE BOOL "" FORCE)
@@ -6451,6 +6455,13 @@ set(ANTLR_BUILD_SHARED OFF CACHE BOOL "" FORCE)
 FetchContent_Declare(antlr4_runtime
   URL https://www.antlr.org/download/antlr4-cpp-runtime-${ANTLR4_VERSION}-source.zip)
 FetchContent_MakeAvailable(antlr4_runtime)
+# The "Building without demo. To enable demo build use: -DWITH_DEMO=True"
+# line just above comes from the vendored ANTLR runtime's own
+# CMakeLists.txt -- it has no way to know we FORCE that flag off above,
+# so its hint does not actually work in this project. This message
+# clarifies that in the same configure log, since we cannot edit or
+# suppress the vendored one.
+message(STATUS "(the WITH_DEMO hint above is from the vendored ANTLR runtime and does not apply here -- this project always disables it; see CMakeLists.txt)")
 
 # antlr4_static's own CMakeLists exports its headers as normal (not
 # SYSTEM) INTERFACE_INCLUDE_DIRECTORIES, so every consumer that links
@@ -8240,11 +8251,11 @@ diverge from what was actually built and tested.
 This repository is under git version control, hosted at
 [github.com/Rmuk655/TensoraCompiler](https://github.com/Rmuk655/TensoraCompiler)
 (`origin`, branch `main`). Base commit at generation time:
-`96e1aaa485e279ccb123659c58be83229c4fda0b`. The concatenation itself
+`f612fbd3ebd769ead3e2b9aff621c726a4948630`. The concatenation itself
 reflects the working tree at generation time, which may include
 changes made after that commit and not yet committed -- the manifest
 and file contents above are the authoritative record either way, since
 they are read directly from disk, not from git history. Generation
-date: 2026-08-21. The 175 CTest cases passing at generation time are
+date: 2026-08-22. The 175 CTest cases passing at generation time are
 the authoritative record of what this listing implements; see
 `docs/testing/TEST_MATRIX.md` and `docs/development/CHANGELOG.md`.
