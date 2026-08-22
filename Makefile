@@ -7,7 +7,7 @@ BUILD ?= build
 # multi-core machine. Override with `make build JOBS=1` if needed.
 JOBS ?= $(shell nproc 2>/dev/null || echo 4)
 
-.PHONY: build test example clean appendix \
+.PHONY: build test example clean appendix benchmark \
         lexer parser semantic optimization codegen full \
         test-lexer test-parser test-semantic test-optimization test-codegen \
         lexer-example parser-example semantic-example optimization-example codegen-example
@@ -48,6 +48,12 @@ codegen-example: build
 
 clean:
 	rm -rf $(BUILD)
+
+# tools/benchmark_matmul_tiling.cpp measures matmul tiling speedup; it
+# is a plain CMake executable, not a CTest case (see docs/development/
+# 07_DEVELOPMENT_ENVIRONMENT.md §7.10), so `make test` never runs it.
+benchmark: build
+	./$(BUILD)/benchmark_matmul_tiling
 
 # Regenerate docs/development/10_APPENDIX_SOURCE_LISTING.md from the
 # current source tree (docs/development/10_APPENDIX_SOURCE_LISTING.md
