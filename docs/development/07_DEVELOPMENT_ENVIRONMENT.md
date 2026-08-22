@@ -273,8 +273,8 @@ development machine.
 
 ## 7.11 Reproducibility
 
-A fresh machine should be able to follow `docs/development/BUILD.md`
-and reproduce the examples.
+A fresh machine should be able to follow [BUILD.md](BUILD.md) and
+reproduce the examples.
 
 ## 7.12 Open-Source Hygiene
 
