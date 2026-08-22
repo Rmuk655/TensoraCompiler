@@ -1,10 +1,9 @@
 # Tensora Project Instructions
 
-This repository contains the Tensora compiler project for CS3423
-Compilers-II.
+This repository contains the Tensora compiler project.
 
 Tensora is a small declarative language for describing machine-learning
-computation graphs. The semester compiler statically checks ML
+computation graphs. The compiler statically checks ML
 computation, keeps verified semantic information in a typed graph IR,
 optimizes that graph, and lowers valid programs through MLIR and LLVM
 for native execution.
@@ -31,24 +30,20 @@ LLVM
 Native Execution
 ```
 
-The semester implementation targets forward computation for inference.
+The implementation targets forward computation for inference.
 Training, automatic differentiation, backpropagation, optimizers,
-distributed training, and production serving are not part of the core,
-unless the team adds them explicitly through the language-change
-process.
+distributed training, and production serving possible future extensions.
 
 ------------------------------------------------------------------------
 
 ## 0. Current Repository State
 
-Read this section before any other. It describes what exists today,
-not a future goal.
 
 **Identity.** Source files use the `.tns` extension. The compiler binary
 is `tensora` (built at `build/tensora`).
 
 **Repository architecture.** `include/tensora/` and `src/` are organized
-by compiler phase, with genuinely cross-phase representations in one
+by compiler phase, with cross-phase representations in one
 `shared/` location:
 
 ``` text
@@ -56,11 +51,11 @@ include/tensora/            src/
 ├── lexer/                  ├── lexer/          Token, Lexer (wraps ANTLR)
 ├── parser/                 ├── parser/         Parser, AstBuilder, error strategy/listener
 ├── semantic/                ├── semantic/       SemanticAnalyzer, Symbol, Contracts
-├── optimization/            ├── optimization/   GraphPass, the 6 Level-1 passes, Liveness
+├── optimization/            ├── optimization/   GraphPass, Level-1 passes, Liveness
 ├── codegen/                  ├── codegen/        MlirLowerer, DialectSetup, tiling pass
 └── shared/                  └── shared/         SourceSpan, Diagnostic, AST, IR, Type
 
-grammar/Tensora.g4    one ANTLR4 grammar (lexer + parser rules; no embedded C++ actions)
+grammar/Tensora.g4    one ANTLR4 grammar (lexer + parser rules)
 src/driver/main.cpp   the `tensora` CLI: one flag per compiler phase
 tests/                mirrors the phases above, plus smoke/ and support/
 ```
@@ -81,7 +76,8 @@ source (.tns)
 ```
 
 **One-time setup after cloning** (checks the toolchain against
-`docs/development/DEPENDENCIES.md` and prints the next commands):
+[docs/development/DEPENDENCIES.md](docs/development/DEPENDENCIES.md)
+and prints the next commands):
 
 ``` bash
 ./tools/setup-dev.sh
@@ -90,9 +86,9 @@ source (.tns)
 **Canonical build and test:**
 
 ``` bash
-cmake -S . -B build
-cmake --build build -j4
-ctest --test-dir build --output-on-failure
+cmake -S . -B build           # Configure project and generate build files
+cmake --build build -j4       # Compile and link using 4 parallel jobs
+ctest --test-dir build --output-on-failure # Run tests and show output for failed tests
 ```
 
 (or `make build` / `make test`). First configure needs internet access:

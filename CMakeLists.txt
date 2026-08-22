@@ -39,6 +39,10 @@ FetchContent_Declare(antlr4_jar
 FetchContent_MakeAvailable(antlr4_jar)
 set(ANTLR4_JAR_PATH ${antlr4_jar_SOURCE_DIR}/antlr-${ANTLR4_VERSION}-complete.jar)
 
+# FORCE here always wins over a `-D...` passed on the `cmake` command
+# line, on purpose: none of these are options we want a developer to
+# be able to turn on by accident (WITH_DEMO in particular builds
+# ANTLR's own vendored demo CLI, not anything of ours).
 set(ANTLR4_INSTALL OFF CACHE BOOL "" FORCE)
 set(WITH_DEMO OFF CACHE BOOL "" FORCE)
 set(WITH_LIBCXX OFF CACHE BOOL "" FORCE)
@@ -47,6 +51,13 @@ set(ANTLR_BUILD_SHARED OFF CACHE BOOL "" FORCE)
 FetchContent_Declare(antlr4_runtime
   URL https://www.antlr.org/download/antlr4-cpp-runtime-${ANTLR4_VERSION}-source.zip)
 FetchContent_MakeAvailable(antlr4_runtime)
+# The "Building without demo. To enable demo build use: -DWITH_DEMO=True"
+# line just above comes from the vendored ANTLR runtime's own
+# CMakeLists.txt -- it has no way to know we FORCE that flag off above,
+# so its hint does not actually work in this project. This message
+# clarifies that in the same configure log, since we cannot edit or
+# suppress the vendored one.
+message(STATUS "(the WITH_DEMO hint above is from the vendored ANTLR runtime and does not apply here -- this project always disables it; see CMakeLists.txt)")
 
 # antlr4_static's own CMakeLists exports its headers as normal (not
 # SYSTEM) INTERFACE_INCLUDE_DIRECTORIES, so every consumer that links
