@@ -1,0 +1,26 @@
+# Student placement-eligibility MLP (real-inference demo).
+#
+# Predicts whether a student is on track to pass ("placement-eligible")
+# from 8 academic features, using a small MLP trained once in PyTorch on
+# the UCI Student Performance dataset (Cortez & Silva, 2008). The
+# trained weights and 3 real held-out student records are produced by
+# tools/models/prepare_mlp_demo.py and loaded at run time with
+# `--data-dir` (see docs/development/BUILD.md). This is a compiler
+# demonstration, not a real placement or grading system.
+#
+# Architecture: features -> linear -> relu -> linear -> 2 class logits.
+# The batch axis is 100: the demo classifies a whole held-out set of 100
+# students in one run and compares every row against PyTorch, so the
+# agreement is statistically meaningful rather than anecdotal.
+input  x:  Tensor[batch=100, feat=8]
+weight W1: Tensor[in=8, out=16]
+weight b1: Tensor[out=16]
+weight W2: Tensor[in=16, out=2]
+weight b2: Tensor[out=2]
+
+graph mlp {
+    h = linear(x, W1, b1)
+    h = relu(h)
+    y = linear(h, W2, b2)
+    return y
+}

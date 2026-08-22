@@ -1,0 +1,48 @@
+# CIFAR-100 image-classifier CNN (real-inference demo).
+#
+# A convolutional classifier for 96x96 RGB images over the 20 CIFAR-100
+# coarse "superclasses", trained once in PyTorch (images upscaled to
+# 96x96 so they are large and clearly viewable) by
+# tools/models/prepare_cifar_demo.py. The trained weights and several
+# real held-out test images are loaded at run time with `--data-dir`
+# (see docs/development/BUILD.md). The graph returns raw class logits;
+# the demo runner applies softmax for display and compares logits
+# against the PyTorch reference.
+#
+# Architecture: four [conv -> relu -> maxpool] blocks (96 -> 48 -> 24 ->
+# 12 -> 6 spatially) then flatten -> linear -> 20 class logits. Conv
+# weights are [oc, ic, kh, kw] (matching PyTorch); the linear weight is
+# [flat, classes] (the transpose of PyTorch's [out, in]).
+#
+# The batch axis n is 40: the demo classifies 40 held-out images in one
+# run and compares every row against PyTorch, for a statistically
+# meaningful agreement check (a few are shown with their pictures).
+input  x:      Tensor[n=40, c=3, h=96, w=96]
+weight convW1: Tensor[oc=16, ic=3, kh=3, kw=3]
+weight convB1: Tensor[oc=16]
+weight convW2: Tensor[oc=32, ic=16, kh=3, kw=3]
+weight convB2: Tensor[oc=32]
+weight convW3: Tensor[oc=64, ic=32, kh=3, kw=3]
+weight convB3: Tensor[oc=64]
+weight convW4: Tensor[oc=64, ic=64, kh=3, kw=3]
+weight convB4: Tensor[oc=64]
+weight fcW:    Tensor[flat=2304, classes=20]
+weight fcB:    Tensor[classes=20]
+
+graph cnn {
+    c1     = conv2d(x, convW1, convB1, stride=1, padding=1)
+    r1     = relu(c1)
+    p1     = maxpool(r1, size=2)
+    c2     = conv2d(p1, convW2, convB2, stride=1, padding=1)
+    r2     = relu(c2)
+    p2     = maxpool(r2, size=2)
+    c3     = conv2d(p2, convW3, convB3, stride=1, padding=1)
+    r3     = relu(c3)
+    p3     = maxpool(r3, size=2)
+    c4     = conv2d(p3, convW4, convB4, stride=1, padding=1)
+    r4     = relu(c4)
+    p4     = maxpool(r4, size=2)
+    flat   = flatten(p4)
+    logits = linear(flat, fcW, fcB)
+    return logits
+}

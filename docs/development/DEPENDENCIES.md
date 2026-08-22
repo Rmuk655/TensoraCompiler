@@ -44,6 +44,35 @@ own `FetchContent` on first configure (`ANTLR4_VERSION` in
 package manager would pin a dependency. Nothing to install by hand;
 first `cmake -S . -B build` needs internet access once to fetch it.
 
+## 4. Python (optional -- real-world demo tooling only)
+
+The compiler has no Python runtime dependency. The real-world inference
+demos (`make demo-*`, `docs/development/BUILD.md`) do use Python, split
+in two:
+
+- **Preparation** (`tools/models/prepare_*.py`, run once): trains the
+  models and produces the trusted PyTorch reference. Needs the packages
+  in `tools/models/requirements.txt` (`torch`, `torchvision`, `numpy`,
+  `pandas`, `matplotlib`). Install them in a **project-local virtual
+  environment**, not the system Python: modern Debian/Ubuntu block
+  `pip install` against the system Python (PEP 668,
+  `externally-managed-environment`), and `pip --break-system-packages`
+  must not be used for this project. `./tools/setup-dev.sh --demos`
+  creates `.venv/` and installs them there; or by hand
+  (`sudo apt install python3-venv` if needed):
+
+  ```bash
+  python3 -m venv .venv
+  source .venv/bin/activate
+  pip install -r tools/models/requirements.txt
+  ```
+- **Running** (`demos/*_demo.sh`): needs only `numpy` (to compare
+  Tensora's output against the saved reference) -- no `torch`, and the
+  venv need not be active.
+
+None of this is checked by `tools/check-deps.sh`, since the compiler and
+its own test suite never need it.
+
 ## What `tools/check-deps.sh` actually checks
 
 Exits non-zero if any of these is missing: `cmake`, a C++20-capable

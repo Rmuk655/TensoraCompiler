@@ -33,6 +33,7 @@
 #include "mlir/Target/LLVMIR/Export.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/MC/TargetRegistry.h"
+#include "llvm/Support/Error.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/raw_ostream.h"
@@ -43,6 +44,8 @@
 #include "tensora/codegen/DialectSetup.h"
 #include "tensora/codegen/MatmulTilingPass.h"
 #include "tensora/codegen/MlirLowerer.h"
+
+#include "Npy.h"
 
 using namespace tensora;
 
@@ -482,10 +485,34 @@ float readMemRefElement0(const MemRefBuffer& buf, int rank) {
   }
 }
 
+// Copies all `total` result elements out of a result descriptor, for
+// --output. Like readMemRefElement0, it reads the callee's own `data`
+// pointer (not the caller's original buffer). The result of these
+// graphs is a fresh C-contiguous allocation, so reading data[0..total)
+// gives the values in row-major order.
+void readMemRefData(const MemRefBuffer& buf, int rank, int64_t total, float* out) {
+  const float* data = nullptr;
+  switch (rank) {
+    case 1: data = reinterpret_cast<const StridedMemRefType<float, 1>*>(buf.bytes.data())->data; break;
+    case 2: data = reinterpret_cast<const StridedMemRefType<float, 2>*>(buf.bytes.data())->data; break;
+    case 3: data = reinterpret_cast<const StridedMemRefType<float, 3>*>(buf.bytes.data())->data; break;
+    case 4: data = reinterpret_cast<const StridedMemRefType<float, 4>*>(buf.bytes.data())->data; break;
+    default: return;
+  }
+  for (int64_t i = 0; i < total; ++i) out[static_cast<size_t>(i)] = data[i];
+}
+
 std::vector<int64_t> shapeOf(const TensorType* t) {
   std::vector<int64_t> shape;
   for (const Axis& ax : t->axes()) shape.push_back(ax.size.constant);
   return shape;
+}
+
+// Formats a shape as "[a, b, c]" for diagnostics.
+std::string shapeStr(const std::vector<int64_t>& shape) {
+  std::string s = "[";
+  for (size_t i = 0; i < shape.size(); ++i) s += (i ? ", " : "") + std::to_string(shape[i]);
+  return s + "]";
 }
 
 // Runs the Level-1, team-authored graph optimization passes on every
@@ -537,7 +564,11 @@ void printUsage(const char* prog) {
             << "  --emit-mlir            lowering: print the MLIR module\n"
             << "  --emit-llvm            backend: print the translated LLVM IR\n"
             << "  --run                  full pipeline: JIT-execute with synthetic all-ones input data\n"
-            << "  -o <out.o>             full pipeline: emit a native object file (ahead-of-time)\n";
+            << "  -o <out.o>             full pipeline: emit a native object file (ahead-of-time)\n"
+            << "\n"
+            << "  --data-dir <dir>       with --run: load each input/weight from <dir>/<name>.npy\n"
+            << "                         (float32) instead of synthetic all-ones data\n"
+            << "  --output <out.npy>     with --run: write the full result tensor to a .npy file\n";
 }
 
 }  // namespace
@@ -546,11 +577,17 @@ int main(int argc, char** argv) {
   std::string stage;
   std::string path;
   std::string outPath;
+  std::string dataDir;   // --data-dir: where to read real input/weight .npy files
+  std::string outputNpy; // --output: where to write the result tensor as .npy
   for (int i = 1; i < argc; ++i) {
     std::string arg = argv[i];
     if (arg == "-o" && i + 1 < argc) {
       stage = "-o";
       outPath = argv[++i];
+    } else if (arg == "--data-dir" && i + 1 < argc) {
+      dataDir = argv[++i];
+    } else if (arg == "--output" && i + 1 < argc) {
+      outputNpy = argv[++i];
     } else if (!arg.empty() && arg[0] == '-') {
       stage = arg;
     } else {
@@ -803,13 +840,14 @@ int main(int argc, char** argv) {
     }
     auto engine = std::move(*maybeEngine);
 
-    // Uses synthetic all-ones data for every declared input and
-    // weight. Tensora source declares shapes, not values (there is no
-    // tensor-literal syntax), so a CLI demo run has no other source of
-    // data. All-ones is a deliberate, checkable choice, not an
-    // arbitrary one: for example, in a matmul, every output element
-    // then equals the contracted dimension K, which you can check by
-    // hand.
+    // Without --data-dir, uses synthetic all-ones data for every
+    // declared input and weight. Tensora source declares shapes, not
+    // values (there is no tensor-literal syntax), so a plain CLI run
+    // has no other source of data. All-ones is a deliberate, checkable
+    // choice, not an arbitrary one: for example, in a matmul, every
+    // output element then equals the contracted dimension K, which you
+    // can check by hand. With --data-dir, each param's real values are
+    // read from <dir>/<name>.npy instead (see the loop below).
     std::vector<std::vector<float>> storage;
     std::vector<MemRefBuffer> argBufs;
     std::vector<void*> packedArgs;
@@ -828,66 +866,75 @@ int main(int argc, char** argv) {
     for (ValueId p : graph.params) {
       const auto* pType = static_cast<const TensorType*>(graph.value(p).type);
       std::vector<int64_t> pShape = shapeOf(pType);
-      storage.emplace_back(static_cast<size_t>(elementCount(pType)), 1.0f);
+      const std::string& pName = graph.value(p).debugName;
+      if (dataDir.empty()) {
+        storage.emplace_back(static_cast<size_t>(elementCount(pType)), 1.0f);
+      } else {
+        // Load this param's real values from <dir>/<name>.npy and check
+        // the file's shape matches what the .tns program declared.
+        std::string npyPath = dataDir + "/" + pName + ".npy";
+        npy::NpyArray arr;
+        std::string npyErr;
+        if (!npy::read(npyPath, arr, npyErr)) {
+          std::cerr << "error: --data-dir: " << npyErr << "\n";
+          return 1;
+        }
+        if (arr.shape != pShape) {
+          std::cerr << "error: --data-dir: '" << pName << "' shape mismatch: declared " << shapeStr(pShape)
+                     << ", file " << npyPath << " has " << shapeStr(arr.shape) << "\n";
+          return 1;
+        }
+        storage.emplace_back(std::move(arr.data));
+      }
       MemRefBuffer buf = makeMemRefBuffer(storage.back().data(), pShape, rankOk);
       if (!rankOk) {
-        std::cerr << "error: --run only supports rank 1-4 tensors; '" << graph.value(p).debugName << "' has rank "
-                   << pShape.size() << "\n";
+        std::cerr << "error: --run only supports rank 1-4 tensors; '" << pName << "' has rank " << pShape.size()
+                   << "\n";
         return 1;
       }
       argBufs.push_back(std::move(buf));
     }
     for (MemRefBuffer& buf : argBufs) packedArgs.push_back(buf.ptr());
 
-    // Calls the ciface wrapper directly, as a plain function pointer
-    // with one void* per argument, in declared order, result first.
-    // This does not go through ExecutionEngine::invokePacked. This is
-    // the same raw-lookup-and-cast pattern this project's other JIT
-    // tests already use reliably, generalized over argument count
-    // with a switch, since a CLI driver cannot know the parameter
-    // count at compile time the way a hand-written test can.
-    auto maybeFn = engine->lookup("_mlir_ciface_" + graph.name);
-    if (!maybeFn) {
-      std::cerr << "error: could not look up '_mlir_ciface_" << graph.name << "'\n";
+    // Invokes the compiled graph through MLIR's own packed calling
+    // convention (ExecutionEngine::invokePacked), the same path the
+    // library's `invoke()` helper uses. The packed C-interface wrapper
+    // reads its arguments from one `void*[]`, so there is no per-arity
+    // code and no cap on the number of inputs/weights: each element
+    // points to one descriptor pointer in `packedArgs` (result first,
+    // then params in declared order), matching how `invoke()` passes
+    // the address of each argument value.
+    std::vector<void*> argAddrs;
+    argAddrs.reserve(packedArgs.size());
+    for (void*& p : packedArgs) argAddrs.push_back(&p);
+    if (llvm::Error err = engine->invokePacked("_mlir_ciface_" + graph.name, argAddrs)) {
+      std::cerr << "error: JIT invocation of '" << graph.name << "' failed: " << llvm::toString(std::move(err)) << "\n";
       return 1;
-    }
-    void* fnPtr = *maybeFn;
-    switch (packedArgs.size()) {
-      case 2: reinterpret_cast<void (*)(void*, void*)>(fnPtr)(packedArgs[0], packedArgs[1]); break;
-      case 3: reinterpret_cast<void (*)(void*, void*, void*)>(fnPtr)(packedArgs[0], packedArgs[1], packedArgs[2]); break;
-      case 4:
-        reinterpret_cast<void (*)(void*, void*, void*, void*)>(fnPtr)(packedArgs[0], packedArgs[1], packedArgs[2],
-                                                                       packedArgs[3]);
-        break;
-      case 5:
-        reinterpret_cast<void (*)(void*, void*, void*, void*, void*)>(fnPtr)(
-            packedArgs[0], packedArgs[1], packedArgs[2], packedArgs[3], packedArgs[4]);
-        break;
-      case 6:
-        reinterpret_cast<void (*)(void*, void*, void*, void*, void*, void*)>(fnPtr)(
-            packedArgs[0], packedArgs[1], packedArgs[2], packedArgs[3], packedArgs[4], packedArgs[5]);
-        break;
-      case 7:
-        reinterpret_cast<void (*)(void*, void*, void*, void*, void*, void*, void*)>(fnPtr)(
-            packedArgs[0], packedArgs[1], packedArgs[2], packedArgs[3], packedArgs[4], packedArgs[5], packedArgs[6]);
-        break;
-      case 8:
-        reinterpret_cast<void (*)(void*, void*, void*, void*, void*, void*, void*, void*)>(fnPtr)(
-            packedArgs[0], packedArgs[1], packedArgs[2], packedArgs[3], packedArgs[4], packedArgs[5], packedArgs[6],
-            packedArgs[7]);
-        break;
-      default:
-        std::cerr << "error: --run only supports up to 7 declared inputs/weights (found "
-                   << (packedArgs.size() - 1) << ")\n";
-        return 1;
     }
 
     int64_t total = elementCount(outType);
     float first = readMemRefElement0(resultBuf, static_cast<int>(outShape.size()));
-    std::cout << "ran '" << graph.name << "' with synthetic all-ones inputs\n";
+    if (dataDir.empty()) {
+      std::cout << "ran '" << graph.name << "' with synthetic all-ones inputs\n";
+    } else {
+      std::cout << "ran '" << graph.name << "' with inputs from " << dataDir << "\n";
+    }
     std::cout << "output shape: [";
     for (size_t i = 0; i < outShape.size(); ++i) std::cout << (i ? ", " : "") << outShape[i];
     std::cout << "], " << total << " elements; element[0] = " << first << "\n";
+
+    // --output writes the whole result tensor (not just element[0]) so a
+    // demo wrapper can read the full logit vector and compare against a
+    // reference. stdout above is unchanged either way.
+    if (!outputNpy.empty()) {
+      std::vector<float> result(static_cast<size_t>(total));
+      readMemRefData(resultBuf, static_cast<int>(outShape.size()), total, result.data());
+      std::string npyErr;
+      if (!npy::write(outputNpy, result.data(), outShape, npyErr)) {
+        std::cerr << "error: --output: " << npyErr << "\n";
+        return 1;
+      }
+    }
     return 0;
   }
 

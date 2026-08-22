@@ -1,0 +1,51 @@
+# Self-attention text classifier (real-inference demo).
+#
+# A single-head self-attention classifier over a fixed-length sequence
+# of word embeddings, trained once in PyTorch by
+# tools/models/prepare_text_attn_demo.py on a small labelled corpus
+# (3 topics). Tensora runs the whole forward path -- the Q/K/V
+# projections, scaled dot-product attention, mean pooling, and a
+# two-layer classifier head (linear -> relu -> linear) -- using only
+# its existing operators. The word embeddings are looked up in Python
+# (embedding lookup is preprocessing, like tokenization) and fed in as
+# the float input X.
+#
+# The same embedding sequence is supplied under two axis names, Xq and
+# Xk (identical values): self-attention needs the query and key
+# positions to be distinct axes (seq_q vs seq_k), which one input tensor
+# cannot express (an axis name is unique within a tensor). This is a
+# naming accommodation, not a change to the computation -- Xq and Xk
+# hold the same data.
+#
+# Scale = 1/sqrt(dk) = 1/sqrt(32); the prep script uses the same
+# constant so the reference matches.
+#
+# The batch axis b is 30: the demo classifies 30 held-out sentences in
+# one run and compares every row against PyTorch, for a statistically
+# meaningful agreement check. The shared projection weights keep b=1 and
+# broadcast over the batch (RM 3.7 leading-axis broadcast).
+input  Xq: Tensor[b=30, seq_q=16, d=32]
+input  Xk: Tensor[b=30, seq_k=16, d=32]
+weight Wq:  Tensor[b=1, d=32, dk=32]
+weight Wk:  Tensor[b=1, d=32, dk=32]
+weight Wv:  Tensor[b=1, d=32, dv=32]
+weight Wc1: Tensor[dv=32, hid=16]
+weight bc1: Tensor[hid=16]
+weight Wc2: Tensor[hid=16, classes=3]
+weight bc2: Tensor[classes=3]
+
+graph attn {
+    Q      = Xq @ Wq
+    K      = Xk @ Wk
+    V      = Xk @ Wv
+    Kt     = transpose(K, perm=[0, 2, 1])
+    scores = Q @ Kt
+    scaled = scores * 0.1767767
+    A      = softmax(scaled, axis=seq_k)
+    ctx    = A @ V
+    pooled = mean(ctx, axis=seq_q)
+    h      = linear(pooled, Wc1, bc1)
+    h      = relu(h)
+    logits = linear(h, Wc2, bc2)
+    return logits
+}
