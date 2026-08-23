@@ -102,7 +102,7 @@ tns::TypedProgram buildCnnGraph(tns::TypeContext& types) {
 
 }  // namespace
 
-int main() {
+int run_cnn_e2e() {
   llvm::InitializeNativeTarget();
   llvm::InitializeNativeTargetAsmPrinter();
 

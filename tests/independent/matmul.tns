@@ -1,0 +1,9 @@
+# Real-data matmul integration fixture (INT-INDEP-MATMUL). Uses varied
+# (non-all-ones) values loaded from tests/independent/matmul/*.npy so the
+# loader + matmul are exercised on genuine data, with a hand-checkable result.
+input a: Tensor[m=2, k=4]
+input b: Tensor[k=4, n=3]
+graph mm {
+    c = a @ b
+    return c
+}

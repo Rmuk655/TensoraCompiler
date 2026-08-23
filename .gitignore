@@ -19,4 +19,4 @@ __pycache__/
 # committed -- reproduced on demand (docs/development/BUILD.md).
 demos/artifacts/
 CLAUDE.md
-docs/claude/*
+docs/role/*

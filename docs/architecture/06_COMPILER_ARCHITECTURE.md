@@ -32,7 +32,7 @@ Standard MLIR/LLVM lowering (bufferization, loop/control-flow/arith/memref
 LLVM IR -> native object (via llvm::TargetMachine) -> linked executable
 ```
 
-The team has built and run this pipeline end to end. 175 passing tests
+The team has built and run this pipeline end to end. 183 passing tests
 cover every phase. Two tests build real ahead-of-time native
 executables: the object file comes from `llvm::TargetMachine`, the
 system linker links it, and `ldd` confirms it has zero MLIR/LLVM
@@ -321,7 +321,7 @@ driver and the test fixtures stay independent on purpose (Section 8).
 ## 6.15 Testing Boundaries
 
 Each interface has its own tests and can take synthetic inputs. This
-matters for parallel development. 175 CTest cases currently pass, and
+matters for parallel development. 183 CTest cases currently pass, and
 they stay stable across repeated full-suite runs.
 
 ## 6.16 Future Extensions

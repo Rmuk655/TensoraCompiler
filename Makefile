@@ -7,17 +7,35 @@ BUILD ?= build
 # multi-core machine. Override with `make build JOBS=1` if needed.
 JOBS ?= $(shell nproc 2>/dev/null || echo 4)
 
-.PHONY: build test example clean appendix benchmark \
+.PHONY: build test example examples demo demos clean appendix benchmark viz demo-independent \
         lexer parser semantic optimization codegen full \
         test-lexer test-parser test-semantic test-optimization test-codegen \
         lexer-example parser-example semantic-example optimization-example codegen-example \
-        demo-mlp-placement demo-cnn-image-classifier demo-attn-text-classifier
+        final-example demo-mlp-placement demo-cnn-image-classifier demo-attn-text-classifier
 
+# Configure only when there is no build tree yet. CMake's generated
+# build system re-runs configure by itself when CMakeLists.txt changes
+# (the Makefile generator injects that rule), so calling `cmake -S -B`
+# on every `make` just reprints the whole configure log for nothing.
 configure:
-	cmake -S . -B $(BUILD)
+	@test -f $(BUILD)/CMakeCache.txt || cmake -S . -B $(BUILD)
 
 build: configure
 	cmake --build $(BUILD) -j$(JOBS)
+
+# Build once, quietly, for the aggregate demo/example targets: run the
+# normal build but show its output only if something actually compiled or
+# linked (or the build failed). When the tree is already up to date this
+# collapses to a single line instead of reprinting the target list. The
+# plain `make build` above stays verbose; this is only for the aggregates,
+# which would otherwise reprint the build for each demo they run.
+define QUIET_BUILD
+	@echo "==> build (once)"; log=$$(mktemp); \
+	if $(MAKE) --no-print-directory build >$$log 2>&1; then \
+	  if grep -qE 'Building|Linking' $$log; then cat $$log; else echo "    already up to date"; fi; \
+	  rm -f $$log; \
+	else cat $$log; rm -f $$log; exit 1; fi
+endef
 
 test: build
 	ctest --test-dir $(BUILD) --output-on-failure
@@ -29,7 +47,19 @@ test: build
 # just runs the matching demos/*.sh script (the existing "one demo per
 # phase" mechanism -- see README.md's Phase Demos section) instead of
 # duplicating its logic here.
-example: build
+# `make example` (alias `examples`) runs ALL phase example demos in
+# order -- source text walked through every phase on the bundled
+# examples/*.tns, ending at the full-pipeline capstone (demo 06). Each
+# phase's demo can still be run on its own via the `*-example` targets
+# below. (`make demo` is the other axis: the real-world / showcase
+# demos, not the phase walkthrough -- see further down.)
+example examples:
+	$(QUIET_BUILD)
+	./demos/01_lexer_demo.sh
+	./demos/02_parser_demo.sh
+	./demos/03_semantic_demo.sh
+	./demos/04_optimization_demo.sh
+	./demos/05_codegen_demo.sh
 	./demos/06_final_compiler_demo.sh
 
 lexer-example: build
@@ -47,6 +77,34 @@ optimization-example: build
 codegen-example: build
 	./demos/05_codegen_demo.sh
 
+# The full-pipeline capstone on its own (the last step of `make example`).
+final-example: build
+	./demos/06_final_compiler_demo.sh
+
+# `make demo` (alias `demos`) runs ALL showcase demos: the benchmark,
+# the independent-pipeline demo, the visualization demo, and the three
+# real-world inference demos. The real-world demos need a one-time
+# PyTorch artifact-prep step (see demo-* targets below); this aggregate
+# SKIPS each one whose demos/artifacts/<name>/ is absent, with a clear
+# message, so `make demo` still succeeds on a fresh clone. The
+# visualization demo is skipped if Graphviz (`dot`) is not installed.
+# (`make example` is the other axis: the per-phase walkthrough.)
+demo demos:
+	$(QUIET_BUILD)
+	@echo "==> benchmark";            ./$(BUILD)/benchmark_matmul_tiling
+	@echo "==> independent pipeline"; ./demos/07_independent_run_demo.sh $(BUILD)
+	@if command -v dot >/dev/null 2>&1; then \
+	  echo "==> visualization"; ./demos/08_viz_demo.sh $${FILE:-examples/optimizations/dead_code.tns} $(BUILD); \
+	else echo "SKIP viz: Graphviz not found (sudo apt install graphviz)"; fi
+	@for pair in mlp:mlp_placement cnn:cnn_image_classifier attn:attn_text_classifier; do \
+	  name=$${pair%%:*}; script=$${pair##*:}; \
+	  if [ -d "demos/artifacts/$$name" ]; then \
+	    echo "==> demo ($$script)"; ./demos/$${script}_demo.sh $(BUILD); \
+	  else \
+	    echo "SKIP $$script: no artifacts in demos/artifacts/$$name/ (run the matching tools/models/prepare_*.py first)"; \
+	  fi; \
+	done
+
 clean:
 	rm -rf $(BUILD)
 
@@ -55,7 +113,7 @@ clean:
 # Tensora pipeline and checks the result against the PyTorch reference.
 # Prepare the artifacts first (needs PyTorch, one time):
 #   python3 tools/models/prepare_mlp_demo.py
-#   python3 tools/models/prepare_cifar_demo.py
+#   python3 tools/models/prepare_stl10_demo.py
 #   python3 tools/models/prepare_text_attn_demo.py
 # The demo runners themselves need only numpy (no torch).
 demo-mlp-placement: build
@@ -72,6 +130,16 @@ demo-attn-text-classifier: build
 # 07_DEVELOPMENT_ENVIRONMENT.md §7.10), so `make test` never runs it.
 benchmark: build
 	./$(BUILD)/benchmark_matmul_tiling
+
+# Independent-pipeline demo: upstream mlir-opt/llvm tools consume Tensora's
+# emitted IR (a different IR world than PyTorch's), on a real-data matmul.
+demo-independent: build
+	./demos/07_independent_run_demo.sh $(BUILD)
+
+# Render Tensora's graph views (AST, TCG before/after optimization, MLIR DAG)
+# to PNGs. Needs Graphviz (`dot`): sudo apt install graphviz.
+viz: build
+	./demos/08_viz_demo.sh $${FILE:-examples/optimizations/dead_code.tns} $(BUILD)
 
 # Regenerate docs/development/10_APPENDIX_SOURCE_LISTING.md from the
 # current source tree (docs/development/10_APPENDIX_SOURCE_LISTING.md

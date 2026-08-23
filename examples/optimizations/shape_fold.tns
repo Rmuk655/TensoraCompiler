@@ -1,0 +1,7 @@
+# ShapeFoldingPass (OPT-SF): a reshape to the same shape is a no-op and is
+# folded away.
+input x: Tensor[a=4, b=8]
+graph g {
+    r = reshape(x, [a=4, b=8])
+    return r
+}

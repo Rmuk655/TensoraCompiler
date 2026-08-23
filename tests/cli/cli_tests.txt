@@ -1,0 +1,34 @@
+# Tensora CLI integration tests -- a data table read by CMakeLists.txt.
+# Adding a CLI test is a one-line edit here, not new CMake code.
+#
+# Format:  <name> | <expect> | <args...>
+#   expect = EXIT0          command must exit 0
+#          | PASS=<regex>   stdout must match <regex> (and exit 0)
+#          | FAIL           command must exit non-zero (WILL_FAIL)
+#   args   = passed to the `tensora` binary; @SRC@ expands to the repo root.
+#
+# These check the end-to-end driver/CLI paths. The correctness of the
+# optimization passes and operators themselves lives in the C++ unit tests
+# (OPT-*, LOW-*, SEM-*, ...), not here -- no overlap.
+
+# Full-pipeline runs against real example programs (all-ones synthetic input).
+INT-FULL-SYMBOLS        | PASS=x  input  Tensor\[batch=B, feat=784\] | --emit-symbols @SRC@/examples/mlp.tns
+INT-FULL-MLP-CHECK      | EXIT0                   | --check @SRC@/examples/mlp_concrete.tns
+INT-FULL-MLP-RUN        | PASS=element\[0\] = 145 | --run @SRC@/examples/mlp_concrete.tns
+INT-FULL-MM-RUN         | PASS=element\[0\] = 256 | --run @SRC@/examples/matmul_large.tns
+INT-FULL-CNN-RUN        | PASS=element\[0\] = 0.5 | --run @SRC@/examples/cnn.tns
+INT-FULL-ATTN-RUN       | PASS=element\[0\] = 1   | --run @SRC@/examples/attention.tns
+# Deliberate negative: symbolic batch dim must be rejected, not miscompiled.
+INT-FULL-SYMBOLIC-REJECT | FAIL                   | --run @SRC@/examples/mlp.tns
+
+# Real-data loading (--data-dir): equivalence + diagnostics (ARCH-016).
+INT-DATALOAD-EQUIV      | PASS=element\[0\] = 145 | --run @SRC@/examples/mlp_concrete.tns --data-dir @SRC@/tests/driver/mlp_ones
+INT-DATALOAD-MISSING    | FAIL                    | --run @SRC@/examples/mlp_concrete.tns --data-dir @SRC@/tests/driver/does_not_exist
+INT-DATALOAD-BADSHAPE   | FAIL                    | --run @SRC@/examples/mlp_concrete.tns --data-dir @SRC@/tests/driver/mlp_badshape
+INT-DATALOAD-BADDTYPE   | FAIL                    | --run @SRC@/examples/mlp_concrete.tns --data-dir @SRC@/tests/driver/mlp_baddtype
+
+# Real (varied, non-all-ones) data through the matmul, hand-checkable result.
+INT-INDEP-MATMUL        | PASS=element\[0\] = 5   | --run @SRC@/tests/independent/matmul.tns --data-dir @SRC@/tests/independent/matmul
+
+# New viz flag: post-optimization graph as Graphviz DOT.
+INT-VIZ-OPTDOT          | PASS=digraph TypedGraph | --emit-optimized-graph-dot @SRC@/examples/optimizations/dead_code.tns

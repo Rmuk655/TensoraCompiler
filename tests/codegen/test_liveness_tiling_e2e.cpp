@@ -105,7 +105,7 @@ std::array<int64_t, 3> lowerAndReadTileSizes(tns::TypedProgram& program, tns::Ti
 
 }  // namespace
 
-int main() {
+int run_liveness_tiling_e2e() {
   bool allOk = true;
 
   {

@@ -561,6 +561,7 @@ void printUsage(const char* prog) {
             << "  --emit-graph-dot       semantic analysis: print the Typed Computation Graph as Graphviz DOT\n"
             << "  --explain              semantic analysis: like --emit-graph, annotated per RM section\n"
             << "  --emit-optimized-graph optimization: print the graph after the Level-1 passes\n"
+            << "  --emit-optimized-graph-dot  optimization: the post-optimization graph as Graphviz DOT\n"
             << "  --emit-mlir            lowering: print the MLIR module\n"
             << "  --emit-llvm            backend: print the translated LLVM IR\n"
             << "  --run                  full pipeline: JIT-execute with synthetic all-ones input data\n"
@@ -682,6 +683,14 @@ int main(int argc, char** argv) {
   if (stage == "--emit-optimized-graph") {
     runOptimizationPasses(program);
     for (const TypedGraph& g : program.graphs()) printTypedGraph(g, types, /*explainMode=*/false);
+    return 0;
+  }
+
+  // Same DOT view as --emit-graph-dot, but after the Level-1 passes, so
+  // a before/after render shows what optimization removed or fused.
+  if (stage == "--emit-optimized-graph-dot") {
+    runOptimizationPasses(program);
+    for (const TypedGraph& g : program.graphs()) std::cout << graphToDot(g, types);
     return 0;
   }
 

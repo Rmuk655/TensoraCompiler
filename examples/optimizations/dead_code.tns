@@ -1,0 +1,10 @@
+# DeadOpEliminationPass (OPT-DCE): `dead` never reaches the return, so the
+# Level-1 passes drop it. Visible with --emit-graph vs --emit-optimized-graph.
+input x: Tensor[batch=4, in=8]
+weight W: Tensor[in=8, out=4]
+weight b: Tensor[out=4]
+graph g {
+    live = linear(x, W, b)
+    dead = relu(x)
+    return live
+}

@@ -79,7 +79,7 @@ tns::TypedGraph buildFfnGraph(tns::TypeContext& types) {
 
 }  // namespace
 
-int main() {
+int run_ffn_e2e() {
   llvm::InitializeNativeTarget();
   llvm::InitializeNativeTargetAsmPrinter();
 

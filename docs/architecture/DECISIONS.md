@@ -529,3 +529,40 @@ all-ones result — the loader is transparent), plus `INT-DATALOAD-MISSING`,
 rejects bad input). The three real-world demos are the end-to-end
 evidence that genuine trained parameters produce PyTorch-matching
 results.
+
+---
+
+## ARCH-017 — CNN demo dataset: STL-10 (native 96x96), not upscaled CIFAR-100
+
+**Problem.** The CNN real-world demo (`examples/cnn_stl10.tns`,
+`tools/models/prepare_stl10_demo.py`) originally trained on CIFAR-100,
+whose images are natively 32x32, upscaled (bilinear interpolation) to
+96x96 so the displayed picture would be large enough to see clearly.
+That upscaling does not add information: it interpolates the existing
+32x32 pixels, so the shown image is a physically larger but still
+blurry picture, not a genuinely higher-resolution photograph. For a
+demo whose point is "show a recognizable image, run it through the
+compiled CNN," a fake-resolution image undercuts exactly that goal.
+
+**Decision.** Switch to **STL-10** (`torchvision.datasets.STL10`), which
+is natively 96x96x3 with 10 recognizable object classes (airplane,
+bird, car, cat, deer, dog, horse, monkey, ship, truck). No resize or
+interpolation step is needed; the displayed image is genuinely that
+resolution. The existing CNN architecture (four `[conv -> relu ->
+maxpool]` blocks, 16→32→64→64 channels, 96→48→24→12→6 spatial) needed
+no change — only the dataset loader and the final class count
+(20 CIFAR-100 coarse superclasses → 10 STL-10 classes).
+
+**Tradeoff.** STL-10's download (~2.5 GB) is larger than CIFAR-100's
+(~170 MB), and its labeled training split is smaller (5000 images vs
+50000), so `prepare_stl10_demo.py` trains for more epochs (40 vs 12) to
+compensate. Both are one-time, cached costs (`demos/artifacts/`,
+`cnn-model.pt`), not a per-run cost.
+
+**Tests.** Unaffected — the CNN demo is not a CTest (needs PyTorch to
+prepare artifacts, per ARCH-016); `E2E-007` in TEST_MATRIX.md documents
+it as before, now against STL-10. `docs/development/BUILD.md`,
+`README.md`, and `demos/cnn_image_classifier_demo.sh` were updated to
+match; the CNN's multi-channel conv2d/maxpool and >7-input packed-JIT
+coverage (ARCH-016) is unchanged, since the architecture did not
+change.

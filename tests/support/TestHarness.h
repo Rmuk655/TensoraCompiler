@@ -110,6 +110,13 @@ inline int runRegisteredCases(int argc, char** argv) {
   std::string wantCategory;
   if (argc > 1) {
     std::string arg = argv[1];
+    if (arg == "--list") {
+      // Print every registered case ID, one per line. This is the
+      // authoritative case list (the registry itself); CMake validates
+      // its discovery against it (see INT-DISCOVERY-SYNC).
+      for (Case& c : registry()) std::cout << c.id << "\n";
+      return 0;
+    }
     if (startsWith(arg, "--category=")) {
       wantCategory = arg.substr(std::string("--category=").size());
       for (Case& c : registry()) {

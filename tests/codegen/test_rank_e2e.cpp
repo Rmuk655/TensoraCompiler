@@ -184,7 +184,7 @@ bool runAndCheck(const char* caseId, tns::OpKind op, const tns::TensorType* xT, 
 
 }  // namespace
 
-int main() {
+int run_rank_e2e() {
   using tns::Axis;
   using tns::Dimension;
   tns::TypeContext types;

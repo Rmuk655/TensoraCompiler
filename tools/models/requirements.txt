@@ -8,6 +8,11 @@
 #
 # Install once, on the machine that prepares the demos:
 #   pip install -r tools/models/requirements.txt   (prefer a venv/pipx)
+#
+# The `make viz` demo also needs Graphviz for the `dot` renderer. That is
+# an OS package, not pip (the PyPI `graphviz` package is only Python
+# bindings that still shell out to the system `dot`), so install it with:
+#   sudo apt install graphviz
 torch
 torchvision
 numpy

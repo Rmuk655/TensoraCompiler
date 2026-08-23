@@ -8,50 +8,90 @@ instead of repeating these commands.
 
 ## Canonical platform: WSL2 + Ubuntu (INTEG-001)
 
-Build and run on **WSL2 running Ubuntu** (or native Linux). Install the
-whole toolchain in one command:
+Build and run on **WSL2 running Ubuntu** (or native Linux). Two steps:
 
 ```bash
-sudo apt update && sudo apt install -y build-essential cmake default-jre
+# 1. System packages. This needs sudo; setup-dev.sh deliberately does not
+#    sudo-install these (see DEPENDENCIES.md, "check-deps.sh vs setup-dev.sh").
+sudo apt update && sudo apt install -y build-essential cmake default-jre \
+    llvm-21-dev libmlir-21-dev mlir-21-tools
+
+# 2. Verify the toolchain and print the next commands to run.
+./tools/setup-dev.sh          # add --demos to also install the PyTorch demo tooling (large)
 ```
 
-Then run [`./tools/check-deps.sh`](../../tools/check-deps.sh). See
-[docs/development/DEPENDENCIES.md](DEPENDENCIES.md) for the full
-pinned-version reference (including LLVM/MLIR 21) and what each
-dependency is for.
+[`setup-dev.sh`](../../tools/setup-dev.sh) runs
+[`check-deps.sh`](../../tools/check-deps.sh) (run that on its own any time
+to audit a machine) and then prints the build/test commands. See
+[DEPENDENCIES.md](DEPENDENCIES.md) for the full pinned-version reference
+(including why LLVM/MLIR is pinned to 21) and what each dependency is for.
 
 **Important:** work inside the WSL native filesystem. Copy the repo
 to, for example, `~/tensora` (ext4), and build there. Do **not** build
 from `/mnt/c/.../OneDrive/...`. `/mnt/c` is slow, and OneDrive fights
 the generated `build/` directory. This is why `build/` is git-ignored.
 
-macOS works too (`brew install cmake openjdk`). Windows-native is not
-supported (see INTEG-001).
+macOS may work (`brew install cmake openjdk`, plus an LLVM/MLIR 21
+install), but it is **not tested** — WSL2 + Ubuntu is the only supported
+platform (INTEG-001). Windows-native is not supported either.
 
 ## Build everything
 
 ```bash
-cmake -S . -B build           # Configure project and generate build files
-cmake --build build -j4       # Compile and link using 4 parallel jobs
+cmake -S . -B build                     # Configure project and generate build files
+cmake --build build -j "$(nproc)"       # Compile and link, one job per core (default is 1 job -- serial)
 ```
+
+`cmake --build` never parallelizes on its own with the Makefiles
+generator (CMake leaves that decision to you, since full-core
+parallelism compiling MLIR/LLVM headers can pressure memory on a small
+machine) -- so every raw `cmake --build` command needs its own `-j`, or
+export a default once per shell so you never have to remember it:
+
+```bash
+export CMAKE_BUILD_PARALLEL_LEVEL="$(nproc)"   # add to ~/.bashrc to make it permanent
+```
+
+With that set, a bare `cmake --build build` (or `--target <phase>`,
+below) is parallel automatically. `make`'s targets already pass
+`-j$(nproc)` themselves, so this variable does not change them.
 
 Or use the convenience wrapper (same thing, less typing):
 
 ```bash
 make build     # configure + build everything
 make test      # build + run the full ctest suite
-make example   # build + run the full pipeline (demos/06_final_compiler_demo.sh)
+make example   # build + run every per-phase demo in order (demos/01..06)
+make demo      # build + run every showcase demo (viz, independent, benchmark, real-world)
 make clean
 ```
+
+`make example` is the per-phase walkthrough; `make demo` is the
+showcase/real-world set. Both, and every individual target, are listed
+in "Make target reference" at the end of this file.
 
 ## Build one phase at a time
 
 `CMakeLists.txt` defines one CMake target per compiler phase, each
 depending only on what that phase needs — building `lexer`, for
-example, does not build the MLIR/LLVM backend. Useful when submitting
-or demoing one phase at a time.
+example, does not build the MLIR/LLVM backend.
+
+These need an already-configured build tree, so run `cmake -S . -B build`
+once first (in particular right after `make clean`, which deletes
+`build/` — otherwise `cmake --build build` reports "build is not a
+directory"). The `make` wrappers below configure automatically, so they
+work straight after a clean.
+
+These also need `-j` for parallel building (or `export
+CMAKE_BUILD_PARALLEL_LEVEL="$(nproc)"` once, per "Build everything"
+above, so you never have to pass it) — `cmake --build` compiles
+**serially** by default otherwise, which is noticeably slow. (The flag
+is `-j` or `--parallel`, e.g. `-j "$(nproc)"`, `-j4`, or bare `-j` for
+all cores; `--j4` is not valid. The `make` wrappers below already pass
+`-j$(nproc)`, so they do not need this.)
 
 ```bash
+cmake -S . -B build                         # once (or after `make clean`)
 cmake --build build --target lexer          # lexer only
 cmake --build build --target parser         # parser only
 cmake --build build --target semantic       # semantic analysis only
@@ -67,99 +107,17 @@ phase target is named `backend` instead.)
 Or with the `make` wrapper, which also configures first:
 
 ```bash
-make lexer
-make parser
-make semantic
-make optimization
-make codegen      # builds the `backend` CMake target
-make full
+make lexer         # configure + build test_lexer only
+make parser        # configure + build test_parser only
+make semantic      # configure + build test_semantic + test_graph only
+make optimization  # configure + build test_passes only
+make codegen       # configure + build the MLIR/LLVM backend + tensora CLI (the `backend` CMake target)
+make full          # configure + build everything (same set `make build` builds)
 ```
 
 Every CTest case also carries a phase label matching this same
 breakdown (see "Run the tests" below), so a phase can be tested in
 isolation the same way it is built in isolation.
-
-## Run the lexer on an example
-
-```bash
-./build/tensora --emit-tokens examples/mlp.tns
-```
-
-Each printed line is `line:col  kind` (it also shows the text for
-identifiers and literals). The compiler reports an illegal character
-on stderr and sets a non-zero exit code. `docs/language/02_LANGUAGE_
-TUTORIAL.md` §2.12 lists every other `--emit-*` flag, one per phase.
-
-`make example` runs the whole pipeline, not one phase. For a single
-phase's demo (source in, phase output out — the same `demos/*.sh`
-scripts README.md's Phase Demos section describes), use the matching
-`-example` target instead:
-
-```bash
-make lexer-example         # demos/01_lexer_demo.sh
-make parser-example        # demos/02_parser_demo.sh
-make semantic-example      # demos/03_semantic_demo.sh
-make optimization-example  # demos/04_optimization_demo.sh
-make codegen-example       # demos/05_codegen_demo.sh
-```
-
-## Run inference with real data
-
-By default `--run` fills inputs and weights with synthetic all-ones data
-(Tensora source declares shapes, not values). To run with real trained
-parameters and real inputs, put one float32 `.npy` file per declared
-input/weight, named `<name>.npy`, in a directory and pass `--data-dir`;
-`--output` writes the full result tensor to a `.npy` file:
-
-```bash
-./build/tensora --run examples/mlp_placement.tns \
-    --data-dir path/to/data \      # loads data/x.npy, data/W1.npy, ...
-    --output   result.npy          # writes the full result tensor
-```
-
-Each file's shape and dtype are checked against the program's declared
-tensor; a mismatch or missing file is a clear error. This is how the
-real-world demos below feed genuine weights and inputs.
-
-## Run the real-world inference demos
-
-Three demos take recognizable real inputs through the full pipeline and
-check the result against a PyTorch reference (see README.md and
-`tools/models/`):
-
-```bash
-make demo-mlp-placement        # student placement-eligibility (tabular MLP)
-make demo-cnn-image-classifier # CIFAR-100 image classification, 20 classes (CNN)
-make demo-attn-text-classifier # topic classification (self-attention)
-```
-
-Each needs its artifacts prepared once first, using PyTorch. Modern
-Debian/Ubuntu block `pip install` against the system Python (PEP 668),
-so the demo dependencies go in a project-local virtual environment, not
-the system Python and never `pip --break-system-packages`.
-`./tools/setup-dev.sh --demos` creates `.venv/` and installs
-`tools/models/requirements.txt` into it:
-
-```bash
-./tools/setup-dev.sh --demos     # one time: creates .venv, installs torch etc.
-source .venv/bin/activate        # 'which python' -> .venv/bin/python
-python tools/models/prepare_mlp_demo.py
-python tools/models/prepare_cifar_demo.py
-python tools/models/prepare_text_attn_demo.py
-deactivate                       # when finished
-```
-
-(Or set the venv up by hand: `python3 -m venv .venv` -- add
-`sudo apt install python3-venv` first if needed -- then
-`source .venv/bin/activate` and `pip install -r
-tools/models/requirements.txt`.) Artifacts land in `demos/artifacts/`
-(git-ignored, reproduced on demand). The demo runners themselves need
-only numpy, so `make demo-*` works without the venv active once the
-artifacts exist. Each demo classifies a whole held-out batch in one run
-(100 students / 40 images / 30 sentences) and reports Tensora-vs-PyTorch
-agreement over the whole batch, showing a few examples in detail. The
-CNN prep caches its trained model at `demos/artifacts/cnn-model.pt` (the
-slow step); delete that file to retrain from scratch.
 
 ## Run the tests
 
@@ -185,37 +143,182 @@ make test-optimization  # build + ctest -L optimization
 make test-codegen       # build + ctest -L codegen
 ```
 
+## Run the lexer on an example
+
+```bash
+./build/tensora --emit-tokens examples/mlp.tns
+```
+
+Each printed line is `line:col  kind` (it also shows the text for
+identifiers and literals). The compiler reports an illegal character
+on stderr and sets a non-zero exit code.
+[docs/language/02_LANGUAGE_TUTORIAL.md](../language/02_LANGUAGE_TUTORIAL.md)
+§2.12 lists every other `--emit-*` flag, one per phase.
+
+`make example` runs every per-phase demo (01…06) in order. For a single
+phase's demo (source in, phase output out — the same `demos/*.sh`
+scripts README.md's Phase Demos section describes), use the matching
+`-example` target instead:
+
+```bash
+make lexer-example         # demos/01_lexer_demo.sh
+make parser-example        # demos/02_parser_demo.sh
+make semantic-example      # demos/03_semantic_demo.sh
+make optimization-example  # demos/04_optimization_demo.sh
+make codegen-example       # demos/05_codegen_demo.sh
+make final-example         # demos/06_final_compiler_demo.sh (full-pipeline capstone)
+```
+
+## Run inference with real data
+
+By default `--run` fills inputs and weights with synthetic all-ones data
+(Tensora source declares shapes, not values). To run with real trained
+parameters and real inputs, put one float32 `.npy` file per declared
+input/weight, named `<name>.npy`, in a directory and pass `--data-dir`;
+`--output` writes the full result tensor to a `.npy` file:
+
+```bash
+./build/tensora --run examples/mlp_placement.tns \
+    --data-dir path/to/data \      # loads data/x.npy, data/W1.npy, ...
+    --output   result.npy          # writes the full result tensor
+```
+
+Each file's shape and dtype are checked against the program's declared
+tensor; a mismatch or missing file is a clear error. This is how the
+real-world demos below feed genuine weights and inputs.
+
+## Run the real-world inference demos
+
+Three demos take recognizable real inputs through the full pipeline and
+check the result against a PyTorch reference (see README.md and
+`tools/models/`). **Each needs its artifacts prepared once first, using
+PyTorch** -- running `make demo-*` before this step fails with "demo
+artifacts not found," telling you to do this. Modern Debian/Ubuntu
+block `pip install` against the system Python (PEP 668), so the demo
+dependencies go in a project-local virtual environment, not the system
+Python and never `pip --break-system-packages`. `./tools/setup-dev.sh
+--demos` creates `.venv/` and installs `tools/models/requirements.txt`
+into it:
+
+```bash
+./tools/setup-dev.sh --demos     # one time: creates .venv, installs torch etc.
+source .venv/bin/activate        # 'which python' -> .venv/bin/python
+python tools/models/prepare_mlp_demo.py
+python tools/models/prepare_stl10_demo.py
+python tools/models/prepare_text_attn_demo.py
+deactivate                       # when finished
+```
+
+Only once that has produced `demos/artifacts/{mlp,cnn,attn}/`:
+
+```bash
+make demo-mlp-placement        # student placement-eligibility (tabular MLP)
+make demo-cnn-image-classifier # STL-10 image classification, 10 classes (CNN, native 96x96)
+make demo-attn-text-classifier # topic classification (self-attention)
+```
+
+Artifacts land in `demos/artifacts/`
+(git-ignored, reproduced on demand). The demo runners themselves need
+only numpy, so `make demo-*` works without the venv active once the
+artifacts exist. Each demo classifies a whole held-out batch in one run
+(100 students / 40 images / 30 sentences) and reports Tensora-vs-PyTorch
+agreement over the whole batch, showing a few examples in detail. The
+CNN prep caches its trained model at `demos/artifacts/cnn-model.pt` (the
+slow step); delete that file to retrain from scratch.
+
+## Visualization, independent pipeline, and benchmark
+
+```bash
+make viz              # render AST / TCG (before + after optimization) / MLIR DAG to PNGs
+make demo-independent # feed Tensora's emitted MLIR/LLVM IR to upstream mlir-opt/llc/lli
+make benchmark        # measure Level-2 matmul-tiling speedup
+```
+
+`make viz` needs Graphviz (`sudo apt install graphviz`) and is the
+clearest view of what optimization does — the Typed Computation Graph
+before and after the Level-1 passes, for **one** program at a time
+(default `examples/optimizations/dead_code.tns`; `FILE=<path> make viz`
+picks a different one, including any other file under
+`examples/optimizations/`). `make benchmark` is a measurement, not a
+CTest (see
+[07_DEVELOPMENT_ENVIRONMENT.md](07_DEVELOPMENT_ENVIRONMENT.md) §7.10) —
+it does not read a `.tns` file at all; it runs a hardcoded 1024x1024x1024
+matmul (the same workload `LOOP-002`/`test_tiling_e2e.cpp` use) untiled
+and at three tile sizes, timing each, to show Level-2 tiling is actually
+faster, not just structurally different.
+
+`make viz` and `make benchmark` **show**; the CTest suite **asserts** —
+but they are not both checking the same artifact `make viz` renders.
+`test_passes` (the Level-1 pass CTest) uses small graphs built directly
+in C++ (`GraphBuilder`, see `tests/optimization/test_passes.cpp`), not
+the `.tns` files under `examples/optimizations/` — it exists to assert
+the *same six passes* `make viz` lets you *see* fire on a real program,
+not to check that specific file. The gated `INT-IR-MLIR-STD`/
+`INT-IR-LLVM-STD` cases run on `examples/mlp_concrete.tns`, a different
+file again, to confirm Tensora's emitted MLIR/LLVM IR is standard enough
+for the real `mlir-opt`/`llvm-as` tools to accept — a check about IR
+validity, not about optimization correctness.
+
+In plain terms, each one answers a different question:
+
+- **`test_passes`**: "Does each optimization pass do the right thing?"
+  For every pass it builds a small graph *by hand* (not from a `.tns`
+  file) where the pass *should* fire, checks the result, then builds a
+  second "near-miss" graph where it should *not* fire, and checks the
+  pass left it alone. Both halves matter — a pass that fires too rarely
+  is useless, and one that fires too eagerly is a correctness bug.
+- **`INT-IR-MLIR-STD` / `INT-IR-LLVM-STD`**: "Is Tensora's output real
+  MLIR/LLVM, or something that only Tensora itself can read?" Each
+  compiles `mlp_concrete.tns` and feeds the result to the actual,
+  unmodified `mlir-opt`/`llvm-as` tools from LLVM — tools Tensora did not
+  write — and checks they accept it without complaint.
+- **`make viz`**: "What did an optimization pass actually change?" It
+  draws a picture of one program's graph before and after the Level-1
+  passes run, so you can see with your own eyes which operations were
+  removed or rewritten, instead of just being told a pass "fired."
+- **`make benchmark`**: "Is the tiled version of matmul actually
+  *faster*, not just structured differently?" It runs the same
+  1024x1024x1024 matrix multiply four ways (untiled, plus three tile
+  sizes) and times each one for a real answer, rather than assuming
+  tiling helps.
+
 ## Notes / known build caveats
 
-- ANTLR generates `TensoraLexer`/`TensoraParser` from
-  `grammar/Tensora.g4` into the build tree (`build/antlr4_generated/`).
-  A CMake custom command does this (the `antlr4_generate` target), so a
-  clean `cmake --build build` always regenerates it. No one commits or
-  hand-edits generated files. `grammar/Tensora.g4` is one *combined*
-  grammar file (lexer and parser rules together), so this one ANTLR
-  invocation always produces both generated files together, even when
-  building only the `lexer` target -- there is no way to generate just
-  one from a combined grammar. This step itself is fast; it is not the
-  reason a from-scratch build takes a while (see below).
-- CMake `FetchContent` fetches the ANTLR jar and C++ runtime on first
-  configure, which needs internet access. Both are pinned to one
-  ANTLR4 version (`ANTLR4_VERSION` in `CMakeLists.txt`), for
-  reproducibility. Compiling that C++ runtime from source (~100 files)
-  is the real cost of a from-scratch build -- but it is a one-time cost
-  per `build/` directory: CMake will not recompile it again on a later
-  incremental build unless `build/` is removed. `make`'s targets pass
-  `-j$(JOBS)` (default: `nproc`) to `cmake --build` for exactly this
-  step, since those ~100 files compile independently and building them
-  one at a time wastes every idle core on a multi-core machine.
-- A from-scratch build reports progress as a percentage of the *whole*
-  build graph (every library, executable, and the vendored ANTLR4
-  runtime), not per compiler phase — so the percentage can jump
-  straight to (for example) 67% as soon as the one large vendored
-  dependency finishes, well before any Tensora-owned code has
-  compiled. This is normal `cmake --build`/`make` behavior, not a sign
-  anything is wrong. Building one phase at a time (above) reports
-  progress against that phase's much smaller target set instead, which
-  reads more sensibly.
+- **Generated frontend.** ANTLR generates `TensoraLexer`/`TensoraParser`
+  from the one combined `grammar/Tensora.g4` into `build/antlr4_generated/`
+  on every build (the `antlr4_generate` target); nothing generated is
+  committed or hand-edited. This step is fast.
+- **First build is slow, once.** `FetchContent` pulls the pinned ANTLR jar
+  and C++ runtime on first configure (needs internet), then compiling that
+  ~100-file runtime dominates a from-scratch build. It is cached per
+  `build/` dir, so incremental builds skip it; `make` passes `-j$(nproc)`
+  to parallelize it.
+- **Progress % is whole-graph.** A from-scratch build's percentage covers
+  every target including the vendored runtime, so it can jump to ~67%
+  before any Tensora code compiles — normal, not a fault. Build one phase
+  at a time for a percentage scoped to that phase.
+
+See [07_DEVELOPMENT_ENVIRONMENT.md](07_DEVELOPMENT_ENVIRONMENT.md) for the
+rationale behind each of these.
+
+## Make target reference
+
+Every convenience target (`make <target>`); CMake commands above are the
+authoritative equivalents.
+
+| Target | What it does |
+|---|---|
+| `build` / `test` / `clean` | configure+build / build+ctest / remove `build/` |
+| `lexer` `parser` `semantic` `optimization` `codegen` `full` | build one phase's targets |
+| `test-lexer` … `test-codegen` | build a phase, then `ctest -L <phase>` |
+| `example` (`examples`) | run all per-phase demos (01…06) in order |
+| `lexer-example` … `codegen-example`, `final-example` | one phase demo (01…06) |
+| `demo` (`demos`) | run all showcase demos (skips unprepared/absent-tool ones) |
+| `demo-mlp-placement` / `demo-cnn-image-classifier` / `demo-attn-text-classifier` | one real-world inference demo |
+| `viz` | render AST/TCG/MLIR graphs to PNGs (needs Graphviz) |
+| `demo-independent` | run emitted IR through upstream mlir-opt/llc/lli |
+| `benchmark` | measure matmul-tiling speedup |
+| `appendix` | regenerate the source-listing appendix |
 
 ## Regenerate the source-listing appendix
 

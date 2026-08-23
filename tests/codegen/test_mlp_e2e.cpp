@@ -70,7 +70,7 @@ MlirValue constTensor(OpBuilder& b, Location loc, RankedTensorType type, ArrayRe
 
 }  // namespace
 
-int main() {
+int run_mlp_e2e() {
   // --- Build the TypedGraph (mirrors what SemanticAnalyzer would produce). ---
   tns::TypeContext types;
   tns::GraphBuilder builder("mlp");

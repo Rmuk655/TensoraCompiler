@@ -228,13 +228,13 @@ tests already work in this project (no invented textual format).
 
 | ID | Pass | Kind | Case | Result | Status |
 |----|------|------|------|--------|--------|
-| OPT-SF-001/002 | ShapeFolding | V/N | constant shape -> literal / symbolic shape untouched | changed / unchanged | done |
+| OPT-SF-001, OPT-SF-002 | ShapeFolding | V/N | constant shape -> literal / symbolic shape untouched | changed / unchanged | done |
 | OPT-DCE-001 | DeadOpElimination | V | drops value not reaching return | changed | done |
 | OPT-DCE-002 | DeadOpElimination | N | keeps value reaching return | unchanged | done |
 | OPT-DCE-003 | DeadOpElimination | V | removes a whole dead chain (2 nodes) next to a same-shaped live chain, not just one dead node | changed (2 nodes removed) | done |
-| OPT-RC-001/002/003 | ReshapeCancellation | V/V/N | reshape immediately undone / chained / non-inverse shapes | changed / changed / unchanged | done |
-| OPT-TC-001/002/003 | TransposeCancellation | V/N/V | inverse perms cancel / non-inverse perms / chained inverse | changed / unchanged / changed | done |
-| OPT-EF-001/002 | ElementwiseFusion | V/N | chain fuses / non-fusable interruption | changed / unchanged | done |
+| OPT-RC-001, OPT-RC-002, OPT-RC-003 | ReshapeCancellation | V/V/N | reshape immediately undone / chained / non-inverse shapes | changed / changed / unchanged | done |
+| OPT-TC-001, OPT-TC-002, OPT-TC-003 | TransposeCancellation | V/N/V | inverse perms cancel / non-inverse perms / chained inverse | changed / unchanged / changed | done |
+| OPT-EF-001, OPT-EF-002 | ElementwiseFusion | V/N | chain fuses / non-fusable interruption | changed / unchanged | done |
 | OPT-LBA-001 | LinearBiasActivationFusion | V | linear+relu fuses | changed | done |
 | OPT-LBA-002 | LinearBiasActivationFusion | N | linear+softmax not fused | unchanged | done |
 | OPT-FIX-001 | PassManager (fixed point) | V | DeadOpElimination drops a linear's dead consumer; a later sweep then fuses the surviving relu | changed, 2+ sweeps | done |
@@ -263,7 +263,7 @@ cases).
 
 | ID | Ref | Kind | Case | Result | Status |
 |----|-----|------|------|--------|--------|
-| LOOP-001-A..F | 8.4 | V/N | large/tiny/exact-divide/remainder/symbolic-skip/memory-pressure `TilingDecision` cases | plan matches shapes (pure C++, no MLIR) | done |
+| LOOP-001-A, LOOP-001-B, LOOP-001-C, LOOP-001-D, LOOP-001-E, LOOP-001-F | 8.4 | V/N | large/tiny/exact-divide/remainder/symbolic-skip/memory-pressure `TilingDecision` cases | plan matches shapes (pure C++, no MLIR) | done |
 | LOOP-002 | 8.4 | V | tiled loop nest structure after `MatmulTilingPass` | tiled copy has `scf.for`, untiled copy does not | done |
 | LOOP-003 | 8.4 | V | tiled vs untiled numerical equivalence | both compute the hand-verified reference value, JIT-executed | done |
 | LOOP-004 | 8.4 | V | tiled vs untiled wall-clock, 1024x1024x1024, tile=128 | reported (real speedup, single-run methodology, not a rigorous claim on its own) | done |
@@ -322,6 +322,11 @@ and compares results.
 | LOW-012 | 3.17 | V | maxpool -> `linalg.pooling_nchw_max` (-inf-filled accumulator, shape-only window operand) | numerically verified via JIT (LOW-012) | done |
 | LOW-013 | 3.8 | V | elementwise add with real tensor-tensor broadcasting (a shorter-rank operand, not a tensor-scalar op) -> `linalg.generic` with `broadcastOperandMap` | numerically verified via JIT (LOW-013): `[[1,2,3],[4,5,6]] + [10,20,30]` | done |
 
+The transpose/flatten/softmax/conv2d(+padding)/sum/mean/maxpool lowering
+checks above (LOW-006..013) run as one CTest, **LOW-NEWOPS**
+(`tests/codegen/test_new_ops_e2e.cpp`, a case of the consolidated
+`test_codegen_e2e` binary).
+
 General reshape (`tensor.reshape` with a runtime shape operand —
 flatten's fixed collapse-to-2D reassociation was sufficient for every
 workload attempted so far) is still not in `MlirLowerer`'s switch — out
@@ -345,7 +350,7 @@ Every RM 3.x frozen operator except general reshape is now lowered.
 | E2E-004 | V | (single-head) scaled dot-product attention vs reference | within tol (1e-4) | done for single head — `test_attention_e2e.cpp`: matmul->transpose->scale->softmax->matmul, checked against a Python-double-computed reference (1.660477); multi-head specifically is not started (needs batched matmul) |
 | E2E-005 | V | matmul-heavy model, tiled vs untiled vs reference | within tol + timing | done — `LOOP-002/003/004` (single 8x8x8 matmul; timing reported, not asserted, since the workload is too small for tiling to pay off) |
 | E2E-006 | V | differential random small graphs | — | not started |
-| E2E-007 | V | real-world inference demos vs PyTorch (MLP placement / CIFAR-100 20-class CNN / self-attention text) | within tol (1e-3/1e-4) | done — `make demo-mlp-placement`/`demo-cnn-image-classifier`/`demo-attn-text-classifier`: each runs PyTorch-trained weights on real held-out inputs through the real CLI (`--run --data-dir`) and checks against a saved PyTorch reference. These exercise **multi-channel** conv2d/maxpool (CIFAR-100 @96x96: 3->16->32->64->64 channels, 4 conv/pool blocks) and batched rank-3 attention end-to-end — coverage the C++ e2e tests above (single-channel conv, rank-2 attention) do not. They also exercise graphs with >7 inputs/weights (the CNN has 11), i.e. the packed JIT invocation (ARCH-016). Not CTest cases (need PyTorch to prepare artifacts); the loader path they rely on is CTest-covered by `INT-DATALOAD-*` |
+| E2E-007 | V | real-world inference demos vs PyTorch (MLP placement / STL-10 10-class CNN / self-attention text) | within tol (1e-3/1e-4) | done — `make demo-mlp-placement`/`demo-cnn-image-classifier`/`demo-attn-text-classifier`: each runs PyTorch-trained weights on real held-out inputs through the real CLI (`--run --data-dir`) and checks against a saved PyTorch reference. These exercise **multi-channel** conv2d/maxpool (STL-10, natively 96x96 -- no upscaling, see ARCH-017: 3->16->32->64->64 channels, 4 conv/pool blocks) and batched rank-3 attention end-to-end — coverage the C++ e2e tests above (single-channel conv, rank-2 attention) do not. They also exercise graphs with >7 inputs/weights (the CNN has 11), i.e. the packed JIT invocation (ARCH-016). Not CTest cases (need PyTorch to prepare artifacts); the loader path they rely on is CTest-covered by `INT-DATALOAD-*` |
 
 E2E-001/002/004/005 use a hand-computed (or, for E2E-002/004, a
 Python-double-precision-computed) reference value rather than a literal

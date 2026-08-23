@@ -14,6 +14,24 @@ this DSL: statically check the computation, keep verified semantic
 information in a typed graph IR, optimize that graph, and lower valid
 programs through MLIR and LLVM for native execution.
 
+**This is not an isolated toy — it interops with PyTorch today, at the
+data boundary, to run genuine end-to-end programs.** Train a model in
+PyTorch as usual, export its weights to `.npy` (one file per
+input/weight), and load them into a compiled Tensora program with
+`--data-dir` (see [docs/development/BUILD.md](docs/development/BUILD.md)).
+Tensora then statically verifies, optimizes, and runs that exact
+computation through MLIR/LLVM, and its result matches the PyTorch
+reference within floating-point tolerance. This is not a synthetic
+claim: all three demos under `demos/` (a tabular MLP, a CNN image
+classifier, a self-attention text classifier) are genuine PyTorch-trained
+models, on real data, running end to end through Tensora this way —
+see [Real-World Inference Demos](#real-world-inference-demos) below. A
+deeper, compile-time integration (for example registering Tensora as a
+`torch.compile` backend, or converging with PyTorch's own MLIR path) is
+design work, not yet built — see
+[docs/ProjectMgmt/11_OPEN_SOURCE_AND_RESEARCH_ROADMAP.md](docs/ProjectMgmt/11_OPEN_SOURCE_AND_RESEARCH_ROADMAP.md)
+§9.
+
 The expected high-level pipeline is:
 
 ``` text
@@ -68,19 +86,22 @@ source (.tns)
   -> JIT execution or native object file
 ```
 
-**One-time setup after cloning** (checks the toolchain against
-[docs/development/DEPENDENCIES.md](docs/development/DEPENDENCIES.md)
-and prints the next commands):
+**One-time setup after cloning.** Install the system packages first
+(`setup-dev.sh` deliberately does not `sudo`-install them), then run it
+to verify the toolchain against
+[docs/development/DEPENDENCIES.md](docs/development/DEPENDENCIES.md) and
+print the next commands:
 
 ``` bash
-./tools/setup-dev.sh
+sudo apt install -y build-essential cmake default-jre llvm-21-dev libmlir-21-dev mlir-21-tools
+./tools/setup-dev.sh          # add --demos to also set up the PyTorch demo venv (large)
 ```
 
 **Canonical build and test:**
 
 ``` bash
-cmake -S . -B build           # Configure project and generate build files
-cmake --build build -j4       # Compile and link using 4 parallel jobs
+cmake -S . -B build                 # Configure project and generate build files
+cmake --build build -j "$(nproc)"   # Compile and link, one job per core (default is 1 job -- serial)
 ctest --test-dir build --output-on-failure # Run tests and show output for failed tests
 ```
 
@@ -114,8 +135,10 @@ demos/05_codegen_demo.sh        # --emit-mlir, --emit-llvm
 demos/06_final_compiler_demo.sh # --run and -o across MLP / tiled matmul / CNN / attention
 ```
 
-Run from the repository root after building (`cmake --build build`):
-
+Run from the repository root after building (`cmake --build build`).
+`make example` (alias `make examples`) runs all six in order; each is
+also its own target (`make lexer-example` … `make codegen-example`,
+`make final-example`).
 
 Each script accepts an optional `.tns` file as its first argument
 (defaults to a sensible example under `examples/`) and an optional
@@ -141,50 +164,78 @@ Computation Graph before and after optimization
 debugging one phase, or for a demo, without running the whole
 pipeline.
 
+# Visualization, Independent Pipeline, and Benchmarks
+
+Three more demos sit alongside the per-phase ones. Each is its own
+`make` target, and `make demo` (alias `make demos`) runs them together
+with the real-world demos below (skipping any whose artifacts or tools
+are absent):
+
+``` bash
+make viz              # demos/08 -- render AST / TCG (before+after opt) / MLIR DAG to PNGs (needs Graphviz `dot`)
+make demo-independent # demos/07 -- feed Tensora's emitted MLIR/LLVM IR to upstream mlir-opt/llc/lli, same math
+make benchmark        # measure Level-2 matmul-tiling speedup (not a CTest; see 07_DEVELOPMENT_ENVIRONMENT.md)
+```
+
+`make viz` gives the clearest picture of optimization: the Typed
+Computation Graph *before* and *after* the Level-1 passes, side by side.
+`make demo-independent` is separate from the tests on purpose — the
+CTest suite *asserts* correctness (e.g. `test_passes`, and the gated
+`INT-IR-*-STD` cases that check emitted IR parses under external tools),
+while these demos *visualize* it; both read the same
+`examples/optimizations/*.tns`, and demo 04 ends by running the
+authoritative pass tests rather than re-checking anything itself.
+
 # Real-World Inference Demos
 
 Three demos take recognizable real inputs, use genuine PyTorch-trained
 parameters, run the whole computation through Tensora (source → TCG →
 optimization → MLIR → LLVM → native execution), and check the result
-against a PyTorch reference:
+against a PyTorch reference. **Each needs its weights and inputs
+prepared once first**, on a machine with PyTorch
+([`tools/models/requirements.txt`](tools/models/requirements.txt)); the
+demo runners themselves need only numpy:
+
+``` bash
+python3 tools/models/prepare_mlp_demo.py        # trains the tabular MLP, exports weights + held-out students
+python3 tools/models/prepare_stl10_demo.py       # trains the STL-10 CNN, exports weights + held-out images
+python3 tools/models/prepare_text_attn_demo.py   # trains the attention text classifier, exports weights + sentences
+```
+
+Only once that exists (`demos/artifacts/{mlp,cnn,attn}/`):
 
 ``` bash
 make demo-mlp-placement        # student placement-eligibility (tabular MLP)
-make demo-cnn-image-classifier # CIFAR-100 image classification, 20 classes (CNN, shows the image)
+make demo-cnn-image-classifier # STL-10 image classification, 10 classes (CNN, native 96x96, shows the image)
 make demo-attn-text-classifier # weather / food / sports topic (self-attention)
 ```
 
-Prepare each demo's weights and inputs once first, on a machine with
-PyTorch (`tools/models/requirements.txt`); the demo runners themselves
-need only numpy:
-
-``` bash
-python3 tools/models/prepare_mlp_demo.py
-python3 tools/models/prepare_cifar_demo.py
-python3 tools/models/prepare_text_attn_demo.py
-```
+`make demo` runs all three plus the visualization, independent-pipeline,
+and benchmark demos above; it skips (with a message) any real-world demo
+whose artifacts have not been prepared, so it still succeeds on a fresh
+clone.
 
 Real values reach the compiled graph through `tensora --run --data-dir`
 (one float32 `.npy` per input/weight); see
-[docs/development/BUILD.md](docs/development/BUILD.md). The Transformer
-demo is a self-attention **classifier** built from Tensora's existing
-operators — a full pretrained BERT/DistilBERT QA model needs operators
-Tensora does not yet have (embedding/gather, layernorm, GELU, integer
-tensors), tracked in
-[docs/ProjectMgmt/11_OPEN_SOURCE_AND_RESEARCH_ROADMAP.md](docs/ProjectMgmt/11_OPEN_SOURCE_AND_RESEARCH_ROADMAP.md)
-§8.9a/§8.9.
+[docs/development/BUILD.md](docs/development/BUILD.md).
 
-## Known limitations these demos will hit if misused
+## Known limitations
 
 - `--emit-mlir`/`--emit-llvm`/`--run`/`-o` need **concrete**
   (non-symbolic) shapes (see `docs/testing/TEST_MATRIX.md` LOW-005).
   Use `examples/mlp_concrete.tns`, not `examples/mlp.tns`, for those
   stages.
-- `--run` uses synthetic all-ones input data by default (Tensora source
-  declares shapes, not values). This is still a checkable choice, not
-  an arbitrary one — for example, a matmul's result is exactly the
-  contracted dimension. Pass `--data-dir` to load real `.npy` values
-  instead (see the real-world demos above).
-- `examples/attention.tns` is single-head (rank-2); batched matmul is
-  lowered (RANK-003/004), so a rank-4 multi-head version is simply not
-  yet written as an example, not blocked on missing lowering support.
+- The Transformer demo is a self-attention **classifier** built from
+  Tensora's existing operators — a full pretrained BERT/DistilBERT QA
+  model needs operators Tensora does not yet have (embedding/gather,
+  layernorm, GELU, integer tensors), tracked in
+  [docs/ProjectMgmt/11_OPEN_SOURCE_AND_RESEARCH_ROADMAP.md](docs/ProjectMgmt/11_OPEN_SOURCE_AND_RESEARCH_ROADMAP.md)
+  §8.9a/§8.9.
+- The only way to get data into a compiled Tensora program today is
+  `.npy` files (`--data-dir`) — there is no in-memory way to hand
+  Tensora a live tensor from another process. Making Tensora a
+  first-class interop target (for example, a PyTorch custom op that
+  passes tensors directly, no file round-trip) is needed for Tensora to
+  be useful across wider use cases; see
+  [docs/ProjectMgmt/11_OPEN_SOURCE_AND_RESEARCH_ROADMAP.md](docs/ProjectMgmt/11_OPEN_SOURCE_AND_RESEARCH_ROADMAP.md)
+  §9.

@@ -180,7 +180,7 @@ std::pair<float, double> runPipeline(ModuleOp module, MLIRContext& ctx, bool app
 
 }  // namespace
 
-int main() {
+int run_tiling_e2e() {
   llvm::InitializeNativeTarget();
   llvm::InitializeNativeTargetAsmPrinter();
   const float expected = static_cast<float>(kDim);  // all-ones 1024x1024 @ 1024x1024 -> every element = 1024
