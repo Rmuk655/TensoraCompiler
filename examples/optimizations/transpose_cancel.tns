@@ -1,0 +1,8 @@
+# TransposeCancellationPass (OPT-TC): two inverse transposes cancel to the
+# original tensor; both are removed. Visible in the Typed Computation Graph.
+input x: Tensor[a=4, b=8]
+graph g {
+    t1 = transpose(x, perm=[1, 0])
+    t2 = transpose(t1, perm=[1, 0])
+    return t2
+}

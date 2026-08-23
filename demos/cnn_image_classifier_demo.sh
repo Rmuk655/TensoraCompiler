@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# CNN real-inference demo: CIFAR-100 image classification (20 coarse
-# superclasses).
+# CNN real-inference demo: STL-10 image classification (10 classes).
+# STL-10 images are natively 96x96 -- displayed at their real resolution,
+# not an upscaled 32x32 CIFAR image (see ARCH-017).
 #
-# Classifies a whole batch of 40 held-out CIFAR-100 images
-# (examples/cnn_cifar.tns) through the full Tensora pipeline (--run, JIT)
+# Classifies a whole batch of 40 held-out STL-10 images
+# (examples/cnn_stl10.tns) through the full Tensora pipeline (--run, JIT)
 # in one go, checks every row against the PyTorch reference, and shows a
 # few of them with their pictures. Only numpy is needed here (no torch);
-# run tools/models/prepare_cifar_demo.py once first.
+# run tools/models/prepare_stl10_demo.py once first.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 BUILD="${1:-build}"
@@ -17,7 +18,7 @@ TOL="1e-3"
 if [ ! -d "$EVAL" ]; then
   echo "error: demo artifacts not found in $EVAL/."
   echo "Run the one-time preparation first (needs PyTorch + torchvision):"
-  echo "  python3 tools/models/prepare_cifar_demo.py"
+  echo "  python3 tools/models/prepare_stl10_demo.py"
   exit 1
 fi
 
@@ -34,11 +35,11 @@ open_image() {
   fi
 }
 
-echo "=== Tensora CNN Real-World Demo: CIFAR-100 image classification (20 superclasses) ==="
-echo "Model: examples/cnn_cifar.tns (4x [conv -> relu -> maxpool] -> flatten -> linear)"
+echo "=== Tensora CNN Real-World Demo: STL-10 image classification (10 classes) ==="
+echo "Model: examples/cnn_stl10.tns (4x [conv -> relu -> maxpool] -> flatten -> linear)"
 echo
 
-"$BUILD/tensora" --run examples/cnn_cifar.tns --data-dir "$EVAL" --output "$EVAL/tensora_out.npy" >/dev/null
+"$BUILD/tensora" --run examples/cnn_stl10.tns --data-dir "$EVAL" --output "$EVAL/tensora_out.npy" >/dev/null
 
 # Open the shown images in a GUI viewer (best effort).
 for b in $(python3 -c "import json;print(' '.join(str(x['index']) for x in json.load(open('$EVAL/meta.json'))['display']))"); do
@@ -51,28 +52,23 @@ import numpy as np
 d, classes_path, tol = sys.argv[1], sys.argv[2], float(sys.argv[3])
 CLASSES = json.load(open(classes_path))
 meta = json.load(open(f"{d}/meta.json"))
-exp  = np.load(f"{d}/expected.npy")      # [N,20] PyTorch logits
-got  = np.load(f"{d}/tensora_out.npy")   # [N,20] Tensora logits
+exp  = np.load(f"{d}/expected.npy")      # [N,10] PyTorch logits
+got  = np.load(f"{d}/tensora_out.npy")   # [N,10] Tensora logits
 truth = meta["true_classes"]
 N = exp.shape[0]
 
 def softmax(z):
     e = np.exp(z - z.max()); return e / e.sum()
 
-# A few images shown with their pictures (a diverse, correctly-classified subset).
+# A few images shown with their pictures (opened above in a GUI viewer --
+# a real 96x96 photo, not upscaled). A terminal-only ANSI rendering was
+# tried and dropped: half-block mosaic art is inherently blocky at any
+# size (confirmed not a truecolor-support issue), so it could not show
+# the image better than just naming which file the GUI window is.
 print(f"Showing {len(meta['display'])} of {N} classified images:\n")
 for item in meta["display"]:
     b = item["index"]
-    thumb = np.load(f"{d}/thumb_{b}.npy")  # [H,W,3] uint8
-    h, w, _ = thumb.shape
-    step = max(1, w // 32)
-    for y in range(0, h - step, 2 * step):
-        line = "".join(
-            f"\x1b[38;2;{thumb[y,x][0]};{thumb[y,x][1]};{thumb[y,x][2]}m"
-            f"\x1b[48;2;{thumb[min(y+step,h-1),x][0]};{thumb[min(y+step,h-1),x][1]};{thumb[min(y+step,h-1),x][2]}m▀"
-            for x in range(0, w, step))
-        print("  " + line + "\x1b[0m")
-    print(f"  Image (row {b} of {N}):")
+    print(f"  Image (row {b} of {N}, opened above from image_{b}.png):")
     print(f"    True class:        {item['true_class']}")
     print(f"    PyTorch reference: {CLASSES[int(exp[b].argmax())]:<20} {softmax(exp[b]).max()*100:5.1f}%")
     print(f"    Tensora result:    {CLASSES[int(got[b].argmax())]:<20} {softmax(got[b]).max()*100:5.1f}%")

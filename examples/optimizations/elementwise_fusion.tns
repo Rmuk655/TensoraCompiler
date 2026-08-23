@@ -1,0 +1,11 @@
+# ElementwiseFusionPass (OPT-EF): a chain of elementwise ops is marked as one
+# fusable group (a graph fact consumed at lowering). Verified by the OPT-EF
+# unit test in tests/optimization/test_passes.cpp.
+input x: Tensor[a=4, b=8]
+input y: Tensor[a=4, b=8]
+input z: Tensor[a=4, b=8]
+graph g {
+    p = x + y
+    q = p * z
+    return q
+}

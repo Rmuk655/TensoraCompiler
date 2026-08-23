@@ -3,7 +3,7 @@
 C++ has no single `requirements.txt` equivalent, because a C++
 project's dependencies do not come from one ecosystem. Tensora's
 dependencies come from four different places, so this page lists all
-four, and `tools/check-deps.sh` checks a machine against this list.
+four, and [`tools/check-deps.sh`](../../tools/check-deps.sh) checks a machine against this list.
 Run it any time to see what is present and what is missing, with the
 exact command to fix each gap:
 
@@ -14,7 +14,7 @@ exact command to fix each gap:
 ## 1. OS packages (required)
 
 Installed with `apt` on the canonical platform (WSL2 + Ubuntu, or
-native Linux; docs/development/07_DEVELOPMENT_ENVIRONMENT.md §7.0):
+native Linux; [docs/development/07_DEVELOPMENT_ENVIRONMENT.md](07_DEVELOPMENT_ENVIRONMENT.md) §7.0):
 
 | Package           | Why                                               | Pinned version                          |
 | ----------------- | ------------------------------------------------- | --------------------------------------- |
@@ -25,7 +25,7 @@ native Linux; docs/development/07_DEVELOPMENT_ENVIRONMENT.md §7.0):
 ## 2. LLVM/MLIR (required, version-pinned)
 
 **Pinned: 21.1.8**, installed via apt packages, not built from source
-(INTEG-003 in `docs/development/INTEG_DECISIONS.md`; §7.3 has the full
+(INTEG-003 in [`docs/development/INTEG_DECISIONS.md`](INTEG_DECISIONS.md); [§7.3](07_DEVELOPMENT_ENVIRONMENT.md#73-compiler-infrastructure) has the full
 rationale and reproducibility record):
 
 ```bash
@@ -52,7 +52,7 @@ in two:
 
 - **Preparation** (`tools/models/prepare_*.py`, run once): trains the
   models and produces the trusted PyTorch reference. Needs the packages
-  in `tools/models/requirements.txt` (`torch`, `torchvision`, `numpy`,
+  in [`tools/models/requirements.txt`](../../tools/models/requirements.txt) (`torch`, `torchvision`, `numpy`,
   `pandas`, `matplotlib`). Install them in a **project-local virtual
   environment**, not the system Python: modern Debian/Ubuntu block
   `pip install` against the system Python (PEP 668,
@@ -68,16 +68,35 @@ in two:
   ```
 - **Running** (`demos/*_demo.sh`): needs only `numpy` (to compare
   Tensora's output against the saved reference) -- no `torch`, and the
-  venv need not be active.
+  venv need not be active. The `make viz` demo additionally needs
+  Graphviz for the `dot` renderer, an OS package: `sudo apt install
+  graphviz`.
 
-None of this is checked by `tools/check-deps.sh`, since the compiler and
-its own test suite never need it.
+[`tools/check-deps.sh`](../../tools/check-deps.sh) does *report* these
+optional demo dependencies (Graphviz, the LLVM/MLIR CLI tools,
+Python/venv) as advisory `[opt]` lines, but they never affect its exit
+code -- the compiler and its own test suite never need them.
 
-## What `tools/check-deps.sh` actually checks
+## check-deps.sh vs setup-dev.sh
 
-Exits non-zero if any of these is missing: `cmake`, a C++20-capable
-`g++`, `java`, `llvm-config-21`, the MLIR 21 CMake package,
-`libmlir_c_runner_utils.so`.
+Two scripts, one primitive and one workflow -- not a duplication:
 
-`tools/setup-dev.sh` runs the same check and then prints the build/test
-commands to run next.
+- [`tools/check-deps.sh`](../../tools/check-deps.sh) is the **diagnostic**.
+  It only *reports* (present, missing, and the exact fix command) and
+  installs nothing, so it is safe to run repeatedly and in CI. It exits
+  non-zero if any *required build* dependency is missing (`cmake`, a
+  C++20-capable `g++`, `java`, `llvm-config-21`, the MLIR 21 CMake
+  package, `libmlir_c_runner_utils.so`); the optional `[opt]` lines above
+  never gate that exit code.
+- [`tools/setup-dev.sh`](../../tools/setup-dev.sh) is the **workflow** on
+  top of it. It runs `check-deps.sh`, and when the required deps are
+  present prints the build/test commands to run next; with `--demos` it
+  also creates `.venv/` and installs the Python demo deps into it. It
+  deliberately does **not** `sudo apt install` the system/LLVM packages --
+  installing OS packages on a machine it does not own is the user's call,
+  so those it only reports (via `check-deps.sh`). This is why the check is
+  a separate script: one source of truth for "what is needed", called both
+  standalone and by the bootstrap.
+
+Run `check-deps.sh` any time to audit a machine; run `setup-dev.sh` once
+after cloning.

@@ -13,11 +13,17 @@ from what was built and tested.
 tensora/examples/attention.tns
 tensora/examples/attn_text_classifier.tns
 tensora/examples/cnn.tns
-tensora/examples/cnn_cifar.tns
+tensora/examples/cnn_stl10.tns
 tensora/examples/matmul_large.tns
 tensora/examples/mlp.tns
 tensora/examples/mlp_concrete.tns
 tensora/examples/mlp_placement.tns
+tensora/examples/optimizations/dead_code.tns
+tensora/examples/optimizations/elementwise_fusion.tns
+tensora/examples/optimizations/linear_bias_activation.tns
+tensora/examples/optimizations/reshape_cancel.tns
+tensora/examples/optimizations/shape_fold.tns
+tensora/examples/optimizations/transpose_cancel.tns
 tensora/grammar/Tensora.g4
 tensora/include/tensora/codegen/DialectSetup.h
 tensora/include/tensora/codegen/LoopTiling.h
@@ -66,9 +72,11 @@ tensora/src/shared/Ir.cpp
 tensora/src/shared/Type.cpp
 tensora/tools/benchmark_matmul_tiling.cpp
 tensora/tools/check-deps.sh
+tensora/tools/check_discovery.sh
+tensora/tools/check_test_matrix.sh
 tensora/tools/codegen_mlp_native.cpp
-tensora/tools/models/prepare_cifar_demo.py
 tensora/tools/models/prepare_mlp_demo.py
+tensora/tools/models/prepare_stl10_demo.py
 tensora/tools/models/prepare_text_attn_demo.py
 tensora/tools/models/requirements.txt
 tensora/tools/regen_appendix.py
@@ -5975,6 +5983,7 @@ void printUsage(const char* prog) {
             << "  --emit-graph-dot       semantic analysis: print the Typed Computation Graph as Graphviz DOT\n"
             << "  --explain              semantic analysis: like --emit-graph, annotated per RM section\n"
             << "  --emit-optimized-graph optimization: print the graph after the Level-1 passes\n"
+            << "  --emit-optimized-graph-dot  optimization: the post-optimization graph as Graphviz DOT\n"
             << "  --emit-mlir            lowering: print the MLIR module\n"
             << "  --emit-llvm            backend: print the translated LLVM IR\n"
             << "  --run                  full pipeline: JIT-execute with synthetic all-ones input data\n"
@@ -6096,6 +6105,14 @@ int main(int argc, char** argv) {
   if (stage == "--emit-optimized-graph") {
     runOptimizationPasses(program);
     for (const TypedGraph& g : program.graphs()) printTypedGraph(g, types, /*explainMode=*/false);
+    return 0;
+  }
+
+  // Same DOT view as --emit-graph-dot, but after the Level-1 passes, so
+  // a before/after render shows what optimization removed or fused.
+  if (stage == "--emit-optimized-graph-dot") {
+    runOptimizationPasses(program);
+    for (const TypedGraph& g : program.graphs()) std::cout << graphToDot(g, types);
     return 0;
   }
 
@@ -6690,21 +6707,23 @@ graph mlp {
 }
 ```
 
-### `examples/cnn_cifar.tns`
+### `examples/cnn_stl10.tns`
 ```text
-# CIFAR-100 image-classifier CNN (real-inference demo).
+# STL-10 image-classifier CNN (real-inference demo).
 #
-# A convolutional classifier for 96x96 RGB images over the 20 CIFAR-100
-# coarse "superclasses", trained once in PyTorch (images upscaled to
-# 96x96 so they are large and clearly viewable) by
-# tools/models/prepare_cifar_demo.py. The trained weights and several
-# real held-out test images are loaded at run time with `--data-dir`
-# (see docs/development/BUILD.md). The graph returns raw class logits;
-# the demo runner applies softmax for display and compares logits
-# against the PyTorch reference.
+# A convolutional classifier for 96x96 RGB images over the 10 STL-10
+# object classes (airplane, bird, car, cat, deer, dog, horse, monkey,
+# ship, truck), trained once in PyTorch by
+# tools/models/prepare_stl10_demo.py. STL-10 images are natively 96x96 --
+# no upscaling or interpolation -- so the displayed picture is genuinely
+# that resolution, not an enlarged 32x32 CIFAR image (see ARCH-017). The
+# trained weights and several real held-out test images are loaded at
+# run time with `--data-dir` (see docs/development/BUILD.md). The graph
+# returns raw class logits; the demo runner applies softmax for display
+# and compares logits against the PyTorch reference.
 #
 # Architecture: four [conv -> relu -> maxpool] blocks (96 -> 48 -> 24 ->
-# 12 -> 6 spatially) then flatten -> linear -> 20 class logits. Conv
+# 12 -> 6 spatially) then flatten -> linear -> 10 class logits. Conv
 # weights are [oc, ic, kh, kw] (matching PyTorch); the linear weight is
 # [flat, classes] (the transpose of PyTorch's [out, in]).
 #
@@ -6720,8 +6739,8 @@ weight convW3: Tensor[oc=64, ic=32, kh=3, kw=3]
 weight convB3: Tensor[oc=64]
 weight convW4: Tensor[oc=64, ic=64, kh=3, kw=3]
 weight convB4: Tensor[oc=64]
-weight fcW:    Tensor[flat=2304, classes=20]
-weight fcB:    Tensor[classes=20]
+weight fcW:    Tensor[flat=2304, classes=10]
+weight fcB:    Tensor[classes=10]
 
 graph cnn {
     c1     = conv2d(x, convW1, convB1, stride=1, padding=1)
@@ -6795,6 +6814,325 @@ graph attn {
     logits = linear(h, Wc2, bc2)
     return logits
 }
+```
+
+### `examples/optimizations/dead_code.tns`
+```text
+# DeadOpEliminationPass (OPT-DCE): `dead` never reaches the return, so the
+# Level-1 passes drop it. Visible with --emit-graph vs --emit-optimized-graph.
+input x: Tensor[batch=4, in=8]
+weight W: Tensor[in=8, out=4]
+weight b: Tensor[out=4]
+graph g {
+    live = linear(x, W, b)
+    dead = relu(x)
+    return live
+}
+```
+
+### `examples/optimizations/transpose_cancel.tns`
+```text
+# TransposeCancellationPass (OPT-TC): two inverse transposes cancel to the
+# original tensor; both are removed. Visible in the Typed Computation Graph.
+input x: Tensor[a=4, b=8]
+graph g {
+    t1 = transpose(x, perm=[1, 0])
+    t2 = transpose(t1, perm=[1, 0])
+    return t2
+}
+```
+
+### `examples/optimizations/reshape_cancel.tns`
+```text
+# ReshapeCancellationPass (OPT-RC): a reshape immediately undone by a reshape
+# back to the original shape; both are removed.
+input x: Tensor[a=4, b=8]
+graph g {
+    r1 = reshape(x, [c=8, d=4])
+    r2 = reshape(r1, [a=4, b=8])
+    return r2
+}
+```
+
+### `examples/optimizations/shape_fold.tns`
+```text
+# ShapeFoldingPass (OPT-SF): a reshape to the same shape is a no-op and is
+# folded away.
+input x: Tensor[a=4, b=8]
+graph g {
+    r = reshape(x, [a=4, b=8])
+    return r
+}
+```
+
+### `examples/optimizations/linear_bias_activation.tns`
+```text
+# LinearBiasActivationFusionPass (OPT-LBA): linear + bias + relu fuse. Visible
+# in --emit-mlir: one linalg.generic does the bias add and the relu together
+# (arith.addf then arith.maximumf) over the matmul result, not two passes.
+input x: Tensor[batch=4, in=8]
+weight W: Tensor[in=8, out=4]
+weight b: Tensor[out=4]
+graph g {
+    h = linear(x, W, b)
+    r = relu(h)
+    return r
+}
+```
+
+### `examples/optimizations/elementwise_fusion.tns`
+```text
+# ElementwiseFusionPass (OPT-EF): a chain of elementwise ops is marked as one
+# fusable group (a graph fact consumed at lowering). Verified by the OPT-EF
+# unit test in tests/optimization/test_passes.cpp.
+input x: Tensor[a=4, b=8]
+input y: Tensor[a=4, b=8]
+input z: Tensor[a=4, b=8]
+graph g {
+    p = x + y
+    q = p * z
+    return q
+}
+```
+
+### `cmake/Tests.cmake`
+```cmake
+# Tensora test + demo-target registration, included from the top-level
+# CMakeLists.txt. Kept separate so the top file stays focused on the
+# build (libraries, driver), and all test wiring lives in one place.
+# Included (not add_subdirectory'd) so targets still build into build/.
+
+# Tests run through CTest. tests/support/TestHarness.h is the shared,
+# no-framework harness (Reporter/Case registry). Every test binary uses it.
+enable_testing()
+
+# --- Test helpers ---------------------------------------------------------
+# One line per test target instead of the repeated add_executable +
+# target_include_directories + target_link_libraries boilerplate.
+
+# A plain unit test: links one phase library, sees the tests/ include dir.
+function(tensora_unit_test name src lib)
+  add_executable(${name} ${src})
+  target_link_libraries(${name} PRIVATE ${lib})
+  target_include_directories(${name} PRIVATE ${CMAKE_SOURCE_DIR}/tests)
+endfunction()
+
+# A codegen test: additionally needs the MLIR/LLVM headers/libs and the
+# c-runner-utils path (the -D is harmless for the few tests that ignore it).
+function(tensora_mlir_test name)
+  add_executable(${name} ${ARGN})  # one or more source files
+  target_include_directories(${name} SYSTEM PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
+  target_include_directories(${name} PRIVATE ${CMAKE_SOURCE_DIR}/tests)
+  target_link_libraries(${name} PRIVATE tensora_codegen MLIR MLIRExecutionEngineShared)
+  target_compile_definitions(${name} PRIVATE MLIR_C_RUNNER_UTILS_PATH="${MLIR_C_RUNNER_UTILS_LIB}")
+endfunction()
+
+# Register one CTest per CASE("<id>", ...) in a harness test's source, so
+# the case IDs live ONLY in the .cpp -- CMake no longer repeats them. The
+# INT-TESTMATRIX-SYNC check below keeps docs/testing/TEST_MATRIX.md in sync.
+# Extraction uses grep+sed (the project is Linux-only, INTEG-001) because
+# file(STRINGS ... REGEX) merges adjacent matched lines in its list form.
+function(tensora_discover_cases bin srcfile)
+  execute_process(
+    COMMAND bash -c "grep -oE '(CASE|TEST_CASE)\\([A-Za-z0-9_]+, *\"[^\"]+\"' '${srcfile}' | sed -E 's/.*\"([^\"]+)\"/\\1/'"
+    OUTPUT_VARIABLE ids OUTPUT_STRIP_TRAILING_WHITESPACE RESULT_VARIABLE rc)
+  if(NOT rc EQUAL 0)
+    message(FATAL_ERROR "tensora_discover_cases: failed to read cases from ${srcfile}")
+  endif()
+  string(REPLACE "\n" ";" ids "${ids}")
+  foreach(id IN LISTS ids)
+    if(id)
+      add_test(NAME ${id} COMMAND ${bin} ${id})
+    endif()
+  endforeach()
+endfunction()
+
+# Harness-based unit tests: build each, then discover its CASE(...) IDs from
+# the source so every case still gets its own CTest (ctest reports which
+# rule failed), with the ID list living only in the .cpp.
+tensora_unit_test(test_lexer    tests/lexer/test_lexer.cpp         tensora_lexer)
+tensora_discover_cases(test_lexer    ${CMAKE_SOURCE_DIR}/tests/lexer/test_lexer.cpp)
+
+tensora_unit_test(test_parser   tests/parser/test_parser.cpp       tensora_parser)
+tensora_discover_cases(test_parser   ${CMAKE_SOURCE_DIR}/tests/parser/test_parser.cpp)
+
+tensora_unit_test(test_semantic tests/semantic/test_semantic.cpp   tensora_semantic)
+tensora_discover_cases(test_semantic ${CMAKE_SOURCE_DIR}/tests/semantic/test_semantic.cpp)
+
+tensora_unit_test(test_graph    tests/semantic/test_graph.cpp      tensora_semantic)
+tensora_discover_cases(test_graph    ${CMAKE_SOURCE_DIR}/tests/semantic/test_graph.cpp)
+
+tensora_unit_test(test_passes   tests/optimization/test_passes.cpp tensora_optimization)
+tensora_discover_cases(test_passes   ${CMAKE_SOURCE_DIR}/tests/optimization/test_passes.cpp)
+
+# SMOKE-MLIR (TEST_PLAN §2b): minimal MLIR/LLVM link+JIT check, before any
+# codegen is built on it -- so it deliberately does NOT link tensora_codegen
+# (kept explicit rather than via the helper for that reason).
+add_executable(smoke_mlir tests/smoke/smoke_mlir.cpp)
+target_include_directories(smoke_mlir SYSTEM PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
+target_link_libraries(smoke_mlir PRIVATE MLIR MLIRExecutionEngineShared)
+add_test(NAME SMOKE-MLIR COMMAND smoke_mlir)
+
+# LOOP-001: TilingDecision is plain C++ (no MLIR headers); discover its cases.
+tensora_unit_test(test_tiling_decision tests/codegen/test_tiling_decision.cpp tensora_codegen)
+tensora_discover_cases(test_tiling_decision ${CMAKE_SOURCE_DIR}/tests/codegen/test_tiling_decision.cpp)
+
+# Codegen e2e tests: one binary, one CASE per check (each check's numeric
+# JIT logic is a run_*() in its own translation unit; test_codegen_e2e.cpp
+# registers them as CASEs). Discovered like every other harness test, so
+# each still runs as its own isolated CTest (`test_codegen_e2e <ID>`):
+# LOW-E2E-MLP, LOOP-002, LOOP-005, LOW-NEWOPS, RANK-E2E, E2E-002/003/004.
+tensora_mlir_test(test_codegen_e2e
+  tests/codegen/test_codegen_e2e.cpp
+  tests/codegen/test_mlp_e2e.cpp
+  tests/codegen/test_tiling_e2e.cpp
+  tests/codegen/test_liveness_tiling_e2e.cpp
+  tests/codegen/test_new_ops_e2e.cpp
+  tests/codegen/test_rank_e2e.cpp
+  tests/codegen/test_cnn_e2e.cpp
+  tests/codegen/test_attention_e2e.cpp
+  tests/codegen/test_ffn_e2e.cpp)
+tensora_discover_cases(test_codegen_e2e ${CMAKE_SOURCE_DIR}/tests/codegen/test_codegen_e2e.cpp)
+
+# Tools (built, not CTest cases): the AOT object emitter (links LLVM, not
+# the JIT engine -- kept explicit) and the tiling benchmark.
+add_executable(codegen_mlp_native tools/codegen_mlp_native.cpp)
+target_include_directories(codegen_mlp_native SYSTEM PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
+target_link_libraries(codegen_mlp_native PRIVATE tensora_codegen MLIR LLVM)
+tensora_mlir_test(benchmark_matmul_tiling tools/benchmark_matmul_tiling.cpp)
+
+# NATIVE-001: the same MLP TypedGraph emitted as a real object file via
+# LLVM's TargetMachine (no JIT), then linked with a small C driver by the
+# system toolchain into a standalone executable CTest runs directly.
+set(MLP_NATIVE_OBJ ${CMAKE_CURRENT_BINARY_DIR}/mlp_native.o)
+add_custom_command(
+  OUTPUT ${MLP_NATIVE_OBJ}
+  COMMAND codegen_mlp_native ${MLP_NATIVE_OBJ}
+  DEPENDS codegen_mlp_native
+  COMMENT "Emitting native object code for the MLP workload via Tensora's MLIR/LLVM backend")
+add_custom_target(mlp_native_object DEPENDS ${MLP_NATIVE_OBJ})
+add_executable(test_mlp_native tests/codegen/mlp_native_driver.c ${MLP_NATIVE_OBJ})
+set_source_files_properties(${MLP_NATIVE_OBJ} PROPERTIES EXTERNAL_OBJECT TRUE GENERATED TRUE)
+add_dependencies(test_mlp_native mlp_native_object)
+target_link_libraries(test_mlp_native PRIVATE m)
+add_test(NAME NATIVE-001 COMMAND test_mlp_native)
+
+# INT-* CLI integration tests are data-driven: tests/cli/cli_tests.txt is a
+# table of `<name> | <expect> | <args>`, read here and registered by one
+# generic loop. Adding a CLI test is a one-line edit in that file, not new
+# CMake. These exercise the real `tensora` driver end to end (source ->
+# JIT), distinct from the C++ e2e tests that build the graph by hand. The
+# passes'/operators' own correctness stays in the C++ unit tests -- no
+# overlap. (Re-run `cmake` after editing the table, as `make`/`ctest` do.)
+file(STRINGS ${CMAKE_SOURCE_DIR}/tests/cli/cli_tests.txt CLI_TEST_LINES)
+foreach(line ${CLI_TEST_LINES})
+  string(STRIP "${line}" line)
+  if(line STREQUAL "" OR line MATCHES "^#")
+    continue()
+  endif()
+  string(REPLACE "|" ";" fields "${line}")
+  list(GET fields 0 t_name)
+  list(GET fields 1 t_expect)
+  list(GET fields 2 t_args)
+  string(STRIP "${t_name}" t_name)
+  string(STRIP "${t_expect}" t_expect)
+  string(STRIP "${t_args}" t_args)
+  string(REPLACE "@SRC@" "${CMAKE_SOURCE_DIR}" t_args "${t_args}")
+  separate_arguments(t_argv UNIX_COMMAND "${t_args}")
+  add_test(NAME ${t_name} COMMAND tensora ${t_argv})
+  if(t_expect STREQUAL "FAIL")
+    set_tests_properties(${t_name} PROPERTIES WILL_FAIL TRUE)
+  elseif(t_expect MATCHES "^PASS=(.+)$")
+    set_tests_properties(${t_name} PROPERTIES PASS_REGULAR_EXPRESSION "${CMAKE_MATCH_1}")
+  endif()
+endforeach()
+
+# INT-IR-*-STD: prove Tensora emits STANDARD MLIR/LLVM IR that the upstream
+# tools accept on their own -- independent of Tensora's runtime, and a
+# different IR world than PyTorch's. Gated on the tools being present so the
+# suite stays green where they are not installed. These validate the IR (no
+# execution): full upstream lowering/execution pipelines are version-
+# sensitive and live in the independent-run demo, not the gated suite.
+find_program(TENSORA_MLIR_OPT mlir-opt PATHS /usr/lib/llvm-21/bin)
+find_program(TENSORA_LLVM_AS llvm-as PATHS /usr/lib/llvm-21/bin)
+if(TENSORA_MLIR_OPT)
+  add_test(NAME INT-IR-MLIR-STD COMMAND bash -c
+    "$<TARGET_FILE:tensora> --emit-mlir ${CMAKE_SOURCE_DIR}/examples/mlp_concrete.tns | ${TENSORA_MLIR_OPT} -o /dev/null")
+endif()
+if(TENSORA_LLVM_AS)
+  add_test(NAME INT-IR-LLVM-STD COMMAND bash -c
+    "$<TARGET_FILE:tensora> --emit-llvm ${CMAKE_SOURCE_DIR}/examples/mlp_concrete.tns | ${TENSORA_LLVM_AS} -o /dev/null")
+endif()
+
+# INT-TESTMATRIX-SYNC: the drift guard. Every CASE("<id>",...) in the test
+# sources must be documented in docs/testing/TEST_MATRIX.md, so the matrix
+# cannot silently fall out of step with the actual suite. The case IDs live
+# only in the .cpp (CMake discovers them; the matrix documents them).
+add_test(NAME INT-TESTMATRIX-SYNC COMMAND bash ${CMAKE_SOURCE_DIR}/tools/check_test_matrix.sh)
+
+# INT-DISCOVERY-SYNC: assert CMake's grep-based case discovery
+# (tensora_discover_cases) exactly matches each test binary's own
+# authoritative `--list` (the registry). So the tests themselves are the
+# single source of truth and a silent grep miss fails loudly.
+add_test(NAME INT-DISCOVERY-SYNC COMMAND bash ${CMAKE_SOURCE_DIR}/tools/check_discovery.sh
+         $<TARGET_FILE_DIR:test_lexer>)
+
+# Category labels for `ctest -L <category>` filtering. These come from
+# the same ID-prefix rule the C++ harness uses
+# (tests/support/TestHarness.h categoryOf). This block sets the label
+# once here, for every test already registered above, instead of
+# repeating it per test.
+get_property(ALL_TEST_NAMES DIRECTORY PROPERTY TESTS)
+foreach(t ${ALL_TEST_NAMES})
+  if(t MATCHES "^BND-")
+    set(kind_label boundary)
+  elseif(t MATCHES "^SMOKE")
+    set(kind_label smoke)
+  elseif(t MATCHES "^INT-")
+    set(kind_label integration)
+  elseif(t MATCHES "^(E2E-|LOW-|NATIVE-|LOOP-|LIVE-|RANK-)")
+    set(kind_label integration)
+  else()
+    set(kind_label unit)
+  endif()
+
+  # Compiler-phase label (`ctest -L <phase>`), so a phase can be tested
+  # in isolation the same way it can be built in isolation (the
+  # `lexer`/`parser`/`semantic`/`optimization`/`codegen` CMake targets
+  # below). Boundary-case IDs (BND-LEX-*, BND-MM-*, etc.) carry the
+  # same phase prefix rule as the unit-test IDs they extend.
+  if(t MATCHES "^(LEX-|BND-LEX-)")
+    set(phase_label lexer)
+  elseif(t MATCHES "^(PAR-|BND-PAR-)")
+    set(phase_label parser)
+  elseif(t MATCHES "^(SEM-|SYM-|ATT-|GR-|BND-MM-|BND-BC-|BND-RS-|BND-FL-|BND-CV-|BND-RD-|BND-TR-|BND-DIM-)")
+    set(phase_label semantic)
+  elseif(t MATCHES "^(OPT-|LIVE-)")
+    set(phase_label optimization)
+  elseif(t MATCHES "^(SMOKE|LOW-|LOOP-|NATIVE-|RANK-|E2E-|INT-)")
+    set(phase_label codegen)
+  else()
+    set(phase_label unknown)
+  endif()
+
+  set_tests_properties(${t} PROPERTIES LABELS "${kind_label};${phase_label}")
+endforeach()
+
+# Named per-phase build targets (docs/development/BUILD.md "Build one
+# phase at a time"). Each just depends on the executables that phase
+# actually needs, so `cmake --build build --target lexer` (etc.)
+# builds only that slice of the DAG instead of everything -- useful
+# when submitting or demoing one phase at a time.
+add_custom_target(lexer DEPENDS test_lexer)
+add_custom_target(parser DEPENDS test_parser)
+add_custom_target(semantic DEPENDS test_semantic test_graph)
+add_custom_target(optimization DEPENDS test_passes)
+# Named "backend", not "codegen": CMake reserves the target name
+# "codegen" for its own CODEGEN custom-command feature (CMP0171).
+add_custom_target(backend DEPENDS
+  smoke_mlir test_tiling_decision test_codegen_e2e test_mlp_native
+  codegen_mlp_native benchmark_matmul_tiling tensora)
+add_custom_target(full DEPENDS lexer parser semantic optimization backend)
 ```
 
 ### `CMakeLists.txt`
@@ -7003,319 +7341,9 @@ target_include_directories(tensora SYSTEM PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_IN
 target_link_libraries(tensora PRIVATE tensora_codegen MLIR MLIRExecutionEngineShared)
 target_compile_definitions(tensora PRIVATE MLIR_C_RUNNER_UTILS_PATH="${MLIR_C_RUNNER_UTILS_LIB}")
 
-# Tests run through CTest. tests/support/TestHarness.h is the shared,
-# no-framework harness (Reporter/Case registry). Every test binary uses it.
-enable_testing()
-
-add_executable(test_lexer tests/lexer/test_lexer.cpp)
-target_link_libraries(test_lexer PRIVATE tensora_lexer)
-target_include_directories(test_lexer PRIVATE ${CMAKE_SOURCE_DIR}/tests)
-
-add_executable(test_parser tests/parser/test_parser.cpp)
-target_link_libraries(test_parser PRIVATE tensora_parser)
-target_include_directories(test_parser PRIVATE ${CMAKE_SOURCE_DIR}/tests)
-
-add_executable(test_semantic tests/semantic/test_semantic.cpp)
-target_link_libraries(test_semantic PRIVATE tensora_semantic)
-target_include_directories(test_semantic PRIVATE ${CMAKE_SOURCE_DIR}/tests)
-
-add_executable(test_graph tests/semantic/test_graph.cpp)
-target_link_libraries(test_graph PRIVATE tensora_semantic)
-target_include_directories(test_graph PRIVATE ${CMAKE_SOURCE_DIR}/tests)
-
-add_executable(test_passes tests/optimization/test_passes.cpp)
-target_link_libraries(test_passes PRIVATE tensora_optimization)
-target_include_directories(test_passes PRIVATE ${CMAKE_SOURCE_DIR}/tests)
-
-# Each case ID gets its own CTest test (test_lexer/test_parser <ID>
-# runs just that case). So `ctest` reports which rule failed, instead
-# of one pass/fail result for everything. These IDs match
-# docs/testing/TEST_MATRIX.md. Keep the two lists in sync.
-set(LEXER_TEST_CASES
-  LEX-001 LEX-002 LEX-003 LEX-004 LEX-005 LEX-006 LEX-007 LEX-008
-  LEX-009 LEX-010 LEX-011
-  BND-LEX-001 BND-LEX-002 BND-LEX-003 BND-LEX-004)
-foreach(case_id ${LEXER_TEST_CASES})
-  add_test(NAME ${case_id} COMMAND test_lexer ${case_id})
-endforeach()
-
-set(PARSER_TEST_CASES
-  PAR-001 PAR-002 PAR-003 PAR-004 PAR-005 PAR-006 PAR-007 PAR-008 PAR-009
-  PAR-010 PAR-011 PAR-012 PAR-013 PAR-014 PAR-015 PAR-016 PAR-017 PAR-018
-  PAR-019 PAR-020 PAR-021 PAR-022 PAR-023 PAR-024 PAR-025 PAR-026 PAR-027
-  PAR-028 PAR-029 PAR-030 PAR-031 PAR-032
-  BND-PAR-001 BND-PAR-002 BND-PAR-003 BND-PAR-004)
-foreach(case_id ${PARSER_TEST_CASES})
-  add_test(NAME ${case_id} COMMAND test_parser ${case_id})
-endforeach()
-
-set(SEMANTIC_TEST_CASES
-  SEM-DECL-001 SEM-DECL-002 SEM-DECL-003 SEM-DECL-004 SEM-DECL-005 SEM-NAME-001 SEM-NAME-002 SEM-NAME-003
-  SEM-SCOPE-001 SEM-SCOPE-002 SEM-TYPE-001
-  SEM-ARITY-001 SEM-ARITY-002 SEM-ARITY-003 SEM-ARITY-004 SEM-ARITY-005
-  SEM-POISON-001 SEM-POISON-002
-  SEM-MM-001 SEM-MM-002 SEM-MM-003 SEM-MM-004
-  SEM-LIN-001 SEM-LIN-002 SEM-LIN-003
-  SEM-EW-001 SEM-EW-002 SEM-EW-003 SEM-EW-004 SEM-EW-005
-  SEM-RS-001 SEM-RS-002 SEM-RS-003 SEM-RS-004
-  SEM-FL-001 SEM-FL-002
-  SEM-TR-001 SEM-TR-002 SEM-TR-003
-  SEM-RD-001 SEM-RD-002
-  SEM-SM-001 SEM-SM-002
-  SEM-CV-001 SEM-CV-002 SEM-CV-003 SEM-CV-004 SEM-CV-005
-  SEM-PL-001 SEM-PL-002
-  SEM-DIM-001 SEM-DIM-002 SEM-DIM-003
-  SYM-001 SYM-002 SYM-003 SYM-004 SYM-005 SYM-006 SYM-007 SYM-008
-  ATT-001 ATT-002
-  BND-MM-001 BND-MM-002 BND-BC-001 BND-RS-001 BND-FL-001
-  BND-CV-001 BND-CV-002 BND-RD-001 BND-TR-001 BND-DIM-001)
-foreach(case_id ${SEMANTIC_TEST_CASES})
-  add_test(NAME ${case_id} COMMAND test_semantic ${case_id})
-endforeach()
-
-set(GRAPH_TEST_CASES GR-001 GR-002 GR-003 GR-004 GR-005 GR-006 GR-007)
-foreach(case_id ${GRAPH_TEST_CASES})
-  add_test(NAME ${case_id} COMMAND test_graph ${case_id})
-endforeach()
-
-set(PASSES_TEST_CASES
-  OPT-SF-001 OPT-SF-002 OPT-DCE-001 OPT-DCE-002 OPT-DCE-003
-  OPT-RC-001 OPT-RC-002 OPT-RC-003 OPT-TC-001 OPT-TC-002 OPT-TC-003
-  OPT-EF-001 OPT-EF-002 OPT-LBA-001 OPT-LBA-002 OPT-FIX-001 OPT-FIX-002
-  LIVE-001 LIVE-002 LIVE-003 LIVE-004)
-# (LOW-E2E-MLP is registered separately below, next to its executable.)
-foreach(case_id ${PASSES_TEST_CASES})
-  add_test(NAME ${case_id} COMMAND test_passes ${case_id})
-endforeach()
-
-# SMOKE-MLIR (TEST_PLAN §2b): checks the MLIR/LLVM link+JIT path works,
-# before any real lowering code is built on it. This is not a CTest
-# case. It has no checks beyond "did it crash." Run it directly.
-add_executable(smoke_mlir tests/smoke/smoke_mlir.cpp)
-target_include_directories(smoke_mlir SYSTEM PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
-target_link_libraries(smoke_mlir PRIVATE MLIR MLIRExecutionEngineShared)
-add_test(NAME SMOKE-MLIR COMMAND smoke_mlir)
-
-# LOW-E2E-MLP: checks that MlirLowerer's matmul/linear/relu lowering
-# gives the right numbers, through real JIT execution (not just a
-# golden-MLIR-text check).
-add_executable(test_mlp_e2e tests/codegen/test_mlp_e2e.cpp)
-target_include_directories(test_mlp_e2e SYSTEM PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
-target_link_libraries(test_mlp_e2e PRIVATE tensora_codegen MLIR MLIRExecutionEngineShared)
-add_test(NAME LOW-E2E-MLP COMMAND test_mlp_e2e)
-
-# LOOP-001: TilingDecision is plain C++. It needs no MLIR headers here.
-add_executable(test_tiling_decision tests/codegen/test_tiling_decision.cpp)
-target_link_libraries(test_tiling_decision PRIVATE tensora_codegen)
-target_include_directories(test_tiling_decision PRIVATE ${CMAKE_SOURCE_DIR}/tests)
-foreach(case_id LOOP-001-A LOOP-001-B LOOP-001-C LOOP-001-D LOOP-001-E LOOP-001-F)
-  add_test(NAME ${case_id} COMMAND test_tiling_decision ${case_id})
-endforeach()
-
-# LOOP-002/003/004: the project-authored MLIR tiling pass. Checks its
-# structure, checks that its numbers match the untiled version, and
-# reports timing.
-add_executable(test_tiling_e2e tests/codegen/test_tiling_e2e.cpp)
-target_include_directories(test_tiling_e2e SYSTEM PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
-target_link_libraries(test_tiling_e2e PRIVATE tensora_codegen MLIR MLIRExecutionEngineShared)
-target_compile_definitions(test_tiling_e2e PRIVATE MLIR_C_RUNNER_UTILS_PATH="${MLIR_C_RUNNER_UTILS_LIB}")
-add_test(NAME LOOP-002 COMMAND test_tiling_e2e)
-
-# LOOP-005: proves MlirLowerer's own internal LivenessAnalysis call
-# (not a hand-built LivenessResult) drives TilingDecision's memory-
-# pressure branch for real, through the real lowering path.
-add_executable(test_liveness_tiling_e2e tests/codegen/test_liveness_tiling_e2e.cpp)
-target_include_directories(test_liveness_tiling_e2e SYSTEM PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
-target_link_libraries(test_liveness_tiling_e2e PRIVATE tensora_codegen MLIR MLIRExecutionEngineShared)
-add_test(NAME LOOP-005 COMMAND test_liveness_tiling_e2e)
-
-# NATIVE-001: a real ahead-of-time-compiled executable. codegen_mlp_native
-# lowers the same MLP TypedGraph as LOW-E2E-MLP, all the way to a real
-# object file, through LLVM's TargetMachine (no JIT or ExecutionEngine
-# involved). A small C driver, with no other dependency, is then built
-# and linked against that object file by the system toolchain. This
-# makes a standalone executable that CTest runs directly.
-add_executable(codegen_mlp_native tools/codegen_mlp_native.cpp)
-target_include_directories(codegen_mlp_native SYSTEM PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
-target_link_libraries(codegen_mlp_native PRIVATE tensora_codegen MLIR LLVM)
-
-# Reporting tool, not a CTest case: measures real wall-clock time for a
-# few candidate matmul tile sizes so the tiling policy's defaults are an
-# evidence-based choice, not an assumed one.
-add_executable(benchmark_matmul_tiling tools/benchmark_matmul_tiling.cpp)
-target_include_directories(benchmark_matmul_tiling SYSTEM PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
-target_link_libraries(benchmark_matmul_tiling PRIVATE tensora_codegen MLIR MLIRExecutionEngineShared)
-target_compile_definitions(benchmark_matmul_tiling PRIVATE MLIR_C_RUNNER_UTILS_PATH="${MLIR_C_RUNNER_UTILS_LIB}")
-
-set(MLP_NATIVE_OBJ ${CMAKE_CURRENT_BINARY_DIR}/mlp_native.o)
-add_custom_command(
-  OUTPUT ${MLP_NATIVE_OBJ}
-  COMMAND codegen_mlp_native ${MLP_NATIVE_OBJ}
-  DEPENDS codegen_mlp_native
-  COMMENT "Emitting native object code for the MLP workload via Tensora's MLIR/LLVM backend")
-add_custom_target(mlp_native_object DEPENDS ${MLP_NATIVE_OBJ})
-
-add_executable(test_mlp_native tests/codegen/mlp_native_driver.c ${MLP_NATIVE_OBJ})
-set_source_files_properties(${MLP_NATIVE_OBJ} PROPERTIES EXTERNAL_OBJECT TRUE GENERATED TRUE)
-add_dependencies(test_mlp_native mlp_native_object)
-target_link_libraries(test_mlp_native PRIVATE m)
-add_test(NAME NATIVE-001 COMMAND test_mlp_native)
-
-# LOW-006..009: transpose, flatten, softmax, and conv2d. Each op is
-# checked on its own through JIT execution, before the CNN and
-# attention end-to-end tests below combine them.
-add_executable(test_new_ops_e2e tests/codegen/test_new_ops_e2e.cpp)
-target_include_directories(test_new_ops_e2e SYSTEM PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
-target_link_libraries(test_new_ops_e2e PRIVATE tensora_codegen MLIR MLIRExecutionEngineShared)
-target_compile_definitions(test_new_ops_e2e PRIVATE MLIR_C_RUNNER_UTILS_PATH="${MLIR_C_RUNNER_UTILS_LIB}")
-add_test(NAME LOW-NEWOPS COMMAND test_new_ops_e2e)
-
-# RANK-001..004: checks the numbers for rank-1/rank>=3 `linear` and
-# rank>=2 (with broadcasting) `@` lowering. This closes a gap between
-# the language and the backend: semantic analysis accepted ranks that
-# MlirLowerer could not lower.
-add_executable(test_rank_e2e tests/codegen/test_rank_e2e.cpp)
-target_include_directories(test_rank_e2e SYSTEM PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
-target_link_libraries(test_rank_e2e PRIVATE tensora_codegen MLIR MLIRExecutionEngineShared)
-target_compile_definitions(test_rank_e2e PRIVATE MLIR_C_RUNNER_UTILS_PATH="${MLIR_C_RUNNER_UTILS_LIB}")
-add_test(NAME RANK-E2E COMMAND test_rank_e2e)
-
-# E2E-002: CNN classifier (conv2d->relu->flatten->linear->softmax).
-add_executable(test_cnn_e2e tests/codegen/test_cnn_e2e.cpp)
-target_include_directories(test_cnn_e2e SYSTEM PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
-target_link_libraries(test_cnn_e2e PRIVATE tensora_codegen MLIR MLIRExecutionEngineShared)
-target_compile_definitions(test_cnn_e2e PRIVATE MLIR_C_RUNNER_UTILS_PATH="${MLIR_C_RUNNER_UTILS_LIB}")
-add_test(NAME E2E-002 COMMAND test_cnn_e2e)
-
-# E2E-004: single-head scaled dot-product attention.
-add_executable(test_attention_e2e tests/codegen/test_attention_e2e.cpp)
-target_include_directories(test_attention_e2e SYSTEM PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
-target_link_libraries(test_attention_e2e PRIVATE tensora_codegen MLIR MLIRExecutionEngineShared)
-target_compile_definitions(test_attention_e2e PRIVATE MLIR_C_RUNNER_UTILS_PATH="${MLIR_C_RUNNER_UTILS_LIB}")
-add_test(NAME E2E-004 COMMAND test_attention_e2e)
-
-# E2E-003: Transformer FFN sublayer (linear->relu->linear at FFN
-# shapes). Reuses lowering already proven above. It adds no new ops.
-add_executable(test_ffn_e2e tests/codegen/test_ffn_e2e.cpp)
-target_include_directories(test_ffn_e2e SYSTEM PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
-target_link_libraries(test_ffn_e2e PRIVATE tensora_codegen MLIR MLIRExecutionEngineShared)
-add_test(NAME E2E-003 COMMAND test_ffn_e2e)
-
-# INT-FULL-*: the real `tensora` CLI driver, run from source text all
-# the way to JIT execution, against examples/*.tns. This differs from
-# every e2e test above, which builds its TypedGraph by hand in C++.
-# Expected values are checked by hand (see each .tns file's header
-# comment) against all-ones synthetic input data, which --run always
-# uses (Tensora source declares shapes, not values).
-# INT-FULL-SYMBOLS: proof, with a golden output, that --emit-symbols
-# prints SemanticAnalyzer's real symbol table (RM 3.6) for a real
-# program: global input/weight declarations, graph-local bindings
-# (including h's shadowing, which collapses to one entry), and the
-# resolution log. The output is the same every run.
-add_test(NAME INT-FULL-SYMBOLS COMMAND tensora --emit-symbols ${CMAKE_SOURCE_DIR}/examples/mlp.tns)
-set_tests_properties(INT-FULL-SYMBOLS PROPERTIES PASS_REGULAR_EXPRESSION
-  "x  input  Tensor\\[batch=B, feat=784\\]")
-
-add_test(NAME INT-FULL-MLP-CHECK COMMAND tensora --check ${CMAKE_SOURCE_DIR}/examples/mlp_concrete.tns)
-add_test(NAME INT-FULL-MLP-RUN COMMAND tensora --run ${CMAKE_SOURCE_DIR}/examples/mlp_concrete.tns)
-set_tests_properties(INT-FULL-MLP-RUN PROPERTIES PASS_REGULAR_EXPRESSION "element\\[0\\] = 145")
-
-add_test(NAME INT-FULL-MM-RUN COMMAND tensora --run ${CMAKE_SOURCE_DIR}/examples/matmul_large.tns)
-set_tests_properties(INT-FULL-MM-RUN PROPERTIES PASS_REGULAR_EXPRESSION "element\\[0\\] = 256")
-
-add_test(NAME INT-FULL-CNN-RUN COMMAND tensora --run ${CMAKE_SOURCE_DIR}/examples/cnn.tns)
-set_tests_properties(INT-FULL-CNN-RUN PROPERTIES PASS_REGULAR_EXPRESSION "element\\[0\\] = 0.5")
-
-add_test(NAME INT-FULL-ATTN-RUN COMMAND tensora --run ${CMAKE_SOURCE_DIR}/examples/attention.tns)
-set_tests_properties(INT-FULL-ATTN-RUN PROPERTIES PASS_REGULAR_EXPRESSION "element\\[0\\] = 1")
-
-# This is a deliberate negative case. mlp.tns has a symbolic batch dim.
-# --run must reject it with the documented limitation message. It must
-# not crash, and it must not silently give a wrong answer.
-add_test(NAME INT-FULL-SYMBOLIC-REJECT COMMAND tensora --run ${CMAKE_SOURCE_DIR}/examples/mlp.tns)
-set_tests_properties(INT-FULL-SYMBOLIC-REJECT PROPERTIES WILL_FAIL TRUE)
-
-# INT-DATALOAD-*: --data-dir real-data loading (ARCH-015). The
-# equivalence case is the core check: feeding all-ones .npy files
-# (tests/driver/mlp_ones/) must reproduce the exact result the built-in
-# all-ones default gives for the same graph (element[0] = 145, same as
-# INT-FULL-MLP-RUN) -- proof the loader is transparent. The three
-# negative cases confirm each diagnostic rejects bad input (nonzero
-# exit) instead of running with wrong or missing data.
-add_test(NAME INT-DATALOAD-EQUIV COMMAND tensora --run ${CMAKE_SOURCE_DIR}/examples/mlp_concrete.tns
-         --data-dir ${CMAKE_SOURCE_DIR}/tests/driver/mlp_ones)
-set_tests_properties(INT-DATALOAD-EQUIV PROPERTIES PASS_REGULAR_EXPRESSION "element\\[0\\] = 145")
-
-add_test(NAME INT-DATALOAD-MISSING COMMAND tensora --run ${CMAKE_SOURCE_DIR}/examples/mlp_concrete.tns
-         --data-dir ${CMAKE_SOURCE_DIR}/tests/driver/does_not_exist)
-set_tests_properties(INT-DATALOAD-MISSING PROPERTIES WILL_FAIL TRUE)
-
-add_test(NAME INT-DATALOAD-BADSHAPE COMMAND tensora --run ${CMAKE_SOURCE_DIR}/examples/mlp_concrete.tns
-         --data-dir ${CMAKE_SOURCE_DIR}/tests/driver/mlp_badshape)
-set_tests_properties(INT-DATALOAD-BADSHAPE PROPERTIES WILL_FAIL TRUE)
-
-add_test(NAME INT-DATALOAD-BADDTYPE COMMAND tensora --run ${CMAKE_SOURCE_DIR}/examples/mlp_concrete.tns
-         --data-dir ${CMAKE_SOURCE_DIR}/tests/driver/mlp_baddtype)
-set_tests_properties(INT-DATALOAD-BADDTYPE PROPERTIES WILL_FAIL TRUE)
-
-# Category labels for `ctest -L <category>` filtering. These come from
-# the same ID-prefix rule the C++ harness uses
-# (tests/support/TestHarness.h categoryOf). This block sets the label
-# once here, for every test already registered above, instead of
-# repeating it per test.
-get_property(ALL_TEST_NAMES DIRECTORY PROPERTY TESTS)
-foreach(t ${ALL_TEST_NAMES})
-  if(t MATCHES "^BND-")
-    set(kind_label boundary)
-  elseif(t MATCHES "^SMOKE")
-    set(kind_label smoke)
-  elseif(t MATCHES "^INT-")
-    set(kind_label integration)
-  elseif(t MATCHES "^(E2E-|LOW-|NATIVE-|LOOP-|LIVE-|RANK-)")
-    set(kind_label integration)
-  else()
-    set(kind_label unit)
-  endif()
-
-  # Compiler-phase label (`ctest -L <phase>`), so a phase can be tested
-  # in isolation the same way it can be built in isolation (the
-  # `lexer`/`parser`/`semantic`/`optimization`/`codegen` CMake targets
-  # below). Boundary-case IDs (BND-LEX-*, BND-MM-*, etc.) carry the
-  # same phase prefix rule as the unit-test IDs they extend.
-  if(t MATCHES "^(LEX-|BND-LEX-)")
-    set(phase_label lexer)
-  elseif(t MATCHES "^(PAR-|BND-PAR-)")
-    set(phase_label parser)
-  elseif(t MATCHES "^(SEM-|SYM-|ATT-|GR-|BND-MM-|BND-BC-|BND-RS-|BND-FL-|BND-CV-|BND-RD-|BND-TR-|BND-DIM-)")
-    set(phase_label semantic)
-  elseif(t MATCHES "^(OPT-|LIVE-)")
-    set(phase_label optimization)
-  elseif(t MATCHES "^(SMOKE|LOW-|LOOP-|NATIVE-|RANK-|E2E-|INT-)")
-    set(phase_label codegen)
-  else()
-    set(phase_label unknown)
-  endif()
-
-  set_tests_properties(${t} PROPERTIES LABELS "${kind_label};${phase_label}")
-endforeach()
-
-# Named per-phase build targets (docs/development/BUILD.md "Build one
-# phase at a time"). Each just depends on the executables that phase
-# actually needs, so `cmake --build build --target lexer` (etc.)
-# builds only that slice of the DAG instead of everything -- useful
-# when submitting or demoing one phase at a time.
-add_custom_target(lexer DEPENDS test_lexer)
-add_custom_target(parser DEPENDS test_parser)
-add_custom_target(semantic DEPENDS test_semantic test_graph)
-add_custom_target(optimization DEPENDS test_passes)
-# Named "backend", not "codegen": CMake reserves the target name
-# "codegen" for its own CODEGEN custom-command feature (CMP0171).
-add_custom_target(backend DEPENDS
-  smoke_mlir test_mlp_e2e test_tiling_decision test_tiling_e2e
-  test_liveness_tiling_e2e test_new_ops_e2e test_rank_e2e test_cnn_e2e
-  test_attention_e2e test_ffn_e2e test_mlp_native codegen_mlp_native
-  benchmark_matmul_tiling tensora)
-add_custom_target(full DEPENDS lexer parser semantic optimization backend)
+# All test targets, CTest registration, and per-phase build aliases live in
+# one place (see the file for the helpers and the data-driven registration).
+include(${CMAKE_SOURCE_DIR}/cmake/Tests.cmake)
 ```
 
 ### `tools/setup-dev.sh`
@@ -7359,8 +7387,12 @@ fi
 echo
 echo "All required dependencies are present. Next steps:"
 echo "  cmake -S . -B build"
-echo "  cmake --build build -j4"
+echo "  cmake --build build -j \"\$(nproc)\""
 echo "  ctest --test-dir build --output-on-failure"
+echo
+echo "Tip: 'cmake --build' is serial unless you pass -j every time. Add this"
+echo "to ~/.bashrc to make every future build parallel by default:"
+echo "  export CMAKE_BUILD_PARALLEL_LEVEL=\"\$(nproc)\""
 
 if [ "$WITH_DEMOS" -eq 0 ]; then
   echo
@@ -7389,7 +7421,7 @@ fi
 echo
 echo "Demo dependencies installed in .venv/. To use the demos:"
 echo "  source .venv/bin/activate      # then 'which python' -> .venv/bin/python"
-echo "  python tools/models/prepare_mlp_demo.py        # (and prepare_cifar_demo.py, prepare_text_attn_demo.py)"
+echo "  python tools/models/prepare_mlp_demo.py        # (and prepare_stl10_demo.py, prepare_text_attn_demo.py)"
 echo "  make demo-mlp-placement        # demo-cnn-image-classifier, demo-attn-text-classifier"
 echo "  deactivate                     # when finished"
 ```
@@ -7404,6 +7436,10 @@ echo "  deactivate                     # when finished"
 # script is the check, not the installer: it reports what is present,
 # what is missing, and the exact command to fix each gap, rather than
 # blindly running `sudo apt install` on a machine it does not control.
+# It also reports the optional demo/visualization dependencies (Graphviz
+# for `make viz`, the upstream LLVM/MLIR CLI tools for `make
+# demo-independent`, Python/venv for the real-world demos); those never
+# gate the exit code, since they are not needed to build or test.
 # See docs/development/DEPENDENCIES.md for the full pinned-version
 # reference this script checks against.
 #
@@ -7415,9 +7451,18 @@ cd "$(dirname "$0")/.."
 
 ok=0
 missing=0
+opt_missing=0
 
 pass() { printf '  [ok]      %s\n' "$1"; ok=$((ok + 1)); }
 fail() { printf '  [MISSING] %s\n' "$1"; missing=$((missing + 1)); }
+# Optional (demo/visualization) deps: report but do NOT gate the exit
+# code -- they are not needed to build or test the compiler.
+note() { printf '  [opt]     %s\n' "$1"; opt_missing=$((opt_missing + 1)); }
+
+# The LLVM/MLIR CLI tools ship in /usr/lib/llvm-21/bin, which the demos
+# add to PATH themselves; accept them there even if not on PATH.
+LLVM_BIN=/usr/lib/llvm-21/bin
+have() { command -v "$1" >/dev/null 2>&1 || [ -x "$LLVM_BIN/$1" ]; }
 
 echo "=== Required: build toolchain ==="
 
@@ -7466,18 +7511,130 @@ else
 fi
 
 echo
+echo "=== Optional: demos, visualization, benchmarks ==="
+echo "(not needed to build or test the compiler; each enables a demo)"
+
+# make viz (demos/08) renders AST/TCG/MLIR graphs with Graphviz `dot`.
+if command -v dot >/dev/null 2>&1; then
+  pass "graphviz dot ($(dot -V 2>&1)) -- for 'make viz'"
+else
+  note "graphviz 'dot' -- for 'make viz': sudo apt install -y graphviz"
+fi
+
+# make demo-independent (demos/07), and viz's MLIR op-graph, feed emitted
+# IR to the upstream LLVM/MLIR command-line tools.
+for t in mlir-opt mlir-translate llc lli; do
+  if have "$t"; then
+    pass "$t (upstream LLVM/MLIR CLI) -- for 'make demo-independent'"
+  else
+    note "$t not on PATH or in $LLVM_BIN -- for 'make demo-independent' (part of mlir-21-tools/llvm-21)"
+  fi
+done
+
+# Real-world demos (make demo-*) use Python: torch to PREPARE artifacts,
+# numpy to RUN. Deps go in a project-local .venv (never system Python).
+if command -v python3 >/dev/null 2>&1; then
+  pass "python3 ($(python3 --version 2>&1)) -- for real-world demos"
+  if [ -d .venv ]; then
+    pass ".venv present (demo virtualenv, has numpy/torch once set up)"
+  else
+    note ".venv not created -- for 'make demo-*': ./tools/setup-dev.sh --demos"
+  fi
+else
+  note "python3 -- for real-world demos: sudo apt install -y python3 python3-venv"
+fi
+
+echo
 echo "=== Not checked here on purpose ==="
 echo "  ANTLR (jar + C++ runtime): fetched reproducibly by CMake's"
 echo "  FetchContent on first configure, not an OS package -- do not"
 echo "  install it system-wide."
 
 echo
-echo "$ok ok, $missing missing"
+echo "$ok ok, $missing missing (required), $opt_missing optional not present"
+if [ "$opt_missing" -gt 0 ]; then
+  echo "[opt] items are demo-only; install a line's tool only if you want that demo."
+fi
 if [ "$missing" -gt 0 ]; then
   echo "Fix the [MISSING] items above before running cmake -S . -B build."
   exit 1
 fi
 exit 0
+```
+
+### `tools/check_test_matrix.sh`
+```bash
+#!/usr/bin/env bash
+# Drift guard: every CASE("<id>", ...) in the test sources must be
+# documented in docs/testing/TEST_MATRIX.md. The case IDs live in the
+# .cpp (CMake discovers them; see tensora_discover_cases in CMakeLists.txt),
+# so this is the one check that keeps the test matrix from silently
+# drifting away from the actual suite. Registered as the CTest
+# INT-TESTMATRIX-SYNC. Linux-only, like the rest of the project (INTEG-001).
+set -uo pipefail
+cd "$(dirname "$0")/.."
+MATRIX=docs/testing/TEST_MATRIX.md
+
+ids=$(grep -rhoE '(CASE|TEST_CASE)\([A-Za-z0-9_]+, *"[^"]+"' tests --include='*.cpp' \
+        | sed -E 's/.*"([^"]+)"/\1/' | sort -u)
+
+missing=0
+for id in $ids; do
+  grep -qF -- "$id" "$MATRIX" || { echo "MISSING from $MATRIX: $id"; missing=1; }
+done
+
+n=$(printf '%s\n' "$ids" | grep -c .)
+if [ "$missing" -eq 0 ]; then
+  echo "OK: all $n test-case IDs from tests/*.cpp are documented in TEST_MATRIX.md"
+else
+  echo "TEST_MATRIX.md is out of sync with the test sources (add the rows above)."
+fi
+exit "$missing"
+```
+
+### `tools/check_discovery.sh`
+```bash
+#!/usr/bin/env bash
+# Discovery self-check: CMake registers one CTest per case by grepping
+# CASE("<id>",...) out of each harness test's source (tensora_discover_cases
+# in cmake/Tests.cmake). This asserts that grep result exactly matches the
+# binary's OWN authoritative case list (`<bin> --list`, straight from the
+# registry). So the tests themselves are the single source of truth, and a
+# silent grep miss (e.g. a CASE that ever spans two lines) fails loudly here
+# instead of quietly dropping a test. Registered as CTest INT-DISCOVERY-SYNC.
+set -uo pipefail
+cd "$(dirname "$0")/.."
+BINDIR="${1:-build}"
+
+# binary -> the source file whose CASE(...) lines CMake greps for it.
+pairs="
+test_lexer|tests/lexer/test_lexer.cpp
+test_parser|tests/parser/test_parser.cpp
+test_semantic|tests/semantic/test_semantic.cpp
+test_graph|tests/semantic/test_graph.cpp
+test_passes|tests/optimization/test_passes.cpp
+test_tiling_decision|tests/codegen/test_tiling_decision.cpp
+test_codegen_e2e|tests/codegen/test_codegen_e2e.cpp
+"
+
+fail=0
+checked=0
+while IFS='|' read -r bin src; do
+  [ -n "$bin" ] || continue
+  b="$BINDIR/$bin"
+  [ -x "$b" ] || { echo "skip $bin (not built)"; continue; }
+  runtime=$("$b" --list | sort -u)
+  grepped=$(grep -oE '(CASE|TEST_CASE)\([A-Za-z0-9_]+, *"[^"]+"' "$src" | sed -E 's/.*"([^"]+)"/\1/' | sort -u)
+  if [ "$runtime" != "$grepped" ]; then
+    echo "DISCOVERY MISMATCH for $bin (grep of $src vs '$bin --list'):"
+    diff <(printf '%s\n' "$grepped") <(printf '%s\n' "$runtime") | sed 's/^/  /'
+    fail=1
+  fi
+  checked=$((checked + 1))
+done <<< "$pairs"
+
+[ "$fail" -eq 0 ] && echo "OK: CMake's grep discovery matches the --list registry for all $checked harness binaries"
+exit $fail
 ```
 
 ### `tools/regen_appendix.py`
@@ -7679,6 +7836,11 @@ if __name__ == "__main__":
 #
 # Install once, on the machine that prepares the demos:
 #   pip install -r tools/models/requirements.txt   (prefer a venv/pipx)
+#
+# The `make viz` demo also needs Graphviz for the `dot` renderer. That is
+# an OS package, not pip (the PyPI `graphviz` package is only Python
+# bindings that still shell out to the system `dot`), so install it with:
+#   sudo apt install graphviz
 torch
 torchvision
 numpy
@@ -7856,29 +8018,33 @@ if __name__ == "__main__":
     main()
 ```
 
-### `tools/models/prepare_cifar_demo.py`
+### `tools/models/prepare_stl10_demo.py`
 ```python
 #!/usr/bin/env python3
-"""Prepare the CNN CIFAR-100 image-classifier real-inference demo.
+"""Prepare the CNN STL-10 image-classifier real-inference demo.
 
-Trains a CNN once in PyTorch on CIFAR-100's 20 coarse "superclasses"
-(images upscaled to 96x96 so they are large and clearly viewable), then
-exports the trained weights and several real held-out test images:
+Trains a CNN once in PyTorch on STL-10's 10 object classes, then exports
+the trained weights and several real held-out test images:
 
   demos/artifacts/cnn/
-      classes.json            -> the 20 superclass names (for the runner)
-      sample{0..N}/
+      classes.json            -> the 10 class names (for the runner)
+      eval/
           x.npy convW1..4.npy convB1..4.npy fcW.npy fcB.npy
-                              -> a self-contained --data-dir
-          expected.npy        -> the PyTorch reference logits
-          image.png           -> the image, for GUI display
-          thumb.npy           -> an RGB thumbnail, for a terminal preview
-          meta.json           -> true class + PyTorch prediction
+                              -> a self-contained --data-dir (EVAL_N images)
+          expected.npy        -> the PyTorch reference logits, one row per image
+          image_<i>.png       -> a displayed image (opened in a GUI viewer)
+          meta.json           -> true classes + which images are displayed
 
-Each sample dir is directly usable as `tensora --run examples/cnn_cifar.tns
---data-dir <dir>`. Run once, on a machine with PyTorch + torchvision
+`eval/` is directly usable as `tensora --run examples/cnn_stl10.tns
+--data-dir demos/artifacts/cnn/eval`. Run once, on a machine with PyTorch + torchvision
 (see tools/models/requirements.txt):
-    python3 tools/models/prepare_cifar_demo.py
+    python3 tools/models/prepare_stl10_demo.py
+
+STL-10 images are natively 96x96 -- unlike CIFAR-10/100 (32x32), no
+upscaling is needed, so the displayed picture is genuinely that
+resolution, not an interpolated enlargement (see ARCH-017). The STL-10
+download (~2.5 GB) is larger than CIFAR's (~170 MB); that is the
+tradeoff for native resolution.
 """
 import json
 import os
@@ -7896,51 +8062,31 @@ except ImportError:
                      "Install with: pip install -r tools/models/requirements.txt")
 
 SEED = 0
-EPOCHS = 12
-# CIFAR-100 images are natively 32x32; we upscale to 96x96 so the demo
-# image is large and clearly viewable. The model is trained at 96x96
-# too, so PyTorch and Tensora run the identical computation.
-SIZE = 96
-EVAL_N = 40   # held-out images classified in one run; matches examples/cnn_cifar.tns
-DISPLAY = 5   # how many of them to show with their pictures (distinct superclasses)
-# CIFAR-100 per-channel normalization (standard values).
-MEAN = (0.5071, 0.4866, 0.4409)
-STD = (0.2673, 0.2564, 0.2762)
-DATA_ROOT = os.path.join(os.path.dirname(__file__), "..", "..", "demos", "artifacts", "cifar-data")
+EPOCHS = 40  # STL-10's labeled train split is only 5000 images (vs CIFAR's 50000)
+SIZE = 96    # STL-10's native resolution -- no resize/upscale needed
+EVAL_N = 40   # held-out images classified in one run; matches examples/cnn_stl10.tns
+DISPLAY = 5   # how many of them to show with their pictures (distinct classes)
+# STL-10 per-channel normalization (standard values).
+MEAN = (0.4467, 0.4398, 0.4066)
+STD = (0.2603, 0.2566, 0.2713)
+DATA_ROOT = os.path.join(os.path.dirname(__file__), "..", "..", "demos", "artifacts", "stl10-data")
 OUT_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "demos", "artifacts", "cnn")
 # Cache the trained model so re-running prep (e.g. to change the demo
 # display) does not retrain from scratch. Delete this file to retrain.
 MODEL_PT = os.path.join(os.path.dirname(__file__), "..", "..", "demos", "artifacts", "cnn-model.pt")
 
-# The 20 CIFAR-100 coarse superclasses, and the standard fine(0-99) ->
-# coarse(0-19) mapping.
-SUPERCLASSES = [
-    "aquatic mammals", "fish", "flowers", "food containers", "fruit and vegetables",
-    "household electrical devices", "household furniture", "insects", "large carnivores",
-    "large man-made outdoor things", "large natural outdoor scenes",
-    "large omnivores and herbivores", "medium mammals", "non-insect invertebrates",
-    "people", "reptiles", "small mammals", "trees", "vehicles 1", "vehicles 2",
-]
-FINE_TO_COARSE = [
-    4, 1, 14, 8, 0, 6, 7, 7, 18, 3, 3, 14, 9, 18, 7, 11, 3, 9, 7, 11,
-    6, 11, 5, 10, 7, 6, 13, 15, 3, 15, 0, 11, 1, 10, 12, 14, 16, 9, 11, 5,
-    5, 19, 8, 8, 15, 13, 14, 17, 18, 10, 16, 4, 17, 4, 2, 0, 17, 4, 18, 17,
-    10, 3, 2, 12, 12, 16, 12, 1, 9, 19, 2, 10, 0, 1, 16, 12, 9, 13, 15, 13,
-    16, 19, 2, 4, 6, 19, 5, 5, 8, 19, 18, 1, 2, 15, 6, 0, 17, 8, 14, 13,
-]
-
 
 class CNN(nn.Module):
     # Four conv/pool blocks: 96 -> 48 -> 24 -> 12 -> 6 spatially, then a
     # linear head over 64*6*6 = 2304 features. Mirrors
-    # examples/cnn_cifar.tns exactly.
-    def __init__(self):
+    # examples/cnn_stl10.tns exactly.
+    def __init__(self, num_classes):
         super().__init__()
         self.conv1 = nn.Conv2d(3, 16, 3, padding=1)
         self.conv2 = nn.Conv2d(16, 32, 3, padding=1)
         self.conv3 = nn.Conv2d(32, 64, 3, padding=1)
         self.conv4 = nn.Conv2d(64, 64, 3, padding=1)
-        self.fc = nn.Linear(64 * 6 * 6, 20)
+        self.fc = nn.Linear(64 * 6 * 6, num_classes)
 
     def forward(self, x):
         x = F.max_pool2d(torch.relu(self.conv1(x)), 2)
@@ -7953,37 +8099,63 @@ class CNN(nn.Module):
 def main():
     torch.manual_seed(SEED)
     np.random.seed(SEED)
-    coarse = torch.tensor(FINE_TO_COARSE)
-    tf = T.Compose([T.Resize(SIZE), T.ToTensor(), T.Normalize(MEAN, STD)])
-    print("Downloading / loading CIFAR-100 ...")
-    train = torchvision.datasets.CIFAR100(DATA_ROOT, train=True, download=True, transform=tf)
-    test = torchvision.datasets.CIFAR100(DATA_ROOT, train=False, download=True, transform=tf)
+    # STL-10's labeled train split is small (5000 images), so the model
+    # sees each one many times over EPOCHS; random flip/crop augmentation
+    # is the standard fix -- it synthesizes new views instead of the model
+    # memorizing exact pixels, and is the single biggest accuracy lever
+    # available without more labeled data. Only the TRAIN transform is
+    # augmented: eval (held-out accuracy, and the batch fed to Tensora)
+    # must see the real, unmodified image, or Tensora-vs-PyTorch agreement
+    # would not mean what it claims.
+    train_tf = T.Compose([
+        T.RandomCrop(SIZE, padding=4),
+        T.RandomHorizontalFlip(),
+        T.ToTensor(),
+        T.Normalize(MEAN, STD),
+    ])
+    eval_tf = T.Compose([T.ToTensor(), T.Normalize(MEAN, STD)])
+    print("Downloading / loading STL-10 (~2.5 GB, native 96x96) ...")
+    train = torchvision.datasets.STL10(DATA_ROOT, split="train", download=True, transform=train_tf)
+    test = torchvision.datasets.STL10(DATA_ROOT, split="test", download=True, transform=eval_tf)
     loader = torch.utils.data.DataLoader(train, batch_size=128, shuffle=True)
+    classes = list(train.classes)  # ['airplane', 'bird', 'car', ..., 'truck']
 
-    model = CNN()
+    model = CNN(len(classes))
+    cached_ok = False
     if os.path.exists(MODEL_PT):
-        model.load_state_dict(torch.load(MODEL_PT))
-        print(f"Loaded cached model from {os.path.normpath(MODEL_PT)} (delete it to retrain)")
-    else:
+        state = torch.load(MODEL_PT)
+        # A cache from a different architecture or class count (e.g. the
+        # old 20-superclass CIFAR-100 model, before ARCH-017) has a
+        # different fc shape; loading it would crash with a shape
+        # mismatch. Detect that and retrain instead of failing.
+        if state.get("fc.weight") is not None and state["fc.weight"].shape[0] == len(classes):
+            model.load_state_dict(state)
+            cached_ok = True
+            print(f"Loaded cached model from {os.path.normpath(MODEL_PT)} (delete it to retrain)")
+        else:
+            print(f"Cached model at {os.path.normpath(MODEL_PT)} does not match "
+                  f"the current {len(classes)}-class model (stale from a previous "
+                  f"dataset/architecture) -- retraining.")
+    if not cached_ok:
         opt = torch.optim.Adam(model.parameters(), lr=1e-3)
         loss_fn = nn.CrossEntropyLoss()
         for epoch in range(EPOCHS):
             model.train()
             for xb, yb in loader:
                 opt.zero_grad()
-                loss_fn(model(xb), coarse[yb]).backward()
+                loss_fn(model(xb), yb).backward()
                 opt.step()
             print(f"  epoch {epoch + 1}/{EPOCHS} done")
         torch.save(model.state_dict(), MODEL_PT)
     model.eval()
 
-    # Held-out accuracy over the 20 superclasses.
+    # Held-out accuracy over the 10 classes.
     correct = total = 0
     with torch.no_grad():
         for xb, yb in torch.utils.data.DataLoader(test, batch_size=256):
-            correct += (model(xb).argmax(1) == coarse[yb]).sum().item()
+            correct += (model(xb).argmax(1) == yb).sum().item()
             total += yb.size(0)
-    print(f"CNN (20 superclasses): held-out accuracy = {correct / total:.3f}")
+    print(f"CNN ({len(classes)} classes): held-out accuracy = {correct / total:.3f}")
 
     with torch.no_grad():
         weights = {
@@ -8000,46 +8172,44 @@ def main():
             "fcB": model.fc.bias.numpy().astype(np.float32),
         }
 
-    raw = torchvision.datasets.CIFAR100(DATA_ROOT, train=False, download=False)  # unnormalized, for display
+    raw = torchvision.datasets.STL10(DATA_ROOT, split="test", download=False)  # unnormalized, for display
 
     # Evaluate a batch of EVAL_N random held-out images in one Tensora run
-    # (batch axis n in examples/cnn_cifar.tns), so Tensora-vs-PyTorch
+    # (batch axis n in examples/cnn_stl10.tns), so Tensora-vs-PyTorch
     # agreement is statistically meaningful. A random draw keeps the
     # accuracy honest (a real mix of right and wrong).
     rng = np.random.default_rng(SEED)
     idxs = rng.choice(len(test), size=EVAL_N, replace=False).tolist()
     xb = torch.stack([test[i][0] for i in idxs])  # [EVAL_N, 3, SIZE, SIZE]
-    true_coarse = [int(coarse[test[i][1]]) for i in idxs]
+    true_classes = [int(test[i][1]) for i in idxs]
     with torch.no_grad():
-        logits = model(xb).numpy().astype(np.float32)  # [EVAL_N, 20]
+        logits = model(xb).numpy().astype(np.float32)  # [EVAL_N, len(classes)]
 
     # Choose DISPLAY images to show with pictures: evenly spaced across
     # the batch, so they are spread out (not adjacent) and land on a
-    # variety of superclasses (the batch is a random draw).
+    # variety of classes (the batch is a random draw).
     display = sorted({round(k * (EVAL_N - 1) / (DISPLAY - 1)) for k in range(DISPLAY)})
 
     os.makedirs(OUT_DIR, exist_ok=True)
     d = os.path.join(OUT_DIR, "eval")
     os.makedirs(d, exist_ok=True)
-    json.dump(SUPERCLASSES, open(os.path.join(OUT_DIR, "classes.json"), "w"), indent=2)
+    json.dump(classes, open(os.path.join(OUT_DIR, "classes.json"), "w"), indent=2)
     np.save(os.path.join(d, "x.npy"), xb.numpy().astype(np.float32))
     for wname, arr in weights.items():
         np.save(os.path.join(d, f"{wname}.npy"), arr)
-    np.save(os.path.join(d, "expected.npy"), logits)  # [EVAL_N, 20]
+    np.save(os.path.join(d, "expected.npy"), logits)  # [EVAL_N, len(classes)]
 
     for b in display:
-        # Upscale the native 32x32 to SIZE so the shown image is viewable.
-        pil_img = raw[idxs[b]][0].resize((SIZE, SIZE))
-        pil_img.save(os.path.join(d, f"image_{b}.png"))
-        np.save(os.path.join(d, f"thumb_{b}.npy"), np.asarray(pil_img, dtype=np.uint8))
+        # Native 96x96 -- saved as-is, no upscaling.
+        raw[idxs[b]][0].save(os.path.join(d, f"image_{b}.png"))
 
     meta = {
         "count": EVAL_N,
-        "true_classes": [SUPERCLASSES[c] for c in true_coarse],
-        "display": [{"index": b, "true_class": SUPERCLASSES[true_coarse[b]]} for b in display],
+        "true_classes": [classes[c] for c in true_classes],
+        "display": [{"index": b, "true_class": classes[true_classes[b]]} for b in display],
     }
     json.dump(meta, open(os.path.join(d, "meta.json"), "w"), indent=2)
-    pt_acc = float((logits.argmax(1) == np.array(true_coarse)).mean())
+    pt_acc = float((logits.argmax(1) == np.array(true_classes)).mean())
     print(f"Wrote {EVAL_N}-image eval batch to {os.path.normpath(OUT_DIR)} "
           f"(PyTorch accuracy on this batch = {pt_acc:.3f}); showing {len(display)} images")
 
@@ -8246,9 +8416,11 @@ if __name__ == "__main__":
 ## 10.9 Test Listing
 
 ```text
+tensora/tests/cli/cli_tests.txt
 tensora/tests/codegen/mlp_native_driver.c
 tensora/tests/codegen/test_attention_e2e.cpp
 tensora/tests/codegen/test_cnn_e2e.cpp
+tensora/tests/codegen/test_codegen_e2e.cpp
 tensora/tests/codegen/test_ffn_e2e.cpp
 tensora/tests/codegen/test_liveness_tiling_e2e.cpp
 tensora/tests/codegen/test_mlp_e2e.cpp
@@ -8263,6 +8435,9 @@ tensora/tests/driver/mlp_ones/W2.npy
 tensora/tests/driver/mlp_ones/b1.npy
 tensora/tests/driver/mlp_ones/b2.npy
 tensora/tests/driver/mlp_ones/x.npy
+tensora/tests/independent/matmul.tns
+tensora/tests/independent/matmul/a.npy
+tensora/tests/independent/matmul/b.npy
 tensora/tests/lexer/test_lexer.cpp
 tensora/tests/optimization/test_passes.cpp
 tensora/tests/parser/test_parser.cpp
@@ -8915,7 +9090,7 @@ tns::TypedProgram buildCnnGraph(tns::TypeContext& types) {
 
 }  // namespace
 
-int main() {
+int run_cnn_e2e() {
   llvm::InitializeNativeTarget();
   llvm::InitializeNativeTargetAsmPrinter();
 
@@ -9204,7 +9379,7 @@ std::pair<float, double> runPipeline(ModuleOp module, MLIRContext& ctx, bool app
 
 }  // namespace
 
-int main() {
+int run_tiling_e2e() {
   llvm::InitializeNativeTarget();
   llvm::InitializeNativeTargetAsmPrinter();
   const float expected = static_cast<float>(kDim);  // all-ones 1024x1024 @ 1024x1024 -> every element = 1024
@@ -9299,12 +9474,12 @@ diverge from what was actually built and tested.
 This repository is under git version control, hosted at
 [github.com/Rmuk655/TensoraCompiler](https://github.com/Rmuk655/TensoraCompiler)
 (`origin`, branch `main`). Base commit at generation time:
-`ae9c3b617700818e63c542b4490f9e6060138f28`. The concatenation itself
+`bdad96c67f2c9709c1c8ce057fa4c13286eee967`. The concatenation itself
 reflects the working tree at generation time, which may include
 changes made after that commit and not yet committed -- the manifest
 and file contents above are the authoritative record either way, since
 they are read directly from disk, not from git history. Generation
-date: 2026-08-22. The 175 CTest cases passing at generation time are
+date: 2026-08-24. The 183 CTest cases passing at generation time are
 the authoritative record of what this listing implements; see
 [docs/testing/TEST_MATRIX.md](../testing/TEST_MATRIX.md) and
 [docs/development/CHANGELOG.md](CHANGELOG.md).

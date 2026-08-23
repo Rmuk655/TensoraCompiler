@@ -1,0 +1,11 @@
+# LinearBiasActivationFusionPass (OPT-LBA): linear + bias + relu fuse. Visible
+# in --emit-mlir: one linalg.generic does the bias add and the relu together
+# (arith.addf then arith.maximumf) over the matmul result, not two passes.
+input x: Tensor[batch=4, in=8]
+weight W: Tensor[in=8, out=4]
+weight b: Tensor[out=4]
+graph g {
+    h = linear(x, W, b)
+    r = relu(h)
+    return r
+}

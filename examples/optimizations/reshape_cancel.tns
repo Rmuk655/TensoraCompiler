@@ -1,0 +1,8 @@
+# ReshapeCancellationPass (OPT-RC): a reshape immediately undone by a reshape
+# back to the original shape; both are removed.
+input x: Tensor[a=4, b=8]
+graph g {
+    r1 = reshape(x, [c=8, d=4])
+    r2 = reshape(r1, [a=4, b=8])
+    return r2
+}

@@ -604,7 +604,7 @@ bool testMaxPool() {
 
 }  // namespace
 
-int main() {
+int run_new_ops_e2e() {
   llvm::InitializeNativeTarget();
   llvm::InitializeNativeTargetAsmPrinter();
   bool ok = true;

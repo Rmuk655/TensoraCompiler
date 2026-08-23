@@ -37,8 +37,12 @@ fi
 echo
 echo "All required dependencies are present. Next steps:"
 echo "  cmake -S . -B build"
-echo "  cmake --build build -j4"
+echo "  cmake --build build -j \"\$(nproc)\""
 echo "  ctest --test-dir build --output-on-failure"
+echo
+echo "Tip: 'cmake --build' is serial unless you pass -j every time. Add this"
+echo "to ~/.bashrc to make every future build parallel by default:"
+echo "  export CMAKE_BUILD_PARALLEL_LEVEL=\"\$(nproc)\""
 
 if [ "$WITH_DEMOS" -eq 0 ]; then
   echo
@@ -67,6 +71,6 @@ fi
 echo
 echo "Demo dependencies installed in .venv/. To use the demos:"
 echo "  source .venv/bin/activate      # then 'which python' -> .venv/bin/python"
-echo "  python tools/models/prepare_mlp_demo.py        # (and prepare_cifar_demo.py, prepare_text_attn_demo.py)"
+echo "  python tools/models/prepare_mlp_demo.py        # (and prepare_stl10_demo.py, prepare_text_attn_demo.py)"
 echo "  make demo-mlp-placement        # demo-cnn-image-classifier, demo-attn-text-classifier"
 echo "  deactivate                     # when finished"

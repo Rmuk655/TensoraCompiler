@@ -94,7 +94,7 @@ tns::TypedProgram buildAttentionGraph(tns::TypeContext& types) {
 
 }  // namespace
 
-int main() {
+int run_attention_e2e() {
   llvm::InitializeNativeTarget();
   llvm::InitializeNativeTargetAsmPrinter();
 
