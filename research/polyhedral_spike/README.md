@@ -77,6 +77,15 @@ to every graph. The flag therefore demonstrates the safe, classic
 polyhedral transform (**loop tiling**), and the fusion result is recorded
 as a cautionary spike finding, not shipped.
 
+**Now diagnosed** (see [FUSION_DIAGNOSIS.md](FUSION_DIAGNOSIS.md),
+`fusion_diagnosis.sh`): the minimal trigger is a single **padded**
+`conv2d`. MLIR's affine *producer-consumer* fusion mis-slices the
+`tensor.pad` producer (zero-fill + interior copy of `x`), keeping only
+the zero-fill and dropping the data copy, so the conv reads zeros. It is
+a correctness bug in upstream `affine-loop-fusion` for padded producers,
+not a Tensora bug and not a missing-semantics case — so it is **not**
+evidence for the semantic-legality thesis.
+
 Takeaway: a polyhedral optimization is reachable and correct in Tensora
 today (tiling), and a polyhedral optimization can also be **silently
 wrong** if applied without the legality guarantee the framework does not

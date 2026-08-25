@@ -87,20 +87,29 @@ not a codegen one. Semantics ON enables a legal transform or a better
 schedule that OFF cannot -> a compiler result. This is the same A/B
 discipline as [../ragged_spike/PROPOSAL.md](../ragged_spike/PROPOSAL.md).
 
-## The fusion failure is a lead, not yet evidence
+## The fusion failure is diagnosed — and it is NOT evidence
 
-The `affine-loop-fusion` failure on `cnn_stl10` (see [README.md](README.md))
-is suggestive but does **not yet** prove that Tensora semantics would fix
-it. The wrong result could be a lowering issue, a pass precondition, an
-alias/memory-effect gap, wrong pass composition, or a plain bug. **It
-must be diagnosed first.** The scientifically interesting shape would be:
+The `affine-loop-fusion` failure on `cnn_stl10` has been diagnosed (see
+[FUSION_DIAGNOSIS.md](FUSION_DIAGNOSIS.md)). The minimal trigger is a
+single **padded** `conv2d`: MLIR's affine producer-consumer fusion
+mis-slices the `tensor.pad` producer (zero-fill + interior copy) and
+drops the data copy, so the conv reads zeros. It is a **correctness bug
+in the upstream pass**, not a case where a transform was legal only
+because of a semantic fact the lowered form hides.
+
+So, honestly, this failure does **not** support the semantic-legality
+thesis and must not be cited for it. The scientifically interesting shape
+is still:
 
 ```
 generic lowered MLIR  -> cannot establish property P
-Tensora TCG           -> has / verifies property P  -> fusion provably legal
+Tensora TCG           -> has / verifies property P  -> transform provably legal
 ```
 
-Only then is the fusion story real evidence.
+but it needs a **different** motivating example -- e.g. a transform that
+is legal only given a verified `L[b]` extent or a prefix-sum `offsets`
+contract that the lowered program cannot recover. Finding that example is
+the real V0.3 task; the padded-conv fusion bug is not it.
 
 ## The performance opportunity is regions, not single GEMMs
 
