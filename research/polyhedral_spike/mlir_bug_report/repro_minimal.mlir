@@ -7,9 +7,11 @@
 // result is 1 + 1 = 2.
 //
 // Correct (no fusion): prints 2.
-// Wrong (producer-consumer or greedy fusion): prints 1 -- the interior
-// element reads as the pad value 0 because fusion drops the copy of the
-// source into the padded buffer and keeps only the pad fill.
+// Wrong (producer-consumer or greedy fusion): prints 1 -- fusion moves the
+// affine pad-fill loop to run AFTER the intervening memref.copy that writes
+// the interior, so the fill re-zeros the copied interior and the consumer
+// reads the pad value 0. (memref.copy is non-affine, so the affine fusion
+// dependence analysis does not see its write to the shared buffer.)
 //
 //   OPT="-one-shot-bufferize=bufferize-function-boundaries -convert-linalg-to-affine-loops"
 //   TAIL="-lower-affine -expand-strided-metadata -convert-scf-to-cf \
