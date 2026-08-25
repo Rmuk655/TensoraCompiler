@@ -127,7 +127,7 @@ that the transformed IR still keeps these invariants:
 optimizer -> semantic validator -> accept / reject transformation
 ```
 
-The fusion bug ([FUSION_DIAGNOSIS.md](FUSION_DIAGNOSIS.md)) is a real
+The fusion bug (Finding 3 above, filed in `mlir_bug_report/`) is a real
 motivating failure: a verifier-valid transform gave a wrong result. Check
 the literature on translation validation and compiler correctness before
 you claim novelty.
@@ -223,15 +223,45 @@ compilation" (too broad). Ask this:
 
 ## What the spike already established
 
-- Finding 1: polyhedral tiling works on Tensora output. This is the
-  baseline integration result.
-- Finding 2: naive tiling is not faster on its own. Tiling plus
-  vectorization wins. So optimization is not "use one transformation".
-- Finding 3: fusion gave wrong code on a padded conv. See
-  [FUSION_DIAGNOSIS.md](FUSION_DIAGNOSIS.md). The minimal reproducer and
-  the before/after IR are in `mlir_bug_report/`.
-- Finding 4: semantic information may constrain or guide a transformation.
-  This is the question to pursue next.
+- Finding 1: polyhedral tiling works on Tensora output. This is now in
+  `main` (v0.1) as the `--polyhedral` flag, ARCH-018
+  (`docs/architecture/DECISIONS.md`). It uses no Tensora-specific
+  semantics, so it is settled infrastructure, not an open V0.3 question.
+
+- Finding 2: naive tiling is not faster on its own; tiling plus
+  vectorization wins. Measured on a hard 1024x1024x1024 matmul (kernel
+  time only, `rtclock`, no JIT or process noise):
+
+  | schedule | GFLOP/s | vs default |
+  |---|---|---|
+  | default (`convert-linalg-to-loops`) | 0.74 | 1.0x |
+  | affine tile=16 | 1.90 | 2.6x |
+  | affine tile=32 | 1.68 | 2.3x |
+  | affine tile=16 + super-vectorize=16 | 13.23 | 17.9x |
+  | affine tile=32 + super-vectorize=16 | 13.35 | 18.0x |
+
+  So optimization is not "use one transformation": tiling alone gives
+  about 2.6x; tiling plus vectorization gives about 18x. About 13
+  GFLOP/s is still far below a tuned CPU GEMM and far below cuBLAS, so
+  this is a win over the naive baseline, not over BLAS. It supports the
+  "regions, not single GEMMs" point above -- do not try to out-tile
+  vendor libraries; look for gains at the region level instead.
+
+- Finding 3: fusion gave a wrong result on a padded conv. The minimal
+  reproducer, the before/after IR, and a controlled experiment are filed
+  upstream against LLVM/MLIR (`mlir_bug_report/`, already submitted).
+  Summary: MLIR's affine producer-consumer fusion moves the `tensor.pad`
+  fill loop to run after the `memref.copy` that writes the interior, so
+  the fill writes the pad value over the interior again and the consumer
+  reads the pad value. This is a miscompilation in upstream MLIR, not a
+  Tensora bug, and not a case where a transform was legal only because
+  of a semantic fact the lowered form hides. **It is not evidence for
+  the semantic-legality idea in this document** -- it only shows that a
+  verifier-valid transform can still be wrong, which is why any semantic
+  validator (Direction D) needs its own proof, not a borrowed one.
+
+- Finding 4: semantic information may constrain or guide a
+  transformation. This is the question to pursue next.
 
 ## Name and fit
 
