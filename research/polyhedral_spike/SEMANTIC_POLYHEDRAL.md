@@ -5,67 +5,132 @@ the spikes in this directory ([README.md](README.md) and the perf sweep)
 and on the ragged and extent work in
 [../ragged_spike/](../ragged_spike/PROPOSAL.md).
 
-## The idea: what is new and what is not
+## The question, stated carefully
 
 Polyhedral compilation is an old and active area. LLVM/Polly, Pluto,
-Tiramisu, PolyDL, and the MLIR affine dialect already do polyhedral
-transformations. So the new part is not "Tensora uses polyhedral
-transformations."
+Tiramisu, PolyDL, and the MLIR affine dialect already derive legal loop
+transformations from iteration domains, affine maps, and dependences. The
+MLIR `linalg` dialect already carries the iteration-to-data maps, the
+iterator kinds, and the accesses. So tiling and producer-consumer fusion
+already work on that information.
 
-The perf sweep in this directory proves this point. Tensora's linalg
-output already feeds those transformations. Tuned tiling and
-vectorization give about an 18x speedup. No Tensora semantics are needed
-for this. This is good engineering, but it is not new research.
+So do not frame the project as this:
 
-The research question is different:
+> "We add axis names and shapes to polyhedral compilation."
 
-> Can ML semantics that Tensora holds before lowering help the compiler
-> choose a transformation, limit a transformation, or prove that a
-> transformation is legal or profitable, when the lowered loops no longer
-> show those facts?
+That is not enough, and it is not new. The perf sweep in this directory
+gets about an 18x speedup with no Tensora semantics at all. That is good
+engineering, not new research.
 
-## A correction from our own experiments: labels are not enough
+Frame the project as this instead:
 
-Tensora knows the axes of `C[b,m,n] = sum_k A[b,m,k] * B[b,k,n]`. The
-axes `b`, `m`, and `n` index independent outputs. The axis `k` is a
-reduction. But
+> What semantic information does an ML program know that a generic
+> polyhedral representation does not? Can that information change the
+> optimization decision and still keep the ability to prove legality?
+
+## Prior art that bounds the novelty (compare, do not reinvent)
+
+You must compare against these systems. Each already covers part of the
+space:
+
+| system | what it already does | do not claim as new |
+|---|---|---|
+| MLIR Affine / Linalg | iteration domains, affine maps, iterator kinds, tiling, fusion | "we bring polyhedral structure to tensors" |
+| TVM TensorIR | explicit `spatial` vs `reduce` block axes; schedule transforms; MetaSchedule search | "we label axes spatial/reduction to guide scheduling" |
+| TACO | separates compute from storage; split, collapse, reorder; sparse formats | "we do iteration-space transforms for tensor algebra" |
+| Tiramisu | polyhedral compiler for dense/sparse data-parallel code; CPU/GPU/FPGA/distributed | "we use polyhedral transforms on tensor programs" |
+| TorchInductor | fusion scheduling by memory traffic, graph distance, backend rules | "we add semantics-aware fusion" |
+| JAX / StableHLO | symbolic shapes, shape constraints, runtime shape checks | "we add shape correctness" |
+
+TensorIR is the closest prior art. It already shows that `spatial` and
+`reduce` axis facts help scheduling. So treat axis roles as known, not
+new.
+
+## Axis names alone are not enough
+
+A name such as `batch` or `sequence` gives the optimizer little. If the
+lowered form is only `d0, d1, d2`, the name is just documentation. The
 [../ragged_spike/tiramisu/islpy_ragged.py](../ragged_spike/tiramisu/islpy_ragged.py)
-shows that polyhedral dependence analysis already finds the basic
-independence and reduction structure from the loops.
+result confirms this: dependence analysis already finds independence and
+reduction structure from the loops.
 
-So a simple label such as `axis=reduction` or `axis=batch` most likely
-gives no new performance. The backend can already find these facts.
+The value is in the semantic **properties** on the axes, for example:
 
-## Where Tensora can add information
+```
+batch:     independent, parallel
+head:      independent, uniform
+sequence:  ordered, maybe causal
+feature:   reduction / contraction candidate
+spatial:   locality-sensitive
+reduction: associative operation
+```
 
-These facts are hard or impossible to rebuild after lowering. The list
-goes from low value to high value:
+Two facts of this kind that a shape-only system does not have:
 
-| semantic fact Tensora supplies | likely value |
+- Numeric equality is not semantic interchangeability. If `batch = 64` and
+  `feature = 64`, a shape-only view may treat the two axes as the same.
+  The semantics keep them apart, so the compiler does not swap them.
+- Collapse only when the contract permits it. If the operation is
+  independent across `batch` and `head`, the compiler can collapse
+  `[B,H,S,D]` to `[B*H,S,D]` for a lower-level kernel. It may do this only
+  because the semantics prove the two axes are independent instances of
+  the same computation.
+
+The high-value facts (hard to rebuild after lowering) are these:
+
+| semantic fact | value |
 |---|---|
-| "`k` is a reduction" | low; dependence analysis finds it |
-| "`batch` is independent" | low; same reason |
-| tensor or operator identity | useful for cost models and special lowering |
-| axis equivalence across ops | maybe useful for fusion or layout |
-| `L[b]` is the valid extent of an axis | **interesting** |
-| `Lout[b] = f(Lin[b])`, verified | **more interesting** |
-| offsets are verified prefix sums of `L[b]` | **interesting for packed data** |
-| work for item `b` is about `L[b]^2` | **interesting for load balance** |
+| axis role (batch/head/sequence/feature) | low on its own; TensorIR has it |
+| `L[b]` is the valid extent of an axis | interesting |
+| `Lout[b] = f(Lin[b])`, verified | more interesting |
+| offsets are verified prefix sums of `L[b]` | interesting for packed data |
+| work for item `b` is about `L[b]^2` | interesting for load balance |
 
 The last row is the ragged-distribution result
 ([../ragged_spike/distal/ragged_balance.py](../ragged_spike/distal/ragged_balance.py)).
-A scheduler that sees only 32 batch items can give 8 items to each of 4
-workers. But attention work is about `L[b]^2`. So equal item counts can
-give very unequal work. The semantic extents let the scheduler balance by
-`sum L[b]^2`. The padded shape `[B, Lmax, ...]` does not carry this fact.
+Equal item counts can give unequal work. The semantic extents let a
+scheduler balance by `sum L[b]^2`. The padded shape does not carry this.
 
-## Two research questions, kept apart
+## Four candidate contributions
 
-- Verification question: can Tensora keep ML semantic contracts that let
-  it prove a transformation legal, when the lowered form cannot show that
-  the transformation is legal?
-- Performance question: with those verified facts, can a scheduler choose
-  transformations that run faster than the same backend without the facts?
+### A. Semantic-contract-guided optimization
+
+Make the shape, the named axes, the axis roles, the operator algebra, and
+the provenance into one explicit contract. A scheduler then asks a
+sharper question: which transformations are legal AND semantically good?
+This is more specific than "shape-aware optimization".
+
+### B. Optimization provenance
+
+Give every transformation a provenance chain, for example
+`VF-op-27 -> MLIR-op-82 -> affine-loop-12 -> LLVM-region-41`. After a
+profile run, map a hot kernel back to a source concept, for example an
+attention head projection. Then answer: which high-level choice caused
+this hardware behavior?
+
+### C. Counterfactual optimization (search with semantic pruning)
+
+Compile the same typed graph several ways (schedule A, B, C), profile
+each, and pick the winner. Search over schedules is not new (TVM
+MetaSchedule). The open question is narrower: can semantic contracts cut
+the search space and help a schedule choice transfer across shapes and
+hardware?
+
+### D. Semantic optimization failure detection
+
+This uses the fusion bug directly. The source language knows facts such as
+`padding = 1`, the conv output shape, and "interior values are not the
+pad value". After an MLIR transformation, a semantic validator can check
+that the transformed IR still keeps these invariants:
+
+```
+optimizer -> semantic validator -> accept / reject transformation
+```
+
+The fusion bug ([FUSION_DIAGNOSIS.md](FUSION_DIAGNOSIS.md)) is a real
+motivating failure: a verifier-valid transform gave a wrong result. Check
+the literature on translation validation and compiler correctness before
+you claim novelty.
 
 ## The experiment that isolates the contribution
 
@@ -85,65 +150,106 @@ same polyhedral backend. Turn the semantics OFF, then ON:
                    compare: legality? schedule? runtime?
 ```
 
-Read the results this way. If the schedule and IR are the same, the result
-is a type or checking result, not a codegen result. If the semantics ON
-case allows a legal transformation or a better schedule that the OFF case
-cannot, the result is a compiler result. This is the same A/B method as
+If the schedule and IR are the same, the result is a type or checking
+result. If semantics ON allows a legal or better schedule that OFF cannot,
+the result is a compiler result. This is the A/B method of
 [../ragged_spike/PROPOSAL.md](../ragged_spike/PROPOSAL.md).
 
-## The fusion failure is diagnosed, and it is not evidence
+## What to measure
 
-We diagnosed the `affine-loop-fusion` failure on `cnn_stl10` (see
-[FUSION_DIAGNOSIS.md](FUSION_DIAGNOSIS.md)). The smallest trigger is one
-padded `conv2d`. The MLIR affine producer-consumer fusion reorders the
-`tensor.pad` fill after the `memref.copy` that writes the interior. So the
-conv reads the pad value. This is a correctness bug in the upstream pass.
-It is not a case where a transformation was legal only because of a
-semantic fact that the lowered form hides.
+Compare the baseline (MLIR/polyhedral optimizer) against the
+semantic-guided version (contracts plus the same optimizer):
 
-So this failure does not support the semantic-legality idea. Do not cite
-it for that idea. The useful research shape is still this:
+1. number of candidate schedules
+2. compile and search time
+3. count of invalid transformations detected
+4. performance
+5. memory traffic
+6. behavior across shapes
+7. behavior across hardware
 
-```
-generic lowered MLIR  -> cannot establish property P
-Tensora TCG           -> has or verifies property P  -> transform provably legal
-```
+## The paper-sized question
 
-But it needs a different example. The example must be a transformation
-that is legal only with a verified fact, such as an `L[b]` extent or a
-prefix-sum `offsets` contract, that the lowered program cannot recover.
-To find that example is the real V0.3 task. The padded-conv fusion bug is
-not that example.
+Do not ask "does semantic tensor information improve polyhedral
+compilation" (too broad). Ask this:
 
-## The performance opportunity is regions, not single matmuls
+> Can source-level tensor semantics -- axis roles, dependence classes,
+> reduction semantics, and shape constraints -- be kept as explicit
+> optimization contracts, and used to prune or validate lower-level
+> transformation choices?
 
-The sweep confirms the earlier lesson. Do not try to beat cuBLAS on a
-single matmul. The opportunity is a region, for example `matmul -> bias
--> activation -> normalization`. A library runs several kernels and writes
-to memory between them:
+## Architecture for the extension
 
 ```
-kernel1 -> memory -> kernel2 -> memory -> kernel3
+                 Tensora (VeriFlow)
+                        |
+                 Semantic analysis
+                        |
+          +-------------+-------------+
+          |                           |
+      tensor facts               semantic facts
+   shape / rank / dtype       axis role / dependence
+          |                    algebraic properties
+          +-------------+-------------+
+                        |
+                Typed semantic IR
+                        |
+                Optimization planner
+                        |
+          +-------+-----+-----+-------+
+          v       v           v
+       fusion   tiling      layout
+          +-------+-----------+
+                        |
+                       MLIR
+                        |
+              transformation space
+                   |          |
+             candidate A  candidate B
+                   |          |
+                 LLVM       LLVM
+                   +----+-----+
+                        |
+                    profiler
+                        |
+                  provenance map
+                        |
+                 semantic validator
+                   |          |
+                accept      reject
+                   |
+                 result
 ```
 
-A compiler with enough semantic and dependence information can emit one
-fused and tiled region:
+## What the spike already established
 
-```
-A,B -> [ fused / tiled region ] -> output
-```
-
-The gain is not a faster multiply. The gain is less memory traffic, fewer
-launches, less padding, and fewer conversions. A small Futhark-style
-Tensora kernel language fits here
-([../ragged_spike/POSITIONING.md](../ragged_spike/POSITIONING.md)).
+- Finding 1: polyhedral tiling works on Tensora output. This is the
+  baseline integration result.
+- Finding 2: naive tiling is not faster on its own. Tiling plus
+  vectorization wins. So optimization is not "use one transformation".
+- Finding 3: fusion gave wrong code on a padded conv. See
+  [FUSION_DIAGNOSIS.md](FUSION_DIAGNOSIS.md). The minimal reproducer and
+  the before/after IR are in `mlir_bug_report/`.
+- Finding 4: semantic information may constrain or guide a transformation.
+  This is the question to pursue next.
 
 ## Name and fit
 
 Name the direction "semantic-guided polyhedral compilation for ML
 regions". Do not name it "polyhedral Tensora". Aim for one result: a
-semantic fact that (1) stays at the TCG level, (2) the lowered form cannot
-recover cheaply, and (3) changes the legality or the schedule quality
-enough to give a measurable result. This fits Prof. Upadrasta's
-sub-polyhedral (UTVPI) scheduling work. That work keeps the schedule
-search fast (see `docs/ProjectMgmt/15_FUTURE_RESEARCH_DIRECTIONS.md`).
+semantic fact that (1) stays at the typed-graph level, (2) the lowered
+form cannot recover cheaply, and (3) changes the legality or the schedule
+quality enough to give a measurable result. This fits Prof. Upadrasta's
+sub-polyhedral (UTVPI) scheduling work, which keeps the schedule search
+fast (see `docs/ProjectMgmt/15_FUTURE_RESEARCH_DIRECTIONS.md`).
+
+## References
+
+- MLIR Affine dialect: https://mlir.llvm.org/docs/Dialects/Affine/
+- TVM TensorIR: https://tvm.apache.org/docs/deep_dive/tensor_ir/index.html
+- TVM TensorIR learning (spatial/reduce axes):
+  https://tvm.apache.org/docs/deep_dive/tensor_ir/learning.html
+- TorchInductor (fusion scheduling): https://docs.pytorch.org/assets/pytorch2-2.pdf
+- JAX shape polymorphism: https://docs.jax.dev/en/latest/export/shape_poly.html
+- TACO: https://compilers.stanford.edu/software/taco/
+- Tiramisu: https://github.com/Tiramisu-Compiler/tiramisu
