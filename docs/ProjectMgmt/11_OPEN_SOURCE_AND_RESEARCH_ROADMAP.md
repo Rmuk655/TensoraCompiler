@@ -1,5 +1,10 @@
 # Tensora Open-Source and Research Roadmap
 
+> The runnable V0.3 research spikes and the falsifiable thesis documents
+> (ragged tensors, extent contracts, polyhedral optimization, PyTorch and
+> StableHLO interop) live on the `v0.3-research` branch under `research/`.
+> `main` holds the frozen v0.1 compiler and this roadmap only.
+
 ## 1. Release V0.1
 
 V0.1 is done. It is complete, tested, documented, and reproducible.

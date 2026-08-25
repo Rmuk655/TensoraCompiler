@@ -164,6 +164,14 @@ Computation Graph before and after optimization
 debugging one phase, or for a demo, without running the whole
 pipeline.
 
+The `--polyhedral` flag is an optional lowering path: it runs `linalg`
+through the MLIR affine dialect and one real polyhedral pass
+(`affine-loop-tile`) instead of the default loop lowering. It gives the
+same result on every runnable example (see
+[docs/architecture/DECISIONS.md](docs/architecture/DECISIONS.md), ARCH-018);
+it exists to prove Tensora's output can drive polyhedral optimization,
+not to change what any program computes.
+
 # Visualization, Independent Pipeline, and Benchmarks
 
 Three more demos sit alongside the per-phase ones. Each is its own
