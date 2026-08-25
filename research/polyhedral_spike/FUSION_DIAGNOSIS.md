@@ -44,13 +44,17 @@ The confirmed mechanism is shown directly by the before/after IR of the
 conv-free minimal case (see `mlir_bug_report/BUG_REPORT.md`, which quotes
 both). The padded producer writes the buffer `%alloc` in two ops: an
 affine **fill** loop (pad value), then a non-affine **`memref.copy`** of
-the source into the interior subview. Because `memref.copy` is not an
-affine op, it is invisible to the affine producer/consumer dependence
-analysis. Fusion sinks the fill loop into the consumer loop and, in doing
-so, **moves the fill past the `memref.copy`** that writes the same buffer.
-The fused fill then re-writes the pad value over the interior the copy
-produced, and the consumer reads the pad value. The copy is not dropped --
-it is **clobbered by the reordered fill**.
+the source into the interior subview. Fusion sinks the fill loop into the
+consumer loop and, in doing so, **moves the fill past the `memref.copy`**
+that writes the same buffer. The fused fill then re-writes the pad value
+over the interior the copy produced, and the consumer reads the pad value.
+The copy is not dropped -- it is **clobbered by the reordered fill**.
+
+The likely reason (hypothesis) is that fusion legality does not model the
+dependence created by the non-affine `memref.copy`. A controlled variant
+supports it: writing the same interior with an *affine loop* instead of
+`memref.copy` fuses correctly -- the miscompile toggles exactly on
+`memref.copy` vs an affine interior write (`mlir_bug_report/affine_variant.mlir`).
 
 For the padded conv the same class appears with an added twist (the fused
 producer buffer is also shrunk to a `1x1x1x1` slice that only holds the
