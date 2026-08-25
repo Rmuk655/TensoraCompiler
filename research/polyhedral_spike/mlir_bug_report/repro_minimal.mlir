@@ -7,11 +7,13 @@
 // result is 1 + 1 = 2.
 //
 // Correct (no fusion): prints 2.
-// Wrong (producer-consumer or greedy fusion): prints 1 -- fusion moves the
-// affine pad-fill loop to run AFTER the intervening memref.copy that writes
-// the interior, so the fill re-zeros the copied interior and the consumer
-// reads the pad value 0. (memref.copy is non-affine, so the affine fusion
-// dependence analysis does not see its write to the shared buffer.)
+// Wrong (producer-consumer or greedy fusion): prints 1 -- the fused IR moves
+// the affine pad-fill loop to run AFTER the intervening memref.copy that
+// writes the interior, so the fill re-zeros the copied interior and the
+// consumer reads the pad value 0. Likely the fusion legality check does not
+// model the dependence created by the (non-affine) memref.copy; a controlled
+// variant (affine_variant.mlir) that writes the interior with an affine loop
+// instead fuses correctly, which supports that reading.
 //
 //   OPT="-one-shot-bufferize=bufferize-function-boundaries -convert-linalg-to-affine-loops"
 //   TAIL="-lower-affine -expand-strided-metadata -convert-scf-to-cf \

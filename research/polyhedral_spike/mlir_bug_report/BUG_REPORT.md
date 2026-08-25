@@ -7,12 +7,14 @@ your own account.
 Reproducers in this directory (standard dialects only, no external deps):
 - `repro_minimal.mlir` -- **headline**: `tensor.pad` -> elementwise add,
   no conv, no reduction.
+- `affine_variant.mlir` -- controlled variant: same buffer, interior
+  written by an affine loop instead of `memref.copy` (fuses correctly).
 - `repro.mlir` -- the original discovery: a single padded `conv2d`.
 
 ---
 
-**Title:** [mlir][affine] affine-loop-fusion reorders a pad-fill loop past
-an intervening `memref.copy`, giving wrong results
+**Title:** [mlir][affine] affine-loop-fusion reorders tensor.pad fill
+across memref.copy and miscompiles
 
 **Observed behavior (measured, self-contained)**
 
@@ -30,7 +32,25 @@ value 0), then add `1.0` elementwise; `@main` prints interior element
 
 The only difference between the correct and wrong runs is the presence of
 `-affine-loop-fusion`. The fused module is verifier-valid (`mlir-opt`
-exits 0). Measured on **Ubuntu LLVM 21.1.8** (`mlir-opt --version`).
+exits 0).
+
+**Environment (exact)**
+
+```
+$ mlir-opt --version
+Ubuntu LLVM version 21.1.8
+$ llvm-config-21 --version
+21.1.8
+$ apt-cache policy llvm-21
+llvm-21:  Installed: 1:21.1.8-6ubuntu1
+$ apt-cache policy libmlir-21-dev
+libmlir-21-dev:  Installed: 1:21.1.8-6ubuntu1
+```
+
+This is the packaged 21.1.8 release; I have not re-run it on current
+trunk. (Recent upstream affine-loop-fusion miscompile reports were on
+newer builds; a small `tensor.pad` reproducer on the released 21.1.8 may
+still be useful.)
 
 Commands:
 
@@ -84,21 +104,36 @@ affine.for %i = 0 to 10 { affine.for %j = 0 to 10 {
 }}
 ```
 
-**Hypothesized root cause**
+**What the IR shows (observed)**
 
-`memref.copy` is not an affine op, so it is invisible to the affine
-producer/consumer dependence analysis that drives fusion. The pass fuses
-the pad-fill loop into the consumer loop and, in doing so, moves that
-store past the `memref.copy` that writes the same buffer `%alloc`. The
-fused fill then re-writes the pad value over the interior the copy
-produced, and the consumer reads the pad value. So the copy is not
-dropped -- it is clobbered by a reordered fill. (This is the mechanism the
-before/after IR shows; the label "root cause" is my reading of it, offered
-for triage, not asserted as confirmed.)
+The fused IR moves the pad-fill stores to run *after* the intervening
+`memref.copy` that writes the interior of the same buffer `%alloc`, so the
+fill overwrites the copied interior and the consumer reads the pad value.
+The copy is not dropped -- it is clobbered by the reordered fill.
 
-This matches the general area where `affine-loop-fusion` has other known
-miscompiles (opaque/external effects and aliasing it does not model). The
-`tensor.pad` -> `fill + memref.copy` lowering is a common way to hit it.
+**Likely issue (hypothesis, plus a controlled experiment)**
+
+The likely issue is that the fusion legality check does not model the
+dependence created by the `memref.copy` (a non-affine op) on `%alloc`, so
+the reordering is considered legal. I have not read the pass's dependence
+analysis, so I state this as a hypothesis -- but a controlled variant
+supports it (`affine_variant.mlir`): keep the exact same three-part
+structure (full fill -> interior write -> elementwise consumer) but write
+the interior with an **affine loop** instead of `memref.copy`. With the
+affine interior write, fusion is **correct** (prints `6` with and without
+`-affine-loop-fusion`). The miscompile toggles precisely on
+`memref.copy` vs an affine interior write:
+
+| interior write | no fusion | + fusion |
+|---|---|---|
+| `memref.copy` (`repro_minimal.mlir`) | 2 | **1 (wrong)** |
+| affine loop (`affine_variant.mlir`) | 6 | 6 (correct) |
+
+`tensor.pad` lowering to `alloc + linalg.fill + buffer copy` is documented
+MLIR bufferization behavior, so this is a natural case rather than an
+artificial one, and it is in the same general area as other recent
+`affine-loop-fusion` miscompile reports (effects/aliasing the pass does
+not model).
 
 **Original context** (`repro.mlir`): first seen in a convolution
 pipeline. A single `linalg.conv_2d_nchw_fchw` on a `tensor.pad` input
