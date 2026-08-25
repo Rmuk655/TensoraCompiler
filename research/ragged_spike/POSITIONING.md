@@ -32,6 +32,35 @@ the gap Tensora's verification fills. Upstreaming a generically-useful
 piece to StableHLO (via `custom_call` first, then an RFC) is a possible
 long-term outcome, not a V0.3 goal.
 
+## Two StableHLO paths: keep the career goal off the research risk
+
+Contributing to StableHLO is a stated personal goal (open-source standing
+/ industry). Do not couple it to whether the V0.3 research lands. There
+are two very different paths, and the safe one should run regardless.
+
+- **Path A -- contribute to StableHLO directly, now (low risk, high
+  certainty).** StableHLO is community-driven with an active RFC/opset
+  process and a steady flow of ecosystem PRs (verifier fixes,
+  decompositions, transforms, tests, docs). Pick up ordinary
+  contributions independent of Tensora. This **reliably** establishes
+  contributor standing whether or not the research succeeds. It is a
+  parallel track, not a V0.3 deliverable.
+- **Path B -- upstream a new abstraction discovered via V0.3 (high risk,
+  research-gated).** Only viable if the research finds a genuinely generic
+  missing piece (e.g. a verified `lengths` <-> `cu_seqlens` relationship),
+  it proves useful to XLA/IREE, and it clears StableHLO's high bar
+  (5-year back / 2-year forward compatibility, RFC, positive + negative +
+  compatibility tests). Reach it through the disciplined
+  `custom_call` -> RFC path, and only after the A/B experiment
+  ([PROPOSAL.md](PROPOSAL.md)) shows the fact changes generated code.
+
+Do **not** make "contribute to StableHLO" a V0.3 objective. Start Path A
+immediately for the credential; treat Path B as the aspirational outcome.
+The MLIR affine-fusion bug found in the polyhedral spike
+(`../polyhedral_spike/FUSION_DIAGNOSIS.md`) is a concrete, low-risk
+example of the same Path-A idea for the MLIR project: a clean upstream
+contribution that needs no research to succeed.
+
 Target UX (Futhark-style FFI/module boundary):
 
 ```python
