@@ -81,3 +81,39 @@ Takeaway: a polyhedral optimization is reachable and correct in Tensora
 today (tiling), and a polyhedral optimization can also be **silently
 wrong** if applied without the legality guarantee the framework does not
 enforce for you (fusion). Both are useful lessons for the roadmap.
+
+## Performance sweep on a hard matmul (`matmul_sweep.sh`)
+
+Does a *tuned* polyhedral schedule beat the default lowering? The
+in-compiler `--polyhedral` flag (tiling only, default tile size) was
+*slower*, so this sweep isolates real kernel time on a hard
+**1024x1024x1024** matmul: `matmul_bench.mlir` times N calls with
+`rtclock` (no JIT/process noise), and `matmul_sweep.sh` applies each
+schedule with `mlir-opt` then runs it with `mlir-runner`.
+
+| schedule | GFLOP/s | vs default |
+|---|---|---|
+| default (`convert-linalg-to-loops`) | 0.74 | 1.0x |
+| affine tile=16 | 1.90 | 2.6x |
+| affine tile=32 | 1.68 | 2.3x |
+| affine tile=64 | 1.41 | 1.9x |
+| affine tile=16 + super-vectorize=16 | 13.23 | 17.9x |
+| **affine tile=32 + super-vectorize=16** | **13.35** | **18.0x** |
+
+Correctness of the vectorized winner was checked separately (all-ones
+inputs -> every output element `1024.0`, same as the default path).
+
+What this shows, honestly:
+
+- **Tuned polyhedral tiling + vectorization is ~18x faster than
+  Tensora's naive default lowering** here -- a large, real, correct
+  speedup.
+- **Tiling alone is not enough** (only ~2.6x, and *slower* through the
+  JIT `--run` path, where compile cost is added). The win needs
+  **vectorization** on top -- which is exactly why the tiling-only
+  `--polyhedral` flag looked slow.
+- **This is a win over the naive baseline, NOT over BLAS.** ~13 GFLOP/s
+  is still far below a tuned single-thread CPU GEMM, and orders below
+  cuBLAS. Consistent with the earlier finding: do not target beating
+  vendor GEMMs; target the headroom naive lowering leaves, plus
+  region-level fusion (see `SEMANTIC_POLYHEDRAL.md`).
