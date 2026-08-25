@@ -40,20 +40,31 @@ a zero-fill of the whole padded buffer, then a copy of the real input `x`
 into the interior. In the affine IR the conv then reads that padded
 buffer inside its `kh,kw,ic` reduction.
 
-MLIR's affine **producer-consumer** fusion sinks that padded producer
-into the conv reduction and computes a per-iteration *slice* of it. For
-this two-region producer it mis-slices: the fused code keeps only the
-**zero-fill** (`affine.store %cst, %alloc[0,0,0,0]` then reads the same
-`0` back) and **drops the copy of `x`**. So every input pixel reads as
-`0`, the conv reduction accumulates `0`, and the output is bias only.
-Chained over four conv blocks the error propagates to the constant seen
-at the matmul.
+The confirmed mechanism is shown directly by the before/after IR of the
+conv-free minimal case (see `mlir_bug_report/BUG_REPORT.md`, which quotes
+both). The padded producer writes the buffer `%alloc` in two ops: an
+affine **fill** loop (pad value), then a non-affine **`memref.copy`** of
+the source into the interior subview. Because `memref.copy` is not an
+affine op, it is invisible to the affine producer/consumer dependence
+analysis. Fusion sinks the fill loop into the consumer loop and, in doing
+so, **moves the fill past the `memref.copy`** that writes the same buffer.
+The fused fill then re-writes the pad value over the interior the copy
+produced, and the consumer reads the pad value. The copy is not dropped --
+it is **clobbered by the reordered fill**.
 
-Conclusion: this is a **miscompilation in MLIR's affine
-producer-consumer loop fusion for a padded (multi-region-write)
-producer** -- upstream `affine-loop-fusion` is a known experimental /
-under-maintained pass. It is a real correctness bug in the transform, not
-a subtle illegality that Tensora's semantics failed to expose.
+For the padded conv the same class appears with an added twist (the fused
+producer buffer is also shrunk to a `1x1x1x1` slice that only holds the
+pad fill), so every input pixel reads `0`, the reduction accumulates `0`,
+and the output is bias only. Chained over four conv blocks the error
+reaches the constant at the matmul.
+
+Conclusion: a **miscompilation in MLIR's affine producer-consumer loop
+fusion** when a padded (`tensor.pad`-derived) producer is fused across the
+non-affine `memref.copy` that fills its interior. It is a real correctness
+bug in the transform (verifier-valid output, wrong result), not a subtle
+illegality that Tensora's semantics failed to expose. The behavioral
+evidence (2 vs 1) plus the before/after IR make it a direct demonstration,
+not just an inference.
 
 ## Consequence for the V0.3 research narrative (important, honest)
 
