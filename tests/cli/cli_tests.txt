@@ -32,3 +32,17 @@ INT-INDEP-MATMUL        | PASS=element\[0\] = 5   | --run @SRC@/tests/independen
 
 # New viz flag: post-optimization graph as Graphviz DOT.
 INT-VIZ-OPTDOT          | PASS=digraph TypedGraph | --emit-optimized-graph-dot @SRC@/examples/optimizations/dead_code.tns
+
+# --polyhedral (ARCH-018): lowers linalg through the MLIR affine dialect
+# and runs affine-loop-tile, instead of the default convert-linalg-to-loops.
+# Each row reuses the exact expected value of its INT-FULL-*-RUN twin above,
+# so a match proves the polyhedral path is numerically identical to the
+# default path, not just that it runs.
+INT-POLY-MLP-RUN        | PASS=element\[0\] = 145         | --polyhedral --run @SRC@/examples/mlp_concrete.tns
+INT-POLY-MM-RUN         | PASS=element\[0\] = 256         | --polyhedral --run @SRC@/examples/matmul_large.tns
+INT-POLY-CNN-RUN        | PASS=element\[0\] = 0.5         | --polyhedral --run @SRC@/examples/cnn.tns
+INT-POLY-ATTN-RUN       | PASS=element\[0\] = 1           | --polyhedral --run @SRC@/examples/attention.tns
+# The larger CNN is the one that exposed a real MLIR affine-loop-fusion bug
+# during the research spike (see docs/architecture/DECISIONS.md ARCH-018);
+# tiling (what ships here) is unaffected by that bug.
+INT-POLY-CNNSTL10-RUN   | PASS=element\[0\] = 1\.54144e\+12 | --polyhedral --run @SRC@/examples/cnn_stl10.tns

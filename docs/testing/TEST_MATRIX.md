@@ -387,6 +387,7 @@ either way.
 | INT-DATALOAD-MISSING | Driver `--data-dir` | a declared param has no `.npy` file | reject: clear error, nonzero exit | done — `WILL_FAIL` |
 | INT-DATALOAD-BADSHAPE | Driver `--data-dir` | a param's `.npy` shape != declared shape | reject: clear error, nonzero exit | done — `WILL_FAIL` |
 | INT-DATALOAD-BADDTYPE | Driver `--data-dir` | a param's `.npy` dtype is not float32 | reject: clear error, nonzero exit | done — `WILL_FAIL` |
+| INT-POLY-* | Driver `--polyhedral` (ARCH-018) | linalg lowered through the MLIR affine dialect + `affine-loop-tile`, instead of the default `convert-linalg-to-loops` | result matches the default path exactly | done — `INT-POLY-MLP-RUN`/`MM-RUN`/`CNN-RUN`/`ATTN-RUN`/`CNNSTL10-RUN` each reuse their `INT-FULL-*-RUN` twin's expected value, so a match proves the polyhedral path is numerically identical, not just that it runs. The generated LLVM IR differs (real transform, not a no-op); see ARCH-018 |
 
 The CLI driver (`tensora --emit-tokens/--emit-ast/--check/--emit-symbols/--emit-graph/--explain/--emit-mlir/--emit-llvm/--run/-o`)
 did not exist before this pass; building and testing it against real `.tns` source is what surfaced the LOW-005
