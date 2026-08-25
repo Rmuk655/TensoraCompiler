@@ -187,6 +187,27 @@ Each file's shape and dtype are checked against the program's declared
 tensor; a mismatch or missing file is a clear error. This is how the
 real-world demos below feed genuine weights and inputs.
 
+## Optional: the `--polyhedral` lowering path
+
+By default, `--run`/`-o`/`--emit-llvm` lower `linalg` straight to `scf`
+loops. Pass `--polyhedral` to lower `linalg` through the MLIR **affine**
+dialect instead, and run one real polyhedral pass (`affine-loop-tile`) on
+it before continuing to LLVM (ARCH-018):
+
+```bash
+./build/tensora --polyhedral --run examples/mlp_concrete.tns
+```
+
+This flag changes only how the program is compiled, not what it
+computes: on every runnable example, `--polyhedral --run` gives the exact
+same result as the plain `--run` (checked by the `INT-POLY-*` tests,
+`tests/cli/cli_tests.txt`). It exists to prove Tensora's output can drive
+a real polyhedral optimization, and to record one polyhedral pass
+(`affine-loop-fusion`) that gave a wrong result on a larger example — a
+bug in upstream MLIR, filed against LLVM/MLIR, not a Tensora defect. See
+`research/polyhedral_spike/` on the `v0.3-research` branch for the full
+finding.
+
 ## Run the real-world inference demos
 
 Three demos take recognizable real inputs through the full pipeline and

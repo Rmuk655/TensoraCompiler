@@ -566,3 +566,56 @@ it as before, now against STL-10. `docs/development/BUILD.md`,
 match; the CNN's multi-channel conv2d/maxpool and >7-input packed-JIT
 coverage (ARCH-016) is unchanged, since the architecture did not
 change.
+
+---
+
+## ARCH-018 — `--polyhedral` driver flag: an optional MLIR affine lowering path
+
+**Problem.** v0.1's standard lowering path sends `linalg` straight to
+`scf` loops (`convert-linalg-to-loops`). This path never builds an
+MLIR affine loop nest, so no MLIR pass that needs the affine dialect
+can run on Tensora's output. A research spike (`v0.3-research` branch)
+found that a small, optional change lets Tensora exercise the MLIR
+affine dialect and one real polyhedral pass, with no change to the
+language or to any existing behavior.
+
+**Decision.** Add a `--polyhedral` flag to the `tensora` driver. It is
+a modifier flag, like `--data-dir`, not a new pipeline stage. When set,
+the lowering pipeline runs `convert-linalg-to-affine-loops`, then
+`affine-loop-tile`, then `lower-affine`, then the normal `scf`-to-LLVM
+path, in place of the default `convert-linalg-to-loops`. Affine loop
+tiling is a standard, size-preserving polyhedral transform. The flag
+needs no CMake change, since the `tensora` target already links the
+full `MLIR` library.
+
+**Rationale — this uses no Tensora semantics.** The `--polyhedral` flag
+does not read any Tensora-specific fact (no axis role, no verified
+extent, no operator contract). It only runs stock MLIR passes on the
+same `linalg` IR v0.1 already emits. So it carries no research risk to
+v0.1: it is additive infrastructure, not a new claim about what Tensora
+knows. The open research question — whether a semantic fact from
+Tensora's type system can change a polyhedral decision that generic
+MLIR analysis cannot make on its own — stays a V0.3 question, tracked
+in `research/polyhedral_spike/SEMANTIC_POLYHEDRAL.md` on the
+`v0.3-research` branch, and is not part of this decision.
+
+**A rejected alternative — loop fusion.** The first version of this
+flag used `affine-loop-fusion`, the dependence-driven MLIR pass, in
+place of tiling. It gave a wrong result on the larger CNN example
+(`examples/cnn_stl10.tns`): a real miscompilation in upstream MLIR
+(`affine-loop-fusion` reorders a `tensor.pad` fill loop across the
+`memref.copy` that fills the padded region). The bug is filed upstream
+against LLVM/MLIR, with a minimal, dependency-free reproducer (see
+`research/polyhedral_spike/mlir_bug_report/` on the `v0.3-research`
+branch). Loop tiling does not use this MLIR code path, so it is not
+affected, and it is what this flag ships.
+
+**Consequences.** `INT-POLY-MLP-RUN`, `INT-POLY-MM-RUN`,
+`INT-POLY-CNN-RUN`, `INT-POLY-ATTN-RUN`, and `INT-POLY-CNNSTL10-RUN`
+(`tests/cli/cli_tests.txt`, documented in TEST_MATRIX.md) each reuse
+the exact expected value of their `INT-FULL-*-RUN` twin. A match proves
+the `--polyhedral` path gives the same numeric result as the default
+path, on every example that runs today, not only that it runs without
+error. The generated LLVM IR does differ under the flag (more branches,
+more lines), so this is a real transform, not a silent no-op. Without
+the flag, behavior and output are unchanged (`INT-FULL-*` still pass).

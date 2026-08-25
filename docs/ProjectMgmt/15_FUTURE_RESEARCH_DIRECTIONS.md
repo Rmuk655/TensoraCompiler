@@ -7,6 +7,92 @@ single-node runtime win to open-source that PyTorch does not already
 give. So these directions are framed as research, not as adoption
 claims.
 
+## 0. The reframed research question (read first)
+
+A review of the V0.2 spikes found that they establish that raggedness
+can matter, but they do **not** yet establish that Tensora has a
+research contribution. The directions below are **candidates to
+evaluate**, not commitments. Three corrections shape all of them:
+
+- **Do not pitch "Tensora does ragged" or "Tensora is faster than
+  PyTorch on ragged."** The spikes push against both. CoRa already
+  occupies "ragged compiler + generated kernels." PyTorch's jagged
+  `NestedTensor` already captures the tested Transformer region.
+- **The honest question is:** *is there a semantic property Tensora can
+  represent and verify that existing tensor compilers (TACO, Tiramisu,
+  DISTAL) do not make explicit, and does making it explicit measurably
+  change optimization, distribution, or correctness?* Raggedness becomes
+  one test case, not the whole thesis. The general categories to probe
+  are **axis independence**, **axis equivalence**, and **reduction
+  algebra**.
+- **Do not build the sub-polyhedral ragged scheduler yet.** First do the
+  capability matrix in §0.1, then pick the first workload with a genuine
+  gap — rather than retrofitting a scheduler onto the one gap
+  (`cumsum`/indexing) that happened to appear in the probe.
+
+### 0.1 First step: a capability matrix, before any building
+
+**The full matrix is built:** `research/ragged_spike/MATRIX.md` (on the
+`v0.3-research` branch).
+It found two candidate missing rows: **static semantic verification**
+(Tensora's only "yes", no other system has it) and **multiple
+independent ragged dimensions** (PyTorch jagged cannot represent it --
+tested; serving systems are single-ragged-axis). The small table below is
+the empirical PyTorch column from
+`research/ragged_spike/pytorch_nested/coverage_spike.py` (GPU, torch
+2.13); the other systems' cells in the full matrix are from papers, not
+runs.
+
+| workload | PyTorch nested (GPU) | PyTorch nested (CPU) | CoRa | TACO | Tiramisu | DISTAL |
+|---|---|---|---|---|---|---|
+| self / causal attention | OK | breaks (no backend) | ? | ? | ? | ? |
+| cross-attention (Q!=KV len) | OK | breaks | ? | ? | ? | ? |
+| KV-cache decode | **breaks** | breaks | ? | ? | ? | ? |
+| GQA / MQA | **breaks** | breaks | ? | ? | ? | ? |
+| two ragged dims | breaks | breaks | ? | ? | ? | ? |
+| autograd | OK | breaks | ? | ? | ? | ? |
+| torch.compile | OK | breaks | ? | ? | ? | ? |
+
+The empirical finding: core PyTorch's ragged path covers GPU dense-batch
+attention but breaks on the inference-serving path (KV-cache, GQA/MQA)
+and on CPU entirely. Those gaps are already served by specialized
+systems (vLLM, llama.cpp), so a research pitch must compare against
+those, not core PyTorch.
+
+Extend this with more real workloads (10-20). For each, record: what the
+programmer must specify manually, what can go wrong, what information is
+implicit, what optimization is hidden. Only a cell where every existing
+system (including the specialized ones) is weak is a real research
+opening.
+
+### 0.2 The five holes to close before claiming a contribution
+
+1. **No representation experiment.** Tensora's TCG does not yet carry
+   substantially more than shapes + op types. Show the extra facts
+   (independence, reduction algebra, ragged extent, axis identity) exist
+   in the IR and that an optimizer consumes them — not as comments.
+2. **No competing implementation.** Compare what each of Tensora, TACO,
+   Tiramisu, DISTAL, and PyTorch/Inductor can *express* before claiming a
+   missing capability.
+3. **No generated schedule.** Show the same computation, two schedules,
+   one chosen using semantic information, and the performance difference.
+4. **No difficult benchmark.** Attention is easy to dismiss (PyTorch
+   invested there). Find a ragged workload with an op `NestedTensor`
+   does not handle cleanly AND a meaningful iteration-space
+   optimization — and check it is actually important and expensive.
+5. **No user evidence.** Collect real ragged kernels and show what is
+   hard to express or easy to get wrong, before claiming verification is
+   valuable.
+
+### 0.3 raggedness is not sparsity (precise boundary)
+
+A ragged tensor is dense within each object but has data-dependent
+extents. It is not necessarily sparse in the TACO sense (no zero-valued
+structure). So "TACO supports sparse, therefore TACO solves ragged" is
+wrong, and so is the reverse. The precise research boundary is
+**irregular iteration spaces that are dense within each object but have
+data-dependent bounds.**
+
 ## The core thesis
 
 One idea unifies all of these: **semantic axis facts, statically
@@ -43,21 +129,23 @@ beat everywhere. If Tensora beats PyTorch in one narrow important regime
 
 ## Direction 1 — Semantic-guided distributed execution (strongest)
 
-The one direction V0.2's spikes could not dominate, because it is
-distributed. The analytical spike (`research/ragged_spike/shard_analysis.py`)
-showed a semantic fact decides communication cost: sharding the
-independent `batch` axis needs zero communication; sharding the
-`hidden` reduction axis needs a large all-reduce. Feed these facts
-(independence, reduction algebra, axis identity, distribution
-constraints) to a distributed mapper.
+The one direction V0.2's spikes could not dominate. Two spikes support
+it. `shard_analysis.py` modeled the communication; `dist_spike.py` then
+**measured** it, with real `torch.distributed` (gloo) collectives across
+the 22 CPU cores: sharding the independent `batch` axis needed zero
+communication; sharding the `hidden` reduction axis cost a real
+~11 ms/step all-reduce. The semantic fact predicts this before running.
+Feed these facts (independence, reduction algebra, axis identity,
+distribution constraints) to a distributed mapper.
 
 - Best fit: **DISTAL** (distributed tensor algebra; it already separates
   data distribution from computation scheduling). Tensora would supply
   a verified higher-level constraint system; DISTAL derives the machine
   mapping.
-- First step needs no cluster: emit chosen distribution, estimated
-  communication, estimated local work; compare against a search
-  baseline. A real speedup claim needs a real cluster later.
+- The hypothesis is already measured locally (co-located gloo, a lower
+  bound vs a real network). The remaining steps: scale the process
+  count, run on a real multi-node cluster, and compare against DISTAL's
+  own mapping -- that is where the real speedup claim is settled.
 
 ## Direction 2 — Semantic-guided polyhedral scheduling
 
@@ -71,7 +159,7 @@ priorities, rather than letting it rediscover them.
 - The professor's **sub-polyhedral (UTVPI) scheduling** (POPL 2013;
   IMPACT 2011/2012) is the technique for keeping that search fast.
 - Ragged/variable-length scheduling connects here; see
-  [`research/ragged_spike/V0.3_PITCH.md`](../../research/ragged_spike/V0.3_PITCH.md).
+  `research/ragged_spike/V0.3_PITCH.md` (on the `v0.3-research` branch).
 
 ## Direction 3 — Verification as the product
 
@@ -128,6 +216,27 @@ Metrics beyond runtime: transformations considered, transformations
 rejected, dependence analyses performed, IR rewrites, compile time,
 communication volume, kernel launches, memory traffic. These test the
 semantic-IR thesis more cleanly than trying to beat a GEMM kernel.
+
+## The question each existing system forces (answer crisply before pitching)
+
+A compiler professor will ask exactly these. The pitch must answer each,
+not restate the system:
+
+- **TACO** already separates *what is computed* from *how tensors are
+  stored*, over index notation, and generates the loops. Question: *what
+  does a semantic-axis layer add to TACO?* A ragged extent is an
+  iteration-bound property, not a storage-format property — that is a
+  candidate answer, but it must be shown, not asserted.
+- **Tiramisu** already separates *computation* from *schedule* in the
+  polyhedral model. Question: *"semantic facts → schedule" is the world
+  Tiramisu already lives in — what specifically is missing?* The novelty
+  cannot be the arrow itself.
+- **DISTAL** already separates *computation* from *distribution and
+  communication*. Question: *is there semantic information about
+  irregular/ragged iteration spaces that DISTAL cannot represent
+  conveniently or exploit correctly?* The `shard_analysis.py` insight is
+  what DISTAL was built to operationalize, so "semantic facts help
+  sharding" is far too broad.
 
 ## Prior art to cite (do not reinvent)
 

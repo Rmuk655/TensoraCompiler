@@ -571,8 +571,9 @@ void printUsage(const char* prog) {
             << "  --data-dir <dir>       with --run: load each input/weight from <dir>/<name>.npy\n"
             << "                         (float32) instead of synthetic all-ones data\n"
             << "  --output <out.npy>     with --run: write the full result tensor to a .npy file\n"
-            << "  --polyhedral           SPIKE: lower linalg through the affine dialect and run a\n"
-            << "                         polyhedral (dependence-driven) pass; see research/polyhedral_spike/\n";
+            << "  --polyhedral           lower linalg through the MLIR affine dialect and run\n"
+            << "                         affine-loop-tile instead of the default loop lowering\n"
+            << "                         (ARCH-018); same result, different generated code\n";
 }
 
 }  // namespace
@@ -583,10 +584,12 @@ int main(int argc, char** argv) {
   std::string outPath;
   std::string dataDir;   // --data-dir: where to read real input/weight .npy files
   std::string outputNpy; // --output: where to write the result tensor as .npy
-  // --polyhedral: SPIKE MODIFIER (spike/polyhedral branch, NOT in v0.1).
-  // It changes the linalg lowering to go through the MLIR affine dialect
-  // and run a polyhedral, dependence-analysis-driven pass. It is a
-  // modifier, like --data-dir, not a stage. See research/polyhedral_spike/.
+  // --polyhedral (ARCH-018): a modifier flag, like --data-dir, not a
+  // stage. It changes the linalg lowering to go through the MLIR affine
+  // dialect and run one polyhedral pass (affine-loop-tile). It uses no
+  // Tensora-specific semantics: it only runs stock MLIR passes on the
+  // same linalg IR the default path already emits, so it changes the
+  // generated code but not the result (checked by the INT-POLY-* tests).
   bool polyhedral = false;
   for (int i = 1; i < argc; ++i) {
     std::string arg = argv[i];
@@ -774,17 +777,17 @@ int main(int argc, char** argv) {
   bufOpts.functionBoundaryTypeConversion = mlir::bufferization::LayoutMapOption::FullyDynamicLayoutMap;
   pm.addPass(mlir::bufferization::createOneShotBufferizePass(bufOpts));
   if (polyhedral) {
-    // SPIKE (spike/polyhedral branch, NOT in v0.1): lower linalg into the
-    // MLIR affine dialect, then run a polyhedral pass. This is the
-    // in-compiler counterpart of research/polyhedral_spike/, which does the
-    // same through mlir-opt. LowerAffine turns the affine loops back into
-    // scf, then SCFToControlFlow continues to cf as usual.
+    // ARCH-018: lower linalg into the MLIR affine dialect, then run one
+    // polyhedral pass, instead of the default convert-linalg-to-loops.
+    // LowerAffine turns the affine loops back into scf, then
+    // SCFToControlFlow continues to cf as usual.
     //
-    // The pass here is affine loop TILING, a classic semantics-preserving
-    // polyhedral transform. Loop FUSION was tried first but produced a
-    // wrong result on the larger CNN (examples/cnn_stl10.tns): the
-    // dependence-driven fuser is not safe to apply blindly to every graph.
-    // See research/polyhedral_spike/README.md.
+    // The pass here is affine loop TILING, a size-preserving polyhedral
+    // transform. Loop FUSION was tried first but gave a wrong result on
+    // a larger example (examples/cnn_stl10.tns): a miscompilation in
+    // upstream MLIR's affine-loop-fusion, filed against LLVM/MLIR, not a
+    // Tensora bug. See research/polyhedral_spike/ (v0.3-research branch)
+    // for the full diagnosis.
     pm.addPass(mlir::createConvertLinalgToAffineLoopsPass());
     pm.addNestedPass<mlir::func::FuncOp>(mlir::affine::createLoopTilingPass());
     pm.addPass(mlir::createLowerAffinePass());

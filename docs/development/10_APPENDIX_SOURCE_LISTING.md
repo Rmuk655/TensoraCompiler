@@ -5443,6 +5443,7 @@ int main(int argc, char** argv) {
 #include "tensora/semantic/SemanticAnalyzer.h"
 
 #include "mlir/Conversion/Passes.h"
+#include "mlir/Dialect/Affine/Passes.h"
 #include "mlir/Dialect/Bufferization/Transforms/Passes.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/Linalg/Passes.h"
@@ -5991,7 +5992,10 @@ void printUsage(const char* prog) {
             << "\n"
             << "  --data-dir <dir>       with --run: load each input/weight from <dir>/<name>.npy\n"
             << "                         (float32) instead of synthetic all-ones data\n"
-            << "  --output <out.npy>     with --run: write the full result tensor to a .npy file\n";
+            << "  --output <out.npy>     with --run: write the full result tensor to a .npy file\n"
+            << "  --polyhedral           lower linalg through the MLIR affine dialect and run\n"
+            << "                         affine-loop-tile instead of the default loop lowering\n"
+            << "                         (ARCH-018); same result, different generated code\n";
 }
 
 }  // namespace
@@ -6002,6 +6006,13 @@ int main(int argc, char** argv) {
   std::string outPath;
   std::string dataDir;   // --data-dir: where to read real input/weight .npy files
   std::string outputNpy; // --output: where to write the result tensor as .npy
+  // --polyhedral (ARCH-018): a modifier flag, like --data-dir, not a
+  // stage. It changes the linalg lowering to go through the MLIR affine
+  // dialect and run one polyhedral pass (affine-loop-tile). It uses no
+  // Tensora-specific semantics: it only runs stock MLIR passes on the
+  // same linalg IR the default path already emits, so it changes the
+  // generated code but not the result (checked by the INT-POLY-* tests).
+  bool polyhedral = false;
   for (int i = 1; i < argc; ++i) {
     std::string arg = argv[i];
     if (arg == "-o" && i + 1 < argc) {
@@ -6011,6 +6022,8 @@ int main(int argc, char** argv) {
       dataDir = argv[++i];
     } else if (arg == "--output" && i + 1 < argc) {
       outputNpy = argv[++i];
+    } else if (arg == "--polyhedral") {
+      polyhedral = true;
     } else if (!arg.empty() && arg[0] == '-') {
       stage = arg;
     } else {
@@ -6185,8 +6198,26 @@ int main(int argc, char** argv) {
   bufOpts.allowReturnAllocsFromLoops = true;
   bufOpts.functionBoundaryTypeConversion = mlir::bufferization::LayoutMapOption::FullyDynamicLayoutMap;
   pm.addPass(mlir::bufferization::createOneShotBufferizePass(bufOpts));
-  pm.addPass(mlir::createConvertLinalgToLoopsPass());
-  pm.addPass(mlir::createSCFToControlFlowPass());
+  if (polyhedral) {
+    // ARCH-018: lower linalg into the MLIR affine dialect, then run one
+    // polyhedral pass, instead of the default convert-linalg-to-loops.
+    // LowerAffine turns the affine loops back into scf, then
+    // SCFToControlFlow continues to cf as usual.
+    //
+    // The pass here is affine loop TILING, a size-preserving polyhedral
+    // transform. Loop FUSION was tried first but gave a wrong result on
+    // a larger example (examples/cnn_stl10.tns): a miscompilation in
+    // upstream MLIR's affine-loop-fusion, filed against LLVM/MLIR, not a
+    // Tensora bug. See research/polyhedral_spike/ (v0.3-research branch)
+    // for the full diagnosis.
+    pm.addPass(mlir::createConvertLinalgToAffineLoopsPass());
+    pm.addNestedPass<mlir::func::FuncOp>(mlir::affine::createLoopTilingPass());
+    pm.addPass(mlir::createLowerAffinePass());
+    pm.addPass(mlir::createSCFToControlFlowPass());
+  } else {
+    pm.addPass(mlir::createConvertLinalgToLoopsPass());
+    pm.addPass(mlir::createSCFToControlFlowPass());
+  }
   pm.addPass(mlir::createConvertControlFlowToLLVMPass());
   pm.addPass(mlir::memref::createExpandStridedMetadataPass());
   pm.addPass(mlir::createLowerAffinePass());
@@ -9474,12 +9505,12 @@ diverge from what was actually built and tested.
 This repository is under git version control, hosted at
 [github.com/Rmuk655/TensoraCompiler](https://github.com/Rmuk655/TensoraCompiler)
 (`origin`, branch `main`). Base commit at generation time:
-`bdad96c67f2c9709c1c8ce057fa4c13286eee967`. The concatenation itself
+`0f99861d1bdc371de1999969835cb6e90ddd86fb`. The concatenation itself
 reflects the working tree at generation time, which may include
 changes made after that commit and not yet committed -- the manifest
 and file contents above are the authoritative record either way, since
 they are read directly from disk, not from git history. Generation
-date: 2026-08-24. The 183 CTest cases passing at generation time are
+date: 2026-08-25. The 183 CTest cases passing at generation time are
 the authoritative record of what this listing implements; see
 [docs/testing/TEST_MATRIX.md](../testing/TEST_MATRIX.md) and
 [docs/development/CHANGELOG.md](CHANGELOG.md).
