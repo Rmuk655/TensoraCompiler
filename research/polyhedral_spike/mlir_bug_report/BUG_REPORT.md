@@ -2,84 +2,74 @@
 
 Submit at: https://github.com/llvm/llvm-project/issues (label: `mlir`).
 This draft is NOT submitted automatically -- review it, then post it under
-your own account. `repro.mlir` in this directory is the self-contained
-reproducer (standard dialects only; no Tensora needed).
+your own account.
+
+Reproducers in this directory (standard dialects only, no Tensora):
+- `repro_minimal.mlir` -- **headline**: `tensor.pad` -> elementwise add,
+  no conv, no reduction.
+- `repro.mlir` -- the original discovery: a single padded `conv2d`.
 
 ---
 
-**Title:** [mlir][affine] affine-loop-fusion (producer-consumer)
-miscompiles a `tensor.pad` producer: drops the interior copy, keeps only
-the pad value
+**Title:** [mlir][affine] affine-loop-fusion miscompiles a `tensor.pad`
+producer: the interior copy is dropped, consumer reads the pad value
 
 **Summary**
 
-`-affine-loop-fusion` in producer-consumer mode produces wrong results
-when the fused producer writes its buffer in two regions -- the pattern
-that a padded convolution lowers to (`tensor.pad` = fill the whole buffer
-with the pad value, then copy the source into the interior). After fusion
-the consumer reads only the pad value; the interior copy is dropped, so
-every "interior" element reads as the padding constant.
+`-affine-loop-fusion` produces wrong results when it fuses a `tensor.pad`
+producer into its consumer. `tensor.pad` bufferizes to a producer that
+writes its destination in two regions: fill the whole buffer with the pad
+value, then copy the source into the interior. After producer-consumer
+fusion the consumer reads only the pad value -- the interior copy is
+dropped -- so every interior element reads as the padding constant.
 
-Reduced to the minimal trigger: a single `linalg.conv_2d_nchw_fchw` whose
-input is a `tensor.pad`. Sibling-mode fusion is fine; only
-producer-consumer fusion is affected. A convolution with no padding (no
-`tensor.pad`) fuses correctly.
+This affects the default (greedy) mode and `mode=producer`.
+`mode=sibling` is unaffected.
 
 **Environment**
 
-- LLVM/MLIR 21.1.8 (Ubuntu package `llvm-21`). Also seen with the default
-  greedy fusion mode.
+- LLVM/MLIR 21.1.8 (Ubuntu package `llvm-21`).
 
-**Reproducer** (`repro.mlir`: all-ones `1x1x8x8` input, `1x1x3x3`
-all-ones kernel, bias 1.0, `padding=1`; `@main` prints output element
-`[0,0,0,0]`, a corner = 4 taps + bias = **5**).
-
-Correct (no fusion) -- prints `5`:
+**Minimal reproducer** (`repro_minimal.mlir`): pad an all-ones `8x8`
+input to `10x10` (pad value 0), then add `1.0` elementwise. `@main`
+prints interior element `[1,1]`, which maps to `input[0,0] = 1`, so the
+result must be `1 + 1 = 2`.
 
 ```
-mlir-opt repro.mlir \
-  -one-shot-bufferize=bufferize-function-boundaries \
-  -convert-linalg-to-affine-loops \
-  -lower-affine -expand-strided-metadata -convert-scf-to-cf \
+OPT="-one-shot-bufferize=bufferize-function-boundaries -convert-linalg-to-affine-loops"
+TAIL="-lower-affine -expand-strided-metadata -convert-scf-to-cf \
   -finalize-memref-to-llvm -convert-vector-to-llvm -convert-func-to-llvm \
   -convert-arith-to-llvm -convert-index-to-llvm -convert-cf-to-llvm \
-  -reconcile-unrealized-casts \
-| mlir-runner -e main -entry-point-result=void \
-  -shared-libs=$LLVM/lib/libmlir_runner_utils.so,$LLVM/lib/libmlir_c_runner_utils.so
-# => 5
+  -reconcile-unrealized-casts"
+L=$(llvm-config --libdir)
+RUN="mlir-runner -e main -entry-point-result=void \
+  -shared-libs=$L/libmlir_runner_utils.so,$L/libmlir_c_runner_utils.so"
+
+mlir-opt repro_minimal.mlir $OPT                     $TAIL | $RUN   # => 2 (correct)
+mlir-opt repro_minimal.mlir $OPT -affine-loop-fusion $TAIL | $RUN   # => 1 (wrong)
 ```
 
-Wrong (add producer-consumer fusion) -- prints `1` (bias only):
-
-```
-mlir-opt repro.mlir \
-  -one-shot-bufferize=bufferize-function-boundaries \
-  -convert-linalg-to-affine-loops \
-  -affine-loop-fusion=mode=producer \
-  ...same tail... 
-# => 1
-```
-
-**Expected**: both print `5`.
-**Actual**: with producer-consumer fusion it prints `1`.
+**Expected**: both print `2`.
+**Actual**: with fusion it prints `1` (the interior element reads the pad
+value `0`, then `+1`).
 
 **Analysis**
 
-`tensor.pad` bufferizes to a producer that writes the destination in two
-regions: a full `linalg.fill` with the pad value, then a copy of the
-source into the interior. When producer-consumer fusion computes the
-per-iteration source slice and sinks the producer into the conv reduction
-nest, the generated slice keeps only the pad `linalg.fill`
-(`affine.store %pad, %slice[0,0,0,0]` immediately reloaded) and omits the
-interior copy of the real input. So each input read returns the pad
-constant (0), the reduction accumulates 0, and the result is bias only.
+`tensor.pad` bufferizes to a producer with two disjoint write regions:
+a full fill with the pad value and a copy of the source into the interior.
+When producer-consumer fusion computes the per-iteration slice of that
+producer and sinks it into the consumer, the generated slice keeps only
+the pad fill and omits the interior copy. So each consumer read returns
+the pad constant.
 
-Confirmed by inspecting the fused IR: the conv's input load reads a
-`memref<1x1x1x1xf32>` that is only ever written with the pad constant.
+Confirmed by inspecting the fused IR on the conv variant (`repro.mlir`):
+the fused input load reads a `memref<1x1x1x1xf32>` that is only ever
+written with the pad constant. Likely the fusion slice/legality logic
+does not handle a producer with multiple disjoint write regions
+(partial-store init + interior copy).
 
-**Notes**
-
-- Sibling-mode fusion (`mode=sibling`) is unaffected.
-- Likely the fusion slice/legality computation does not account for a
-  producer with multiple disjoint write regions (partial-store init +
-  interior copy).
+**Original context** (`repro.mlir`): found in a convolution pipeline. A
+single `linalg.conv_2d_nchw_fchw` on a `tensor.pad` input (`padding=1`,
+all-ones) should give a corner output of `4 + bias(1) = 5`; with
+producer-consumer fusion it gives `1` (bias only). A convolution with no
+padding (no `tensor.pad`) fuses correctly.
