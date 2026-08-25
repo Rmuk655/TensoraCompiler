@@ -32,34 +32,34 @@ the gap Tensora's verification fills. Upstreaming a generically-useful
 piece to StableHLO (via `custom_call` first, then an RFC) is a possible
 long-term outcome, not a V0.3 goal.
 
-## Two StableHLO paths: keep the career goal off the research risk
+## Two StableHLO paths: keep the career goal apart from the research risk
 
-Contributing to StableHLO is a stated personal goal (open-source standing
-/ industry). Do not couple it to whether the V0.3 research lands. There
-are two very different paths, and the safe one should run regardless.
+To contribute to StableHLO is a personal goal (open-source standing and
+industry). Do not tie it to the success of the V0.3 research. There are
+two paths. The safe path must run in all cases.
 
-- **Path A -- contribute to StableHLO directly, now (low risk, high
-  certainty).** StableHLO is community-driven with an active RFC/opset
-  process and a steady flow of ecosystem PRs (verifier fixes,
-  decompositions, transforms, tests, docs). Pick up ordinary
-  contributions independent of Tensora. This **reliably** establishes
-  contributor standing whether or not the research succeeds. It is a
-  parallel track, not a V0.3 deliverable.
-- **Path B -- upstream a new abstraction discovered via V0.3 (high risk,
-  research-gated).** Only viable if the research finds a genuinely generic
-  missing piece (e.g. a verified `lengths` <-> `cu_seqlens` relationship),
-  it proves useful to XLA/IREE, and it clears StableHLO's high bar
-  (5-year back / 2-year forward compatibility, RFC, positive + negative +
-  compatibility tests). Reach it through the disciplined
-  `custom_call` -> RFC path, and only after the A/B experiment
-  ([PROPOSAL.md](PROPOSAL.md)) shows the fact changes generated code.
+- **Path A: contribute to StableHLO directly, now. Low risk, high
+  certainty.** The StableHLO community is active. It has an RFC and opset
+  process and a steady flow of contributions (verifier fixes,
+  decompositions, transforms, tests, docs). Take ordinary contributions
+  that do not depend on Tensora. This path builds contributor standing in
+  all cases. It is a parallel track, not a V0.3 deliverable.
+- **Path B: upstream a new abstraction found through V0.3. High risk, and
+  it depends on the research.** This path works only if the research finds
+  a generic missing piece, for example a verified link between `lengths`
+  and `cu_seqlens`. The piece must help XLA and IREE. And it must meet the
+  StableHLO bar (5-year back and 2-year forward compatibility, an RFC, and
+  positive, negative, and compatibility tests). Use the `custom_call`
+  path first, then the RFC. Do this only after the A/B experiment
+  ([PROPOSAL.md](PROPOSAL.md)) shows that the fact changes the generated
+  code.
 
-Do **not** make "contribute to StableHLO" a V0.3 objective. Start Path A
-immediately for the credential; treat Path B as the aspirational outcome.
-The MLIR affine-fusion bug found in the polyhedral spike
-(`../polyhedral_spike/FUSION_DIAGNOSIS.md`) is a concrete, low-risk
-example of the same Path-A idea for the MLIR project: a clean upstream
-contribution that needs no research to succeed.
+Do not make "contribute to StableHLO" a V0.3 objective. Start Path A now,
+for the credential. Treat Path B as the far goal. The MLIR affine-fusion
+bug from the polyhedral spike
+(`../polyhedral_spike/FUSION_DIAGNOSIS.md`) is a concrete Path-A example
+for the MLIR project. It is a clean upstream contribution that needs no
+research to succeed.
 
 Target UX (Futhark-style FFI/module boundary):
 
