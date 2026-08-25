@@ -43,29 +43,33 @@ and no rebuild.
    optimization". It uses the installed LLVM/MLIR 21 `mlir-opt`
    (`/usr/lib/llvm-21/bin`).
 2. The in-compiler `--polyhedral` flag adds the same idea inside the
-   driver. It is done and tested. See below.
+   driver. It is now merged into `main` (v0.1). See below.
 
-All files here are on the `v0.3-research` branch. `main` keeps only the
-frozen v0.1 compiler and the roadmap.
+This file and the other files in this directory stay on the
+`v0.3-research` branch. `main` holds only the frozen v0.1 compiler and
+the roadmap, plus the merged `--polyhedral` flag described next.
 
-## In-compiler result (`--polyhedral` flag)
+## In-compiler result (`--polyhedral` flag) — now in `main`
 
-A `--polyhedral` flag was added to the `tensora` driver on the
-`v0.3-research` branch, so the graded v0.1 on `main` stays frozen. The
-change is small and additive (`src/driver/main.cpp` only, no CMake
-change, because the driver already links the aggregate `MLIR` library).
-With the flag, the linalg lowering goes `convert-linalg-to-affine-loops`,
-then `affine-loop-tile`, then `lower-affine`, then scf, then LLVM. Without
-the flag, it uses `convert-linalg-to-loops`.
+The `--polyhedral` flag started as a spike on this branch. It uses no
+Tensora-specific semantics — it only runs stock MLIR passes on the same
+`linalg` IR the default path already emits — so it carried no research
+risk, and it is now merged into `main` (v0.1) as **ARCH-018**
+(`docs/architecture/DECISIONS.md`). The flag, its usage text, and its
+correctness tests all live in `main` now, not here:
 
-Verified with `test_polyhedral_parity.sh`:
+- The flag itself: `src/driver/main.cpp` (`main`).
+- The correctness check: `tests/cli/cli_tests.txt`, the `INT-POLY-*`
+  CTest cases (`main`). Each reuses its `INT-FULL-*-RUN` twin's expected
+  value, so a pass proves `--polyhedral --run` is numerically identical
+  to the default `--run`, on mlp, matmul, cnn, attention, and the larger
+  `cnn_stl10`.
+- The decision record: ARCH-018.
+- User docs: `README.md` and `docs/development/BUILD.md` (`main`).
 
-- Correctness: for all 7 runnable examples (mlp, cnn, attention, matmul,
-  and more), `--polyhedral --run` gives a result that is numerically
-  identical to the default `--run` (exact, `np.array_equal`).
-- Real transform, not a no-op: the LLVM IR differs. For `mlp_concrete` it
-  goes from 416 to 598 lines and 42 to 84 branches. For `matmul_large` it
-  goes from 312 to 338 lines and 24 to 30 branches.
+This directory keeps only what is genuinely research, not shipped: the
+`mlir-opt`-only pipeline above (`polyhedral_pipeline.sh`), the fusion
+finding below, and the performance sweep.
 
 ### Finding: dependence-driven fusion was not safe here
 
