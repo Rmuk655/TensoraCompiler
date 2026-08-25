@@ -57,9 +57,9 @@ two paths. The safe path must run in all cases.
 Do not make "contribute to StableHLO" a V0.3 objective. Start Path A now,
 for the credential. Treat Path B as the far goal. The MLIR affine-fusion
 bug from the polyhedral spike
-(`../polyhedral_spike/FUSION_DIAGNOSIS.md`) is a concrete Path-A example
-for the MLIR project. It is a clean upstream contribution that needs no
-research to succeed.
+(`../polyhedral_spike/mlir_bug_report/`, already filed) is a concrete
+Path-A example for the MLIR project. It is a clean upstream contribution
+that needs no research to succeed.
 
 Target UX (Futhark-style FFI/module boundary):
 
