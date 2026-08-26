@@ -85,7 +85,12 @@ users at all?**
     commercially available compilers cannot already reach on their own?
     §2 already rules out the easy versions of this claim; what remains
     is narrow and still unproven. The candidate questions below (A-F)
-    are this part's detail, with F corrected to match that finding.
+    are this part's detail, with F corrected to match that finding. A
+    seventh candidate, on the branch only, asks whether generalizing
+    Tensora's fixed operator set to Tensor-Comprehensions-style verified
+    index notation pays for its own cost (`research/tc_integration/PROPOSAL.md`
+    on `v0.3-research`; TC itself is archived and was never in core
+    PyTorch or vLLM, so this tests the idea, not the dead project).
 -   **1b. PyTorch-native embedding (research and engineering).**
     Tensora cannot compete with PyTorch's low-level kernels (§9.1/§9.4),
     so any real value must be delivered *above* that layer, embedded as
