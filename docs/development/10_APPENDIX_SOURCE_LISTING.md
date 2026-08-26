@@ -9505,12 +9505,12 @@ diverge from what was actually built and tested.
 This repository is under git version control, hosted at
 [github.com/Rmuk655/TensoraCompiler](https://github.com/Rmuk655/TensoraCompiler)
 (`origin`, branch `main`). Base commit at generation time:
-`0f99861d1bdc371de1999969835cb6e90ddd86fb`. The concatenation itself
+`5af145b0150640599b24a20c21c62bb42dc7f01d`. The concatenation itself
 reflects the working tree at generation time, which may include
 changes made after that commit and not yet committed -- the manifest
 and file contents above are the authoritative record either way, since
 they are read directly from disk, not from git history. Generation
-date: 2026-08-25. The 183 CTest cases passing at generation time are
+date: 2026-08-26. The 183 CTest cases passing at generation time are
 the authoritative record of what this listing implements; see
 [docs/testing/TEST_MATRIX.md](../testing/TEST_MATRIX.md) and
 [docs/development/CHANGELOG.md](CHANGELOG.md).
