@@ -90,7 +90,12 @@ users at all?**
     Tensora's fixed operator set to Tensor-Comprehensions-style verified
     index notation pays for its own cost (`research/tc_integration/PROPOSAL.md`
     on `v0.3-research`; TC itself is archived and was never in core
-    PyTorch or vLLM, so this tests the idea, not the dead project).
+    PyTorch or vLLM, so this tests the idea, not the dead project). An
+    eighth, sibling candidate asks whether an explicit, searched
+    schedule object (the algorithm/schedule split TC, Halide, and TVM
+    all use) -- pruned by Tensora's own verified facts -- beats a fixed
+    heuristic (`research/schedule_search/PROPOSAL.md` on
+    `v0.3-research`).
 -   **1b. PyTorch-native embedding (research and engineering).**
     Tensora cannot compete with PyTorch's low-level kernels (§9.1/§9.4),
     so any real value must be delivered *above* that layer, embedded as
