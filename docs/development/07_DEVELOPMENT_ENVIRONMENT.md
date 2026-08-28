@@ -132,7 +132,8 @@ tensora/
 │   ├── setup-dev.sh                one-time bootstrap: runs check-deps.sh, prints next steps
 │   └── regen_appendix.py           regenerates 10_APPENDIX_SOURCE_LISTING.md (`make appendix`)
 ├── examples/
-│   └── mlp.tns, mlp_concrete.tns, cnn.tns, attention.tns, matmul_large.tns
+│   └── mlp.tns, mlp_concrete.tns, cnn.tns, attention.tns, matmul_large.tns,
+│       transformer_ffn.tns, transformer_ffn_concrete.tns
 ├── docs/
 └── CMakeLists.txt
 ```
