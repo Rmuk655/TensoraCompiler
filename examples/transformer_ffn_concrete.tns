@@ -1,0 +1,22 @@
+# A Transformer feed-forward block with concrete dimensions (used to
+# demo --run/-o, which do not yet support symbolic dimensions -- see
+# transformer_ffn.tns for the symbolic-shape version matching
+# docs/language/00_WHITEPAPER.md Section 10.3 exactly). Shapes are
+# shrunk for a fast --run, the same way mlp_concrete.tns shrinks
+# mlp.tns; the op sequence (linear -> relu -> linear) is unchanged.
+#
+# --run uses synthetic all-ones input/weights, so by hand:
+#   h[i,j]   = model(8)*1*1 + b1(1)        = 9      (relu: unchanged)
+#   y[i,j]   = hidden(32)*9 + b2(1)        = 289
+input  x:  Tensor[batch=2, seq=3, model=8]
+weight W1: Tensor[in=8, out=32]
+weight b1: Tensor[out=32]
+weight W2: Tensor[in=32, out=8]
+weight b2: Tensor[out=8]
+
+graph transformer_ffn {
+    h = linear(x, W1, b1)   # [batch=2, seq=3, out=32]
+    h = relu(h)             # [batch=2, seq=3, out=32]
+    y = linear(h, W2, b2)   # [batch=2, seq=3, out=8]
+    return y
+}
