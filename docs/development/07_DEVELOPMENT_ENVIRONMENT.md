@@ -24,7 +24,7 @@ so the Parser boundary in `INTERFACES.md` §2 can use `std::span`.
 
 Frozen choice: **ANTLR4** generates both the lexer and parser from one
 grammar (see architecture ADR ARCH-011 in
-[`docs/architecture/DECISIONS.md`](../architecture/DECISIONS.md)). This course teaches lexer/parser
+[`docs/architecture/DECISIONS.md`](../architecture/DECISIONS.md)). This academic compiler teaches lexer/parser
 generators and grammar-driven code generation, so an ANTLR frontend
 shows graded frontend-generator theory directly, with a small amount of
 hand-integrated generator glue for a new student to trace through

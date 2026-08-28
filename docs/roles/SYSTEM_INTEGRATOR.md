@@ -192,10 +192,10 @@ v0.2-lexer
 v0.3-parser
 v0.4-semantics
 v0.5-backend
-v1.0-course-final
+v1.0-academic-final
 ```
 
-Names can be adjusted, but course milestones must be reproducible.
+Names can be adjusted, but academic compiler milestones must be reproducible.
 
 ## Reproducibility
 
@@ -238,7 +238,7 @@ make format
 
 or equivalent scripts.
 
-The course explicitly expects an integration environment and Makefile/tooling where appropriate. The command names may differ, but the workflow must be one-command/simple.
+The academic compiler explicitly expects an integration environment and Makefile/tooling where appropriate. The command names may differ, but the workflow must be one-command/simple.
 
 ## CI and Formatting
 

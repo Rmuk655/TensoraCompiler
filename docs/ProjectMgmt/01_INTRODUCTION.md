@@ -34,7 +34,7 @@ Tensora
  -> Native CPU Execution
 ```
 
-The semester backend targets forward computation suitable for inference.
+This academic compiler's backend targets forward computation suitable for inference.
 Training and automatic differentiation are outside the required scope.
 
 ## 1.3 Why a Domain-Specific Language?

@@ -329,7 +329,7 @@ MLIR GPU
 LLVM-only experimental backend
 ```
 
-The semester requires only the agreed primary backend.
+The academic compiler requires only the agreed primary backend.
 
 ## Diagnostics
 

@@ -10,22 +10,26 @@
 - **Result**: `accept` (compiles clean) or `reject` (+ expected `DiagCode`).
 - **Kind**: `V` valid, `N` near-miss valid, `X` invalid.
 - IDs are stable and referenced by the corpus and regression log.
+- **Test**: link to the file (and line, where the case is a single named
+  `CASE`) that implements the row. `—` means no case exists yet
+  (`Status: planned`) or the row is a multi-file/aggregate claim
+  described in the prose below its table.
 
 ## Frontend — Lexer (RM 3.1)
 
-| ID | RM | Kind | Case | Result | Status |
-|----|----|------|------|--------|--------|
-| LEX-001 | 3.1 | V | keywords + identifiers, incl. keyword-prefix maximal munch | tokens | done |
-| LEX-002 | 3.1 | V | int and float literal values, incl. leading-zero int | tokens | done |
-| LEX-003 | 3.1 | V | every operator/delimiter, spaced | tokens | done |
-| LEX-004 | 3.1 | V | every operator/delimiter with no whitespace (adjacency) | tokens | done |
-| LEX-005 | 3.1 | V | comment variants (empty, no-newline, back-to-back, contents ignored) | tokens | done |
-| LEX-006 | 3.1 | V | whitespace/newline insensitivity across separator styles | kinds equal | done |
-| LEX-007 | 3.1 | X | malformed floats `3.` `.5` `3.x` `1..2` | reject: LexIllegalChar | done |
-| LEX-008 | 3.1 | X | illegal-char variety incl. 7 in a row; scanning continues | reject: LexIllegalChar | done |
-| LEX-009 | 3.1 | V | `SourceSpan` line/col/offset incl. tabs + CRLF; lexeme == source slice | spans correct | done |
-| LEX-010 | 3.1 | V | full representative program, golden token-kind dump | tokens | done |
-| LEX-011 | 3.1 | X | int literal at/over int64 max (LANG-001; fixed REG-001) | reject: LexIntegerOverflow | done |
+| ID | RM | Kind | Case | Result | Status | Test |
+|----|----|----|----|----|----|----|
+| LEX-001 | [3.1](../language/03_LANGUAGE_REFERENCE_MANUAL.md#31-lexical-structure) | V | keywords + identifiers, incl. keyword-prefix maximal munch | tokens | done | [test_lexer.cpp:46](../../tests/lexer/test_lexer.cpp#L46) |
+| LEX-002 | [3.1](../language/03_LANGUAGE_REFERENCE_MANUAL.md#31-lexical-structure) | V | int and float literal values, incl. leading-zero int | tokens | done | [test_lexer.cpp:72](../../tests/lexer/test_lexer.cpp#L72) |
+| LEX-003 | [3.1](../language/03_LANGUAGE_REFERENCE_MANUAL.md#31-lexical-structure) | V | every operator/delimiter, spaced | tokens | done | [test_lexer.cpp:87](../../tests/lexer/test_lexer.cpp#L87) |
+| LEX-004 | [3.1](../language/03_LANGUAGE_REFERENCE_MANUAL.md#31-lexical-structure) | V | every operator/delimiter with no whitespace (adjacency) | tokens | done | [test_lexer.cpp:106](../../tests/lexer/test_lexer.cpp#L106) |
+| LEX-005 | [3.1](../language/03_LANGUAGE_REFERENCE_MANUAL.md#31-lexical-structure) | V | comment variants (empty, no-newline, back-to-back, contents ignored) | tokens | done | [test_lexer.cpp:128](../../tests/lexer/test_lexer.cpp#L128) |
+| LEX-006 | [3.1](../language/03_LANGUAGE_REFERENCE_MANUAL.md#31-lexical-structure) | V | whitespace/newline insensitivity across separator styles | kinds equal | done | [test_lexer.cpp:173](../../tests/lexer/test_lexer.cpp#L173) |
+| LEX-007 | [3.1](../language/03_LANGUAGE_REFERENCE_MANUAL.md#31-lexical-structure) | X | malformed floats `3.` `.5` `3.x` `1..2` | reject: LexIllegalChar | done | [test_lexer.cpp:198](../../tests/lexer/test_lexer.cpp#L198) |
+| LEX-008 | [3.1](../language/03_LANGUAGE_REFERENCE_MANUAL.md#31-lexical-structure) | X | illegal-char variety incl. 7 in a row; scanning continues | reject: LexIllegalChar | done | [test_lexer.cpp:240](../../tests/lexer/test_lexer.cpp#L240) |
+| LEX-009 | [3.1](../language/03_LANGUAGE_REFERENCE_MANUAL.md#31-lexical-structure) | V | `SourceSpan` line/col/offset incl. tabs + CRLF; lexeme == source slice | spans correct | done | [test_lexer.cpp:266](../../tests/lexer/test_lexer.cpp#L266) |
+| LEX-010 | [3.1](../language/03_LANGUAGE_REFERENCE_MANUAL.md#31-lexical-structure) | V | full representative program, golden token-kind dump | tokens | done | [test_lexer.cpp:311](../../tests/lexer/test_lexer.cpp#L311) |
+| LEX-011 | [3.1](../language/03_LANGUAGE_REFERENCE_MANUAL.md#31-lexical-structure) | X | int literal at/over int64 max (LANG-001; fixed REG-001) | reject: LexIntegerOverflow | done | [test_lexer.cpp:359](../../tests/lexer/test_lexer.cpp#L359) |
 
 Boundary cases for RM 3.1 are tracked as `BND-LEX-*` in the Boundary
 section below (empty file, comments-only file, token at EOF, first-token
@@ -40,40 +44,40 @@ and no error-recovery or grammar-fidelity (decl\* before graphDecl+)
 cases, so it did not meet 08_TEST_PLAN.md's "exhaustive when: every AST
 production has a direct test" criterion (§2a Unit).
 
-| ID | RM | Kind | Case | Result | Status |
-|----|----|------|------|--------|--------|
-| PAR-001 | 3.2, 3.24 | V | MLP program (whitepaper 10.1) -> AST golden | ast | done |
-| PAR-002 | 3.2, 3.24 | V | CNN program (whitepaper 10.2) -> AST golden | ast | done |
-| PAR-003 | 3.2, 3.24 | V | Transformer FFN program (whitepaper 10.3) -> AST golden | ast | done |
-| PAR-004 | 3.2, 3.24 | V | multi-head attention program (whitepaper 10.4) -> AST golden | ast | done |
-| PAR-005 | 3.3 | V | `tensorType`/`axis`: 1 axis, 2 axes, 4 axes; concrete and symbolic `dimSize` | ast | done |
-| PAR-006 | 3.2 | V | `decl`: `inputDecl` alone, `weightDecl` alone, both, multiple of each | ast | done |
-| PAR-007 | 3.2, 3.24 | V | `program`: multiple `graphDecl`s (`graphDecl+` repetition) | ast | done |
-| PAR-008 | 3.2 | V | `statement`: two statements with no terminator; a bare-identifier statement (`y = h`) | ast | done |
-| PAR-009 | 3.24 | V | `expression`/`binop`: each of `@ + - * /` with identifier and float-literal `operand` | ast | done |
-| PAR-010 | 3.24 | V | `callExpr`: one positional arg, multiple positional args | ast | done |
-| PAR-011 | 3.24 | V | `arg` kinds: keyword arg (int value), keyword arg (identifier value), reshape axis-list arg, all three mixed in one call | ast | done |
-| PAR-012 | 3.12, 3.14, 3.24 | V | `argValue` kinds: `intLit` (`stride=1`), identifier (`axis=kseq`), `intList` (`perm=[0,1,3,2]`) | ast | done |
-| PAR-013 | 3.16, 3.24 | V | `conv2d`-shaped call: multiple positional + multiple keyword args together | ast | done |
-| PAR-014 | 3.2 | X | missing `=` in a statement | reject: ParseExpected | done |
-| PAR-015 | 3.3 | X | missing `]` closing a `tensorType` | reject: ParseExpected | done |
-| PAR-016 | 3.3 | X | missing `[` opening a `tensorType` | reject: ParseExpected | done |
-| PAR-017 | 3.3 | X | empty `tensorType` (`Tensor[]`; `axis` list requires >= 1) | reject: ParseExpected | done |
-| PAR-018 | 3.3 | X | missing `=` in an `axis` | reject: ParseExpected | done |
-| PAR-019 | 3.2, 3.24 | X | `graphDecl` missing `returnStmt` before `}` | reject: ParseExpected | done |
-| PAR-020 | 3.2 | X | `graphDecl` missing closing `}` | reject: ParseExpected | done |
-| PAR-021 | 3.24 | X | `returnStmt` missing its identifier | reject: ParseExpected | done |
-| PAR-022 | 3.24 | X | zero-arg call (`relu()`; `arg` list requires >= 1) | reject: ParseExpected | done |
-| PAR-023 | 3.24 | X | missing closing `)` on a call | reject: ParseExpected | done |
-| PAR-024 | 3.24 | X | trailing comma in an arg list (`relu(h,)`) | reject: ParseExpected | done |
-| PAR-025 | 3.24 | X | keyword arg with no value (`stride=)`) | reject: ParseExpected | done |
-| PAR-026 | 3.2, 3.24 | X | a `decl` after a `graphDecl` (violates `decl* graphDecl+` ordering) | reject: ParseExpected | done |
-| PAR-027 | 3.2, 3.24 | X | a program with zero `graphDecl`s (`graphDecl+` requires >= 1) | reject: ParseExpected | done |
-| PAR-028 | recovery | X | two independent syntax errors in different sections (one in a `decl`, one in a graph body) both reported | 2 diagnostics | done |
-| PAR-029 | recovery | X | two independent malformed statements in the same graph body both reported | 2 diagnostics | done |
-| PAR-030 | span | X | a missing-token diagnostic's `SourceSpan` (line/col) points at the actual offending token | span correct | done |
-| PAR-031 | regression | X | bare int literal as a binop operand (BUG-002/REG-002: used to segfault) | reject: diagnostic, not a crash | done |
-| PAR-032 | regression | X | illegal axis `dimSize` token (BUG-003/REG-003: used to segfault) | reject: diagnostic, not a crash | done |
+| ID | RM | Kind | Case | Result | Status | Test |
+|----|----|----|----|----|----|----|
+| PAR-001 | [3.2](../language/03_LANGUAGE_REFERENCE_MANUAL.md#32-program-structure), [3.24](../language/03_LANGUAGE_REFERENCE_MANUAL.md#324-grammar-summary) | V | MLP program (whitepaper 10.1) -> AST golden | ast | done | [test_parser.cpp:45](../../tests/parser/test_parser.cpp#L45) |
+| PAR-002 | [3.2](../language/03_LANGUAGE_REFERENCE_MANUAL.md#32-program-structure), [3.24](../language/03_LANGUAGE_REFERENCE_MANUAL.md#324-grammar-summary) | V | CNN program (whitepaper 10.2) -> AST golden | ast | done | [test_parser.cpp:91](../../tests/parser/test_parser.cpp#L91) |
+| PAR-003 | [3.2](../language/03_LANGUAGE_REFERENCE_MANUAL.md#32-program-structure), [3.24](../language/03_LANGUAGE_REFERENCE_MANUAL.md#324-grammar-summary) | V | Transformer FFN program (whitepaper 10.3) -> AST golden | ast | done | [test_parser.cpp:146](../../tests/parser/test_parser.cpp#L146) |
+| PAR-004 | [3.2](../language/03_LANGUAGE_REFERENCE_MANUAL.md#32-program-structure), [3.24](../language/03_LANGUAGE_REFERENCE_MANUAL.md#324-grammar-summary) | V | multi-head attention program (whitepaper 10.4) -> AST golden | ast | done | [test_parser.cpp:175](../../tests/parser/test_parser.cpp#L175) |
+| PAR-005 | [3.3](../language/03_LANGUAGE_REFERENCE_MANUAL.md#33-tensor-types) | V | `tensorType`/`axis`: 1 axis, 2 axes, 4 axes; concrete and symbolic `dimSize` | ast | done | [test_parser.cpp:224](../../tests/parser/test_parser.cpp#L224) |
+| PAR-006 | [3.2](../language/03_LANGUAGE_REFERENCE_MANUAL.md#32-program-structure) | V | `decl`: `inputDecl` alone, `weightDecl` alone, both, multiple of each | ast | done | [test_parser.cpp:250](../../tests/parser/test_parser.cpp#L250) |
+| PAR-007 | [3.2](../language/03_LANGUAGE_REFERENCE_MANUAL.md#32-program-structure), [3.24](../language/03_LANGUAGE_REFERENCE_MANUAL.md#324-grammar-summary) | V | `program`: multiple `graphDecl`s (`graphDecl+` repetition) | ast | done | [test_parser.cpp:271](../../tests/parser/test_parser.cpp#L271) |
+| PAR-008 | [3.2](../language/03_LANGUAGE_REFERENCE_MANUAL.md#32-program-structure) | V | `statement`: two statements with no terminator; a bare-identifier statement (`y = h`) | ast | done | [test_parser.cpp:290](../../tests/parser/test_parser.cpp#L290) |
+| PAR-009 | [3.24](../language/03_LANGUAGE_REFERENCE_MANUAL.md#324-grammar-summary) | V | `expression`/`binop`: each of `@ + - * /` with identifier and float-literal `operand` | ast | done | [test_parser.cpp:313](../../tests/parser/test_parser.cpp#L313) |
+| PAR-010 | [3.24](../language/03_LANGUAGE_REFERENCE_MANUAL.md#324-grammar-summary) | V | `callExpr`: one positional arg, multiple positional args | ast | done | [test_parser.cpp:347](../../tests/parser/test_parser.cpp#L347) |
+| PAR-011 | [3.24](../language/03_LANGUAGE_REFERENCE_MANUAL.md#324-grammar-summary) | V | `arg` kinds: keyword arg (int value), keyword arg (identifier value), reshape axis-list arg, all three mixed in one call | ast | done | [test_parser.cpp:368](../../tests/parser/test_parser.cpp#L368) |
+| PAR-012 | [3.12](../language/03_LANGUAGE_REFERENCE_MANUAL.md#312-reshape), [3.14](../language/03_LANGUAGE_REFERENCE_MANUAL.md#314-transpose), [3.24](../language/03_LANGUAGE_REFERENCE_MANUAL.md#324-grammar-summary) | V | `argValue` kinds: `intLit` (`stride=1`), identifier (`axis=kseq`), `intList` (`perm=[0,1,3,2]`) | ast | done | [test_parser.cpp:401](../../tests/parser/test_parser.cpp#L401) |
+| PAR-013 | [3.16](../language/03_LANGUAGE_REFERENCE_MANUAL.md#316-conv2d), [3.24](../language/03_LANGUAGE_REFERENCE_MANUAL.md#324-grammar-summary) | V | `conv2d`-shaped call: multiple positional + multiple keyword args together | ast | done | [test_parser.cpp:427](../../tests/parser/test_parser.cpp#L427) |
+| PAR-014 | [3.2](../language/03_LANGUAGE_REFERENCE_MANUAL.md#32-program-structure) | X | missing `=` in a statement | reject: ParseExpected | done | [test_parser.cpp:445](../../tests/parser/test_parser.cpp#L445) |
+| PAR-015 | [3.3](../language/03_LANGUAGE_REFERENCE_MANUAL.md#33-tensor-types) | X | missing `]` closing a `tensorType` | reject: ParseExpected | done | [test_parser.cpp:455](../../tests/parser/test_parser.cpp#L455) |
+| PAR-016 | [3.3](../language/03_LANGUAGE_REFERENCE_MANUAL.md#33-tensor-types) | X | missing `[` opening a `tensorType` | reject: ParseExpected | done | [test_parser.cpp:465](../../tests/parser/test_parser.cpp#L465) |
+| PAR-017 | [3.3](../language/03_LANGUAGE_REFERENCE_MANUAL.md#33-tensor-types) | X | empty `tensorType` (`Tensor[]`; `axis` list requires >= 1) | reject: ParseExpected | done | [test_parser.cpp:475](../../tests/parser/test_parser.cpp#L475) |
+| PAR-018 | [3.3](../language/03_LANGUAGE_REFERENCE_MANUAL.md#33-tensor-types) | X | missing `=` in an `axis` | reject: ParseExpected | done | [test_parser.cpp:485](../../tests/parser/test_parser.cpp#L485) |
+| PAR-019 | [3.2](../language/03_LANGUAGE_REFERENCE_MANUAL.md#32-program-structure), [3.24](../language/03_LANGUAGE_REFERENCE_MANUAL.md#324-grammar-summary) | X | `graphDecl` missing `returnStmt` before `}` | reject: ParseExpected | done | [test_parser.cpp:495](../../tests/parser/test_parser.cpp#L495) |
+| PAR-020 | [3.2](../language/03_LANGUAGE_REFERENCE_MANUAL.md#32-program-structure) | X | `graphDecl` missing closing `}` | reject: ParseExpected | done | [test_parser.cpp:505](../../tests/parser/test_parser.cpp#L505) |
+| PAR-021 | [3.24](../language/03_LANGUAGE_REFERENCE_MANUAL.md#324-grammar-summary) | X | `returnStmt` missing its identifier | reject: ParseExpected | done | [test_parser.cpp:515](../../tests/parser/test_parser.cpp#L515) |
+| PAR-022 | [3.24](../language/03_LANGUAGE_REFERENCE_MANUAL.md#324-grammar-summary) | X | zero-arg call (`relu()`; `arg` list requires >= 1) | reject: ParseExpected | done | [test_parser.cpp:525](../../tests/parser/test_parser.cpp#L525) |
+| PAR-023 | [3.24](../language/03_LANGUAGE_REFERENCE_MANUAL.md#324-grammar-summary) | X | missing closing `)` on a call | reject: ParseExpected | done | [test_parser.cpp:535](../../tests/parser/test_parser.cpp#L535) |
+| PAR-024 | [3.24](../language/03_LANGUAGE_REFERENCE_MANUAL.md#324-grammar-summary) | X | trailing comma in an arg list (`relu(h,)`) | reject: ParseExpected | done | [test_parser.cpp:545](../../tests/parser/test_parser.cpp#L545) |
+| PAR-025 | [3.24](../language/03_LANGUAGE_REFERENCE_MANUAL.md#324-grammar-summary) | X | keyword arg with no value (`stride=)`) | reject: ParseExpected | done | [test_parser.cpp:555](../../tests/parser/test_parser.cpp#L555) |
+| PAR-026 | [3.2](../language/03_LANGUAGE_REFERENCE_MANUAL.md#32-program-structure), [3.24](../language/03_LANGUAGE_REFERENCE_MANUAL.md#324-grammar-summary) | X | a `decl` after a `graphDecl` (violates `decl* graphDecl+` ordering) | reject: ParseExpected | done | [test_parser.cpp:565](../../tests/parser/test_parser.cpp#L565) |
+| PAR-027 | [3.2](../language/03_LANGUAGE_REFERENCE_MANUAL.md#32-program-structure), [3.24](../language/03_LANGUAGE_REFERENCE_MANUAL.md#324-grammar-summary) | X | a program with zero `graphDecl`s (`graphDecl+` requires >= 1) | reject: ParseExpected | done | [test_parser.cpp:575](../../tests/parser/test_parser.cpp#L575) |
+| PAR-028 | recovery | X | two independent syntax errors in different sections (one in a `decl`, one in a graph body) both reported | 2 diagnostics | done | [test_parser.cpp:585](../../tests/parser/test_parser.cpp#L585) |
+| PAR-029 | recovery | X | two independent malformed statements in the same graph body both reported | 2 diagnostics | done | [test_parser.cpp:616](../../tests/parser/test_parser.cpp#L616) |
+| PAR-030 | span | X | a missing-token diagnostic's `SourceSpan` (line/col) points at the actual offending token | span correct | done | [test_parser.cpp:628](../../tests/parser/test_parser.cpp#L628) |
+| PAR-031 | regression | X | bare int literal as a binop operand (BUG-002/REG-002: used to segfault) | reject: diagnostic, not a crash | done | [test_parser.cpp:647](../../tests/parser/test_parser.cpp#L647) |
+| PAR-032 | regression | X | illegal axis `dimSize` token (BUG-003/REG-003: used to segfault) | reject: diagnostic, not a crash | done | [test_parser.cpp:659](../../tests/parser/test_parser.cpp#L659) |
 
 Boundary cases for RM 3.2/3.3/3.24 are tracked as `BND-PAR-*` below (empty
 statement list, minimal program, axis-count and arg-count extremes).
@@ -93,101 +97,101 @@ fixed further here since forcing `NoViableAltException` would require
 deliberately engineering an unrealistic grammar state rather than testing
 real language behavior.
 
-## Semantic — required course checks (RM 3.6, 3.8, 3.7–3.17)
+## Semantic — required academic-compiler checks (RM 3.6, 3.8, 3.7–3.17)
 
-| ID | RM | Kind | Case | Result | Status |
-|----|----|------|------|--------|--------|
-| SEM-DECL-001 | 3.6 | X | duplicate global name | reject: SemaRedeclaration | done |
-| SEM-DECL-002 | 3.6 | X | duplicate graph name | reject: SemaRedeclaration | done |
-| SEM-DECL-003 | 3.6 | X | graph-local assignment shadows a global input/weight name (different kind) | reject: SemaRedeclaration | done |
-| SEM-DECL-004 | 3.3 | X | duplicate axis name within one tensor type (ARCH-013) | reject: SemaDuplicateAxisName | done |
-| SEM-DECL-005 | 3.3 | X | duplicate axis name in a `reshape` target axis list (ARCH-013) | reject: SemaDuplicateAxisName | done |
-| SEM-NAME-001 | 3.6 | X | use of undefined name | reject: SemaUndefinedName | done |
-| SEM-NAME-002 | 3.6 | X | `return` of unbound name | reject: SemaUndefinedName | done |
-| SEM-NAME-003 | 3.24 | X | call to an operator name outside the frozen set | reject: SemaUndefinedName | done |
-| SEM-SCOPE-001 | 3.6 | V | rebinding `h = relu(h)` (shadowing) | accept | done |
-| SEM-SCOPE-002 | 3.6 | X | name from graph A used in graph B | reject: SemaUndefinedName | done |
-| SYM-001 | 3.6 | V | `SemanticAnalyzer::symbolTable()`: globals recorded in declaration order with correct kind/type | 2 globals, `x`(Input) then `W`(Weight), verified decl type | done |
-| SYM-002 | 3.6 | V | graph-local symbol recorded with its inferred (not declared) type | `h`, kind Value, relu's inferred type | done |
-| SYM-003 | 3.6 | V | shadowing (`h = relu(h)`) collapses to one recorded local entry | 1 entry, not 2 | done |
-| SYM-004 | 3.6 | V | resolution log: `global::`/`local::`, deduped per distinct referenced name | 3 entries for x/h/y referenced across 3 statements | done |
-| SYM-005 | 3.6 | X | resolution log records an unresolved reference as `undefined`, not silently absent | logged, no crash | done |
-| SYM-006 | 3.6 | X | a rejected global redeclaration never enters the recorded global scope | 1 entry (the original), not 2 | done |
-| SYM-007 | 3.6 | X | a rejected local rebind of a global name never enters the recorded local scope | 0 local entries | done |
-| SYM-008 | 3.6 | V | multiple graphs each get their own recorded scope, in program order | 2 graph scopes, no cross-graph leakage | done |
-| SEM-TYPE-001 | 3.8 | X | scalar where tensor operand required (`x @ 0.5`) | reject: SemaTypeMismatch | done |
-| SEM-ARITY-001 | 3.9 | X | `linear` with 2 args | reject: SemaArgCount | done |
-| SEM-ARITY-002 | 3.16 | X | `conv2d` missing `stride` | reject: SemaArgCount | done |
-| SEM-ARITY-003 | 3.11 | X | `softmax` axis given as integer | reject: SemaArgKind | done |
-| SEM-ARITY-004 | 3.24 | X | `relu` with an unknown keyword argument | reject: SemaArgKind | done |
-| SEM-ARITY-005 | 3.14 | X | `transpose` missing `perm` | reject: SemaArgCount | done |
-| SEM-POISON-001 | ARCH-007 | X | one bad statement does not cascade into spurious follow-on errors later in the same graph | 1 diagnostic only | done |
-| SEM-POISON-002 | recovery | X | two independent semantic errors (different graphs) are both reported in one pass | 2 diagnostics | done |
+| ID | RM | Kind | Case | Result | Status | Test |
+|----|----|----|----|----|----|----|
+| SEM-DECL-001 | [3.6](../language/03_LANGUAGE_REFERENCE_MANUAL.md#36-name-and-scope-rules) | X | duplicate global name | reject: SemaRedeclaration | done | [test_semantic.cpp:42](../../tests/semantic/test_semantic.cpp#L42) |
+| SEM-DECL-002 | [3.6](../language/03_LANGUAGE_REFERENCE_MANUAL.md#36-name-and-scope-rules) | X | duplicate graph name | reject: SemaRedeclaration | done | [test_semantic.cpp:50](../../tests/semantic/test_semantic.cpp#L50) |
+| SEM-DECL-003 | [3.6](../language/03_LANGUAGE_REFERENCE_MANUAL.md#36-name-and-scope-rules) | X | graph-local assignment shadows a global input/weight name (different kind) | reject: SemaRedeclaration | done | [test_semantic.cpp:58](../../tests/semantic/test_semantic.cpp#L58) |
+| SEM-DECL-004 | [3.3](../language/03_LANGUAGE_REFERENCE_MANUAL.md#33-tensor-types) | X | duplicate axis name within one tensor type (ARCH-013) | reject: SemaDuplicateAxisName | done | [test_semantic.cpp:66](../../tests/semantic/test_semantic.cpp#L66) |
+| SEM-DECL-005 | [3.3](../language/03_LANGUAGE_REFERENCE_MANUAL.md#33-tensor-types) | X | duplicate axis name in a `reshape` target axis list (ARCH-013) | reject: SemaDuplicateAxisName | done | [test_semantic.cpp:74](../../tests/semantic/test_semantic.cpp#L74) |
+| SEM-NAME-001 | [3.6](../language/03_LANGUAGE_REFERENCE_MANUAL.md#36-name-and-scope-rules) | X | use of undefined name | reject: SemaUndefinedName | done | [test_semantic.cpp:87](../../tests/semantic/test_semantic.cpp#L87) |
+| SEM-NAME-002 | [3.6](../language/03_LANGUAGE_REFERENCE_MANUAL.md#36-name-and-scope-rules) | X | `return` of unbound name | reject: SemaUndefinedName | done | [test_semantic.cpp:95](../../tests/semantic/test_semantic.cpp#L95) |
+| SEM-NAME-003 | [3.24](../language/03_LANGUAGE_REFERENCE_MANUAL.md#324-grammar-summary) | X | call to an operator name outside the frozen set | reject: SemaUndefinedName | done | [test_semantic.cpp:103](../../tests/semantic/test_semantic.cpp#L103) |
+| SEM-SCOPE-001 | [3.6](../language/03_LANGUAGE_REFERENCE_MANUAL.md#36-name-and-scope-rules) | V | rebinding `h = relu(h)` (shadowing) | accept | done | [test_semantic.cpp:113](../../tests/semantic/test_semantic.cpp#L113) |
+| SEM-SCOPE-002 | [3.6](../language/03_LANGUAGE_REFERENCE_MANUAL.md#36-name-and-scope-rules) | X | name from graph A used in graph B | reject: SemaUndefinedName | done | [test_semantic.cpp:121](../../tests/semantic/test_semantic.cpp#L121) |
+| SYM-001 | [3.6](../language/03_LANGUAGE_REFERENCE_MANUAL.md#36-name-and-scope-rules) | V | `SemanticAnalyzer::symbolTable()`: globals recorded in declaration order with correct kind/type | 2 globals, `x`(Input) then `W`(Weight), verified decl type | done | [test_semantic.cpp:806](../../tests/semantic/test_semantic.cpp#L806) |
+| SYM-002 | [3.6](../language/03_LANGUAGE_REFERENCE_MANUAL.md#36-name-and-scope-rules) | V | graph-local symbol recorded with its inferred (not declared) type | `h`, kind Value, relu's inferred type | done | [test_semantic.cpp:828](../../tests/semantic/test_semantic.cpp#L828) |
+| SYM-003 | [3.6](../language/03_LANGUAGE_REFERENCE_MANUAL.md#36-name-and-scope-rules) | V | shadowing (`h = relu(h)`) collapses to one recorded local entry | 1 entry, not 2 | done | [test_semantic.cpp:848](../../tests/semantic/test_semantic.cpp#L848) |
+| SYM-004 | [3.6](../language/03_LANGUAGE_REFERENCE_MANUAL.md#36-name-and-scope-rules) | V | resolution log: `global::`/`local::`, deduped per distinct referenced name | 3 entries for x/h/y referenced across 3 statements | done | [test_semantic.cpp:863](../../tests/semantic/test_semantic.cpp#L863) |
+| SYM-005 | [3.6](../language/03_LANGUAGE_REFERENCE_MANUAL.md#36-name-and-scope-rules) | X | resolution log records an unresolved reference as `undefined`, not silently absent | logged, no crash | done | [test_semantic.cpp:882](../../tests/semantic/test_semantic.cpp#L882) |
+| SYM-006 | [3.6](../language/03_LANGUAGE_REFERENCE_MANUAL.md#36-name-and-scope-rules) | X | a rejected global redeclaration never enters the recorded global scope | 1 entry (the original), not 2 | done | [test_semantic.cpp:900](../../tests/semantic/test_semantic.cpp#L900) |
+| SYM-007 | [3.6](../language/03_LANGUAGE_REFERENCE_MANUAL.md#36-name-and-scope-rules) | X | a rejected local rebind of a global name never enters the recorded local scope | 0 local entries | done | [test_semantic.cpp:915](../../tests/semantic/test_semantic.cpp#L915) |
+| SYM-008 | [3.6](../language/03_LANGUAGE_REFERENCE_MANUAL.md#36-name-and-scope-rules) | V | multiple graphs each get their own recorded scope, in program order | 2 graph scopes, no cross-graph leakage | done | [test_semantic.cpp:929](../../tests/semantic/test_semantic.cpp#L929) |
+| SEM-TYPE-001 | [3.8](../language/03_LANGUAGE_REFERENCE_MANUAL.md#38-elementwise-arithmetic-and-broadcasting) | X | scalar where tensor operand required (`x @ 0.5`) | reject: SemaTypeMismatch | done | [test_semantic.cpp:131](../../tests/semantic/test_semantic.cpp#L131) |
+| SEM-ARITY-001 | [3.9](../language/03_LANGUAGE_REFERENCE_MANUAL.md#39-linear) | X | `linear` with 2 args | reject: SemaArgCount | done | [test_semantic.cpp:139](../../tests/semantic/test_semantic.cpp#L139) |
+| SEM-ARITY-002 | [3.16](../language/03_LANGUAGE_REFERENCE_MANUAL.md#316-conv2d) | X | `conv2d` missing `stride` | reject: SemaArgCount | done | [test_semantic.cpp:148](../../tests/semantic/test_semantic.cpp#L148) |
+| SEM-ARITY-003 | [3.11](../language/03_LANGUAGE_REFERENCE_MANUAL.md#311-softmax) | X | `softmax` axis given as integer | reject: SemaArgKind | done | [test_semantic.cpp:161](../../tests/semantic/test_semantic.cpp#L161) |
+| SEM-ARITY-004 | [3.24](../language/03_LANGUAGE_REFERENCE_MANUAL.md#324-grammar-summary) | X | `relu` with an unknown keyword argument | reject: SemaArgKind | done | [test_semantic.cpp:169](../../tests/semantic/test_semantic.cpp#L169) |
+| SEM-ARITY-005 | [3.14](../language/03_LANGUAGE_REFERENCE_MANUAL.md#314-transpose) | X | `transpose` missing `perm` | reject: SemaArgCount | done | [test_semantic.cpp:177](../../tests/semantic/test_semantic.cpp#L177) |
+| SEM-POISON-001 | ARCH-007 | X | one bad statement does not cascade into spurious follow-on errors later in the same graph | 1 diagnostic only | done | [test_semantic.cpp:187](../../tests/semantic/test_semantic.cpp#L187) |
+| SEM-POISON-002 | recovery | X | two independent semantic errors (different graphs) are both reported in one pass | 2 diagnostics | done | [test_semantic.cpp:203](../../tests/semantic/test_semantic.cpp#L203) |
 
 ## Semantic — matmul / linear (RM 3.7, 3.9)
 
-| ID | RM | Kind | Case | Result | Status |
-|----|----|------|------|--------|--------|
-| SEM-MM-001 | 3.7 | V | `[batch=B,feat=784]@[in=784,out=256]` | accept -> `[batch=B,out=256]` | done |
-| SEM-MM-002 | 3.7 | X | `784 != 512` | reject: SemaShapeMismatch (784!=512) | done |
-| SEM-MM-003 | 3.7 | N | symbolic contraction `K` unifies | accept | done |
-| SEM-MM-004 | 3.7 | X | batched leading-axis mismatch | reject: SemaShapeMismatch | done |
-| SEM-LIN-001 | 3.9 | V | linear with matching bias | accept | done |
-| SEM-LIN-002 | 3.9 | X | bias size mismatch | reject: SemaShapeMismatch | done |
-| SEM-LIN-003 | 3.9 | X | bias axis-name mismatch | reject: SemaAxisNameMismatch | done |
+| ID | RM | Kind | Case | Result | Status | Test |
+|----|----|----|----|----|----|----|
+| SEM-MM-001 | [3.7](../language/03_LANGUAGE_REFERENCE_MANUAL.md#37-matrix-multiplication) | V | `[batch=B,feat=784]@[in=784,out=256]` | accept -> `[batch=B,out=256]` | done | [test_semantic.cpp:213](../../tests/semantic/test_semantic.cpp#L213) |
+| SEM-MM-002 | [3.7](../language/03_LANGUAGE_REFERENCE_MANUAL.md#37-matrix-multiplication) | X | `784 != 512` | reject: SemaShapeMismatch (784!=512) | done | [test_semantic.cpp:227](../../tests/semantic/test_semantic.cpp#L227) |
+| SEM-MM-003 | [3.7](../language/03_LANGUAGE_REFERENCE_MANUAL.md#37-matrix-multiplication) | N | symbolic contraction `K` unifies | accept | done | [test_semantic.cpp:238](../../tests/semantic/test_semantic.cpp#L238) |
+| SEM-MM-004 | [3.7](../language/03_LANGUAGE_REFERENCE_MANUAL.md#37-matrix-multiplication) | X | batched leading-axis mismatch | reject: SemaShapeMismatch | done | [test_semantic.cpp:248](../../tests/semantic/test_semantic.cpp#L248) |
+| SEM-LIN-001 | [3.9](../language/03_LANGUAGE_REFERENCE_MANUAL.md#39-linear) | V | linear with matching bias | accept | done | [test_semantic.cpp:259](../../tests/semantic/test_semantic.cpp#L259) |
+| SEM-LIN-002 | [3.9](../language/03_LANGUAGE_REFERENCE_MANUAL.md#39-linear) | X | bias size mismatch | reject: SemaShapeMismatch | done | [test_semantic.cpp:272](../../tests/semantic/test_semantic.cpp#L272) |
+| SEM-LIN-003 | [3.9](../language/03_LANGUAGE_REFERENCE_MANUAL.md#39-linear) | X | bias axis-name mismatch | reject: SemaAxisNameMismatch | done | [test_semantic.cpp:283](../../tests/semantic/test_semantic.cpp#L283) |
 
 ## Semantic — elementwise / broadcasting / axis names (RM 3.8)
 
-| ID | RM | Kind | Case | Result | Status |
-|----|----|------|------|--------|--------|
-| SEM-EW-001 | 3.8 | V | equal shapes and names | accept | done |
-| SEM-EW-002 | 3.8 | V | size-1 broadcast | accept | done |
-| SEM-EW-003 | 3.8 | X | **equal sizes, swapped axis names** | reject: SemaAxisNameMismatch | done |
-| SEM-EW-004 | 3.8 | X | incompatible sizes | reject: SemaBroadcast | done |
-| SEM-EW-005 | 3.8 | V | tensor-scalar `x * 0.125` | accept | done |
+| ID | RM | Kind | Case | Result | Status | Test |
+|----|----|----|----|----|----|----|
+| SEM-EW-001 | [3.8](../language/03_LANGUAGE_REFERENCE_MANUAL.md#38-elementwise-arithmetic-and-broadcasting) | V | equal shapes and names | accept | done | [test_semantic.cpp:296](../../tests/semantic/test_semantic.cpp#L296) |
+| SEM-EW-002 | [3.8](../language/03_LANGUAGE_REFERENCE_MANUAL.md#38-elementwise-arithmetic-and-broadcasting) | V | size-1 broadcast | accept | done | [test_semantic.cpp:305](../../tests/semantic/test_semantic.cpp#L305) |
+| SEM-EW-003 | [3.8](../language/03_LANGUAGE_REFERENCE_MANUAL.md#38-elementwise-arithmetic-and-broadcasting) | X | **equal sizes, swapped axis names** | reject: SemaAxisNameMismatch | done | [test_semantic.cpp:317](../../tests/semantic/test_semantic.cpp#L317) |
+| SEM-EW-004 | [3.8](../language/03_LANGUAGE_REFERENCE_MANUAL.md#38-elementwise-arithmetic-and-broadcasting) | X | incompatible sizes | reject: SemaBroadcast | done | [test_semantic.cpp:327](../../tests/semantic/test_semantic.cpp#L327) |
+| SEM-EW-005 | [3.8](../language/03_LANGUAGE_REFERENCE_MANUAL.md#38-elementwise-arithmetic-and-broadcasting) | V | tensor-scalar `x * 0.125` | accept | done | [test_semantic.cpp:337](../../tests/semantic/test_semantic.cpp#L337) |
 
 ## Semantic — reshape / flatten (RM 3.12, 3.13)
 
-| ID | RM | Kind | Case | Result | Status |
-|----|----|------|------|--------|--------|
-| SEM-RS-001 | 3.12 | V | `768 -> [head=12,dim=64]` | accept | done |
-| SEM-RS-002 | 3.12 | X | `768 -> [head=10,dim=64]` (640) | reject: SemaReshapeCount (640!=768) | done |
-| SEM-RS-003 | 3.4, 3.12 | X | symbolic-factor multiset mismatch (`[batch=B,feat=768]` vs `[batch=C,head=12,dim=64]`, unrelated symbols) -- outside the bounded subset (RM 3.4), not a decided count mismatch | reject: SemaUnresolvableShape | done |
-| SEM-RS-004 | 3.12 | N | symbolic factor cancels correctly (`[batch=B,feat=768]` -> `[batch=B,head=12,dim=64]`), near-miss of RS-003 | accept | done |
-| SEM-FL-001 | 3.13 | V | concrete tail flattens to `flat=200704` | accept | done |
-| SEM-FL-002 | 3.13 | X | symbolic tail dim | reject: SemaUnresolvableShape | done |
+| ID | RM | Kind | Case | Result | Status | Test |
+|----|----|----|----|----|----|----|
+| SEM-RS-001 | [3.12](../language/03_LANGUAGE_REFERENCE_MANUAL.md#312-reshape) | V | `768 -> [head=12,dim=64]` | accept | done | [test_semantic.cpp:348](../../tests/semantic/test_semantic.cpp#L348) |
+| SEM-RS-002 | [3.12](../language/03_LANGUAGE_REFERENCE_MANUAL.md#312-reshape) | X | `768 -> [head=10,dim=64]` (640) | reject: SemaReshapeCount (640!=768) | done | [test_semantic.cpp:361](../../tests/semantic/test_semantic.cpp#L361) |
+| SEM-RS-003 | [3.4](../language/03_LANGUAGE_REFERENCE_MANUAL.md#34-symbolic-dimensions), [3.12](../language/03_LANGUAGE_REFERENCE_MANUAL.md#312-reshape) | X | symbolic-factor multiset mismatch (`[batch=B,feat=768]` vs `[batch=C,head=12,dim=64]`, unrelated symbols) -- outside the bounded subset (RM 3.4), not a decided count mismatch | reject: SemaUnresolvableShape | done | [test_semantic.cpp:370](../../tests/semantic/test_semantic.cpp#L370) |
+| SEM-RS-004 | [3.12](../language/03_LANGUAGE_REFERENCE_MANUAL.md#312-reshape) | N | symbolic factor cancels correctly (`[batch=B,feat=768]` -> `[batch=B,head=12,dim=64]`), near-miss of RS-003 | accept | done | [test_semantic.cpp:380](../../tests/semantic/test_semantic.cpp#L380) |
+| SEM-FL-001 | [3.13](../language/03_LANGUAGE_REFERENCE_MANUAL.md#313-flatten) | V | concrete tail flattens to `flat=200704` | accept | done | [test_semantic.cpp:389](../../tests/semantic/test_semantic.cpp#L389) |
+| SEM-FL-002 | [3.13](../language/03_LANGUAGE_REFERENCE_MANUAL.md#313-flatten) | X | symbolic tail dim | reject: SemaUnresolvableShape | done | [test_semantic.cpp:403](../../tests/semantic/test_semantic.cpp#L403) |
 
 ## Semantic — transpose / reductions / softmax (RM 3.14, 3.11, 3.15)
 
-| ID | RM | Kind | Case | Result | Status |
-|----|----|------|------|--------|--------|
-| SEM-TR-001 | 3.14 | V | valid perm on rank-4 | accept | done |
-| SEM-TR-002 | 3.14 | X | repeated perm index | reject: SemaTransposePerm | done |
-| SEM-TR-003 | 3.14 | X | out-of-range perm index | reject: SemaTransposePerm | done |
-| SEM-RD-001 | 3.15 | V | `sum(x, axis=feat)` existing axis | accept (axis removed) | done |
-| SEM-RD-002 | 3.15 | X | nonexistent axis name | reject: SemaAxisNotFound | done |
-| SEM-SM-001 | 3.11 | V | `softmax(scores, axis=kseq)` | accept | done |
-| SEM-SM-002 | 3.11 | X | softmax nonexistent axis | reject: SemaAxisNotFound | done |
+| ID | RM | Kind | Case | Result | Status | Test |
+|----|----|----|----|----|----|----|
+| SEM-TR-001 | [3.14](../language/03_LANGUAGE_REFERENCE_MANUAL.md#314-transpose) | V | valid perm on rank-4 | accept | done | [test_semantic.cpp:413](../../tests/semantic/test_semantic.cpp#L413) |
+| SEM-TR-002 | [3.14](../language/03_LANGUAGE_REFERENCE_MANUAL.md#314-transpose) | X | repeated perm index | reject: SemaTransposePerm | done | [test_semantic.cpp:425](../../tests/semantic/test_semantic.cpp#L425) |
+| SEM-TR-003 | [3.14](../language/03_LANGUAGE_REFERENCE_MANUAL.md#314-transpose) | X | out-of-range perm index | reject: SemaTransposePerm | done | [test_semantic.cpp:434](../../tests/semantic/test_semantic.cpp#L434) |
+| SEM-RD-001 | [3.15](../language/03_LANGUAGE_REFERENCE_MANUAL.md#315-sum--mean) | V | `sum(x, axis=feat)` existing axis | accept (axis removed) | done | [test_semantic.cpp:443](../../tests/semantic/test_semantic.cpp#L443) |
+| SEM-RD-002 | [3.15](../language/03_LANGUAGE_REFERENCE_MANUAL.md#315-sum--mean) | X | nonexistent axis name | reject: SemaAxisNotFound | done | [test_semantic.cpp:453](../../tests/semantic/test_semantic.cpp#L453) |
+| SEM-SM-001 | [3.11](../language/03_LANGUAGE_REFERENCE_MANUAL.md#311-softmax) | V | `softmax(scores, axis=kseq)` | accept | done | [test_semantic.cpp:461](../../tests/semantic/test_semantic.cpp#L461) |
+| SEM-SM-002 | [3.11](../language/03_LANGUAGE_REFERENCE_MANUAL.md#311-softmax) | X | softmax nonexistent axis | reject: SemaAxisNotFound | done | [test_semantic.cpp:472](../../tests/semantic/test_semantic.cpp#L472) |
 
 ## Semantic — conv / pooling (RM 3.16, 3.17)
 
-| ID | RM | Kind | Case | Result | Status |
-|----|----|------|------|--------|--------|
-| SEM-CV-001 | 3.16 | V | conv `stride=1,padding=1` preserves HxW | accept | done |
-| SEM-CV-002 | 3.16 | X | channel mismatch `3 != 16` | reject: SemaConvChannel | done |
-| SEM-CV-003 | 3.16 | X | non-dividing spatial arithmetic | reject: SemaConvArithmetic | done |
-| SEM-CV-004 | 3.16 | X | stride=2 at 224x224 that would only floor-divide (a common-framework convention) is rejected, not floored | reject: SemaConvArithmetic | done |
-| SEM-CV-005 | 3.16 | V | stride=2 at 224x224 exactly halves H/W when the division is exact | accept, output [64,112,112] | done |
-| SEM-PL-001 | 3.17 | V | `maxpool size=2` halves HxW | accept | done |
-| SEM-PL-002 | 3.17 | N | `stride` defaults to `size` | accept | done |
+| ID | RM | Kind | Case | Result | Status | Test |
+|----|----|----|----|----|----|----|
+| SEM-CV-001 | [3.16](../language/03_LANGUAGE_REFERENCE_MANUAL.md#316-conv2d) | V | conv `stride=1,padding=1` preserves HxW | accept | done | [test_semantic.cpp:483](../../tests/semantic/test_semantic.cpp#L483) |
+| SEM-CV-002 | [3.16](../language/03_LANGUAGE_REFERENCE_MANUAL.md#316-conv2d) | X | channel mismatch `3 != 16` | reject: SemaConvChannel | done | [test_semantic.cpp:499](../../tests/semantic/test_semantic.cpp#L499) |
+| SEM-CV-003 | [3.16](../language/03_LANGUAGE_REFERENCE_MANUAL.md#316-conv2d) | X | non-dividing spatial arithmetic | reject: SemaConvArithmetic | done | [test_semantic.cpp:511](../../tests/semantic/test_semantic.cpp#L511) |
+| SEM-CV-004 | [3.16](../language/03_LANGUAGE_REFERENCE_MANUAL.md#316-conv2d) | X | stride=2 at 224x224 that would only floor-divide (a common-framework convention) is rejected, not floored | reject: SemaConvArithmetic | done | [test_semantic.cpp:532](../../tests/semantic/test_semantic.cpp#L532) |
+| SEM-CV-005 | [3.16](../language/03_LANGUAGE_REFERENCE_MANUAL.md#316-conv2d) | V | stride=2 at 224x224 exactly halves H/W when the division is exact | accept, output [64,112,112] | done | [test_semantic.cpp:545](../../tests/semantic/test_semantic.cpp#L545) |
+| SEM-PL-001 | [3.17](../language/03_LANGUAGE_REFERENCE_MANUAL.md#317-maxpool) | V | `maxpool size=2` halves HxW | accept | done | [test_semantic.cpp:561](../../tests/semantic/test_semantic.cpp#L561) |
+| SEM-PL-002 | [3.17](../language/03_LANGUAGE_REFERENCE_MANUAL.md#317-maxpool) | N | `stride` defaults to `size` | accept | done | [test_semantic.cpp:574](../../tests/semantic/test_semantic.cpp#L574) |
 
 ## Semantic — bounded solver (RM 3.4)
 
-| ID | RM | Kind | Case | Result | Status |
-|----|----|------|------|--------|--------|
-| SEM-DIM-001 | 3.4 | V | equality/unification of symbolic `B` | accept | done |
-| SEM-DIM-002 | 3.4 | X | requires nonlinear reasoning (same shape as SEM-RS-003, exercised generically) | reject: SemaUnresolvableShape | done |
-| SEM-DIM-003 | 3.3 | X | a zero-sized dimension (ARCH-013) | reject: SemaNonPositiveDimension | done |
+| ID | RM | Kind | Case | Result | Status | Test |
+|----|----|----|----|----|----|----|
+| SEM-DIM-001 | [3.4](../language/03_LANGUAGE_REFERENCE_MANUAL.md#34-symbolic-dimensions) | V | equality/unification of symbolic `B` | accept | done | [test_semantic.cpp:585](../../tests/semantic/test_semantic.cpp#L585) |
+| SEM-DIM-002 | [3.4](../language/03_LANGUAGE_REFERENCE_MANUAL.md#34-symbolic-dimensions) | X | requires nonlinear reasoning (same shape as SEM-RS-003, exercised generically) | reject: SemaUnresolvableShape | done | [test_semantic.cpp:594](../../tests/semantic/test_semantic.cpp#L594) |
+| SEM-DIM-003 | [3.3](../language/03_LANGUAGE_REFERENCE_MANUAL.md#33-tensor-types) | X | a zero-sized dimension (ARCH-013) | reject: SemaNonPositiveDimension | done | [test_semantic.cpp:604](../../tests/semantic/test_semantic.cpp#L604) |
 
 **SEM-RS-003 / SEM-DIM-002 note:** `DimSolver::sameElementCount` (refining
 `INTERFACES.md`'s illustrative `bool` signature to an
@@ -202,22 +206,22 @@ which had listed SEM-RS-003 as `SemaReshapeCount`.
 
 ## Semantic — attention / multi-head (whitepaper §10.4)
 
-| ID | RM | Kind | Case | Result | Status |
-|----|----|------|------|--------|--------|
-| ATT-001 | 3.7, 3.8, 3.11, 3.14 | V | the full attention program (whitepaper 10.4) type-checks end to end: batched `@`, rank-4 `transpose`, scalar `*`, `softmax(axis=kseq)` | accept | done |
-| ATT-002 | 3.8 | X | mutated ATT-001: swap `Q`'s and `K`'s leading axis names (`batch`/`head` transposed on one operand) so the batched matmul's leading-axis broadcast fails | reject: SemaAxisNameMismatch | done |
+| ID | RM | Kind | Case | Result | Status | Test |
+|----|----|----|----|----|----|----|
+| ATT-001 | [3.7](../language/03_LANGUAGE_REFERENCE_MANUAL.md#37-matrix-multiplication), [3.8](../language/03_LANGUAGE_REFERENCE_MANUAL.md#38-elementwise-arithmetic-and-broadcasting), [3.11](../language/03_LANGUAGE_REFERENCE_MANUAL.md#311-softmax), [3.14](../language/03_LANGUAGE_REFERENCE_MANUAL.md#314-transpose) | V | the full attention program (whitepaper 10.4) type-checks end to end: batched `@`, rank-4 `transpose`, scalar `*`, `softmax(axis=kseq)` | accept | done | [test_semantic.cpp:614](../../tests/semantic/test_semantic.cpp#L614) |
+| ATT-002 | [3.8](../language/03_LANGUAGE_REFERENCE_MANUAL.md#38-elementwise-arithmetic-and-broadcasting) | X | mutated ATT-001: swap `Q`'s and `K`'s leading axis names (`batch`/`head` transposed on one operand) so the batched matmul's leading-axis broadcast fails | reject: SemaAxisNameMismatch | done | [test_semantic.cpp:639](../../tests/semantic/test_semantic.cpp#L639) |
 
 ## Graph (RM 3.18, 3.20; IR.md)
 
-| ID | RM | Kind | Case | Result | Status |
-|----|----|------|------|--------|--------|
-| GR-001 | 3.20 | V | MLP program analyzed end to end: golden structural TCG (node count/kinds/order, param count) | graph | done |
-| GR-002 | IR §1 | X | hand-built `GraphBuilder` fixture with a cycle | GraphVerifier reject: IrInvariantViolation | done |
-| GR-003 | IR §1 | X | hand-built fixture with a dangling operand (out-of-range ValueId) | GraphVerifier reject: IrInvariantViolation | done |
-| GR-004 | 3.18 | V | producer/consumer queries correct on a small hand-built chain | accept | done |
-| GR-005 | 3.20 | V | single reachable output; every node in topological order | accept | done |
-| GR-006 | ARCH-008 | V | a `GraphVerifier`-clean fixture built entirely by hand (no sema) passes, demonstrating the mock-enabler contract | accept | done |
-| GR-007 | 3.18 | V | a graph referencing the same global input twice adds it as exactly one param (lazy dedup) | 1 param, 2 consumers | done |
+| ID | RM | Kind | Case | Result | Status | Test |
+|----|----|----|----|----|----|----|
+| GR-001 | [3.20](../language/03_LANGUAGE_REFERENCE_MANUAL.md#320-typed-computation-graph) | V | MLP program analyzed end to end: golden structural TCG (node count/kinds/order, param count) | graph | done | [test_graph.cpp:32](../../tests/semantic/test_graph.cpp#L32) |
+| GR-002 | IR §1 | X | hand-built `GraphBuilder` fixture with a cycle | GraphVerifier reject: IrInvariantViolation | done | [test_graph.cpp:63](../../tests/semantic/test_graph.cpp#L63) |
+| GR-003 | IR §1 | X | hand-built fixture with a dangling operand (out-of-range ValueId) | GraphVerifier reject: IrInvariantViolation | done | [test_graph.cpp:85](../../tests/semantic/test_graph.cpp#L85) |
+| GR-004 | [3.18](../language/03_LANGUAGE_REFERENCE_MANUAL.md#318-graph-semantics) | V | producer/consumer queries correct on a small hand-built chain | accept | done | [test_graph.cpp:102](../../tests/semantic/test_graph.cpp#L102) |
+| GR-005 | [3.20](../language/03_LANGUAGE_REFERENCE_MANUAL.md#320-typed-computation-graph) | V | single reachable output; every node in topological order | accept | done | [test_graph.cpp:124](../../tests/semantic/test_graph.cpp#L124) |
+| GR-006 | ARCH-008 | V | a `GraphVerifier`-clean fixture built entirely by hand (no sema) passes, demonstrating the mock-enabler contract | accept | done | [test_graph.cpp:140](../../tests/semantic/test_graph.cpp#L140) |
+| GR-007 | [3.18](../language/03_LANGUAGE_REFERENCE_MANUAL.md#318-graph-semantics) | V | a graph referencing the same global input twice adds it as exactly one param (lazy dedup) | 1 param, 2 consumers | done | [test_graph.cpp:165](../../tests/semantic/test_graph.cpp#L165) |
 
 `--emit-graph`'s textual dump format (IR.md §7) is not implemented by this
 phase (driver/CLI work); GR-001's "golden" comparison is a structural
@@ -226,20 +230,20 @@ tests already work in this project (no invented textual format).
 
 ## Optimization — per pass (RM 3.21)
 
-| ID | Pass | Kind | Case | Result | Status |
-|----|------|------|------|--------|--------|
-| OPT-SF-001, OPT-SF-002 | ShapeFolding | V/N | constant shape -> literal / symbolic shape untouched | changed / unchanged | done |
-| OPT-DCE-001 | DeadOpElimination | V | drops value not reaching return | changed | done |
-| OPT-DCE-002 | DeadOpElimination | N | keeps value reaching return | unchanged | done |
-| OPT-DCE-003 | DeadOpElimination | V | removes a whole dead chain (2 nodes) next to a same-shaped live chain, not just one dead node | changed (2 nodes removed) | done |
-| OPT-RC-001, OPT-RC-002, OPT-RC-003 | ReshapeCancellation | V/V/N | reshape immediately undone / chained / non-inverse shapes | changed / changed / unchanged | done |
-| OPT-TC-001, OPT-TC-002, OPT-TC-003 | TransposeCancellation | V/N/V | inverse perms cancel / non-inverse perms / chained inverse | changed / unchanged / changed | done |
-| OPT-EF-001, OPT-EF-002 | ElementwiseFusion | V/N | chain fuses / non-fusable interruption | changed / unchanged | done |
-| OPT-LBA-001 | LinearBiasActivationFusion | V | linear+relu fuses | changed | done |
-| OPT-LBA-002 | LinearBiasActivationFusion | N | linear+softmax not fused | unchanged | done |
-| OPT-FIX-001 | PassManager (fixed point) | V | DeadOpElimination drops a linear's dead consumer; a later sweep then fuses the surviving relu | changed, 2+ sweeps | done |
-| OPT-FIX-002 | PassManager (fixed point) | N | the same pair, run through one sweep only (no re-run) | not tagged | done |
-| OPT-EQ-001 | all | V | numerical equivalence before/after | equal (e2e) | partial — LOW-E2E-MLP/NATIVE-001 verify LinearBiasActivationFusion+DeadOpElimination numerically end to end; not yet repeated per-pass for the other 6 |
+| ID | Pass | Kind | Case | Result | Status | Test |
+|----|----|----|----|----|----|----|
+| OPT-SF-001, OPT-SF-002 | ShapeFolding | V/N | constant shape -> literal / symbolic shape untouched | changed / unchanged | done | [test_passes.cpp:28](../../tests/optimization/test_passes.cpp#L28), [test_passes.cpp:50](../../tests/optimization/test_passes.cpp#L50) |
+| OPT-DCE-001 | DeadOpElimination | V | drops value not reaching return | changed | done | [test_passes.cpp:70](../../tests/optimization/test_passes.cpp#L70) |
+| OPT-DCE-002 | DeadOpElimination | N | keeps value reaching return | unchanged | done | [test_passes.cpp:90](../../tests/optimization/test_passes.cpp#L90) |
+| OPT-DCE-003 | DeadOpElimination | V | removes a whole dead chain (2 nodes) next to a same-shaped live chain, not just one dead node | changed (2 nodes removed) | done | [test_passes.cpp:111](../../tests/optimization/test_passes.cpp#L111) |
+| OPT-RC-001, OPT-RC-002, OPT-RC-003 | ReshapeCancellation | V/V/N | reshape immediately undone / chained / non-inverse shapes | changed / changed / unchanged | done | [test_passes.cpp:137](../../tests/optimization/test_passes.cpp#L137), [test_passes.cpp:166](../../tests/optimization/test_passes.cpp#L166), [test_passes.cpp:195](../../tests/optimization/test_passes.cpp#L195) |
+| OPT-TC-001, OPT-TC-002, OPT-TC-003 | TransposeCancellation | V/N/V | inverse perms cancel / non-inverse perms / chained inverse | changed / unchanged / changed | done | [test_passes.cpp:223](../../tests/optimization/test_passes.cpp#L223), [test_passes.cpp:250](../../tests/optimization/test_passes.cpp#L250), [test_passes.cpp:276](../../tests/optimization/test_passes.cpp#L276) |
+| OPT-EF-001, OPT-EF-002 | ElementwiseFusion | V/N | chain fuses / non-fusable interruption | changed / unchanged | done | [test_passes.cpp:302](../../tests/optimization/test_passes.cpp#L302), [test_passes.cpp:324](../../tests/optimization/test_passes.cpp#L324) |
+| OPT-LBA-001 | LinearBiasActivationFusion | V | linear+relu fuses | changed | done | [test_passes.cpp:344](../../tests/optimization/test_passes.cpp#L344) |
+| OPT-LBA-002 | LinearBiasActivationFusion | N | linear+softmax not fused | unchanged | done | [test_passes.cpp:367](../../tests/optimization/test_passes.cpp#L367) |
+| OPT-FIX-001 | PassManager (fixed point) | V | DeadOpElimination drops a linear's dead consumer; a later sweep then fuses the surviving relu | changed, 2+ sweeps | done | [test_passes.cpp:402](../../tests/optimization/test_passes.cpp#L402) |
+| OPT-FIX-002 | PassManager (fixed point) | N | the same pair, run through one sweep only (no re-run) | not tagged | done | [test_passes.cpp:439](../../tests/optimization/test_passes.cpp#L439) |
+| OPT-EQ-001 | all | V | numerical equivalence before/after | equal (e2e) | partial — LOW-E2E-MLP/NATIVE-001 verify LinearBiasActivationFusion+DeadOpElimination numerically end to end; not yet repeated per-pass for the other 6 | [test_mlp_e2e.cpp](../../tests/codegen/test_mlp_e2e.cpp), [mlp_native_driver.c](../../tests/codegen/mlp_native_driver.c) |
 
 All 6 passes and their `GraphPass`/`PassManager` infrastructure live in
 `include/tensora/optimization/GraphPass.h` + `src/optimization/GraphPasses.cpp`,
@@ -248,12 +252,12 @@ all passing).
 
 ## Analysis — tensor liveness (ARCH-009)
 
-| ID | Ref | Kind | Case | Result | Status |
-|----|-----|------|------|--------|--------|
-| LIVE-001 | ARCH-009 | V | live intervals on a producer/consumer chain | intervals correct | done |
-| LIVE-002 | ARCH-009 | V | byte size of a concrete-dim tensor | matches hand calc | done |
-| LIVE-003 | ARCH-009 | V | peak-memory = max simultaneously-live | matches hand calc | done |
-| LIVE-004 | ARCH-009 | V | a decision consumes peakLiveBytes | decision changes with estimate | done — feeds `TilingDecision` (LOOP-001-F), a real consumer, not just a reported number |
+| ID | Ref | Kind | Case | Result | Status | Test |
+|----|----|----|----|----|----|----|
+| LIVE-001 | ARCH-009 | V | live intervals on a producer/consumer chain | intervals correct | done | [test_passes.cpp:466](../../tests/optimization/test_passes.cpp#L466) |
+| LIVE-002 | ARCH-009 | V | byte size of a concrete-dim tensor | matches hand calc | done | [test_passes.cpp:489](../../tests/optimization/test_passes.cpp#L489) |
+| LIVE-003 | ARCH-009 | V | peak-memory = max simultaneously-live | matches hand calc | done | [test_passes.cpp:496](../../tests/optimization/test_passes.cpp#L496) |
+| LIVE-004 | ARCH-009 | V | a decision consumes peakLiveBytes | decision changes with estimate | done — feeds `TilingDecision` (LOOP-001-F), a real consumer, not just a reported number | [test_passes.cpp:515](../../tests/optimization/test_passes.cpp#L515) |
 
 `include/tensora/optimization/Liveness.h` + `src/optimization/Liveness.cpp`;
 exercised by `tests/optimization/test_passes.cpp`'s LIVE-* cases (4 CTest
@@ -261,15 +265,15 @@ cases).
 
 ## Loop optimization — matmul tiling (Level-2, ARCH-009, USP)
 
-| ID | Ref | Kind | Case | Result | Status |
-|----|-----|------|------|--------|--------|
-| LOOP-001-A, LOOP-001-B, LOOP-001-C, LOOP-001-D, LOOP-001-E, LOOP-001-F | 8.4 | V/N | large/tiny/exact-divide/remainder/symbolic-skip/memory-pressure `TilingDecision` cases | plan matches shapes (pure C++, no MLIR) | done |
-| LOOP-002 | 8.4 | V | tiled loop nest structure after `MatmulTilingPass` | tiled copy has `scf.for`, untiled copy does not | done |
-| LOOP-003 | 8.4 | V | tiled vs untiled numerical equivalence | both compute the hand-verified reference value, JIT-executed | done |
-| LOOP-004 | 8.4 | V | tiled vs untiled wall-clock, 1024x1024x1024, tile=128 | reported (real speedup, single-run methodology, not a rigorous claim on its own) | done |
-| LOOP-005-A/B | ARCH-009 | V/V | `MlirLowerer`'s own `LivenessAnalysis` call (not a hand-built `LivenessResult`) drives the tile-size choice through the real lowering path | tile_sizes={32,32,32} with no memory pressure; {16,16,16} once an unused 1.37 MiB weight alone pushes peak live bytes over the 1 MiB budget | done |
-| LOOP-005-C | ARCH-009 | V | a plain 512x512x512 matmul (no extra weight fixture) already exceeds the default 1 MiB budget from its own operand sizes (3 MiB total) | tile_sizes={16,16,16} | done |
-| LOOP-005-D | ARCH-009 | V | the identical 512x512x512 matmul, lowered under a 4 MiB `TilingPolicy::memoryBudgetBytes` instead of the 1 MiB default | tile_sizes={32,32,32} -- confirms the "budget" is a policy field compared against a static shape-based estimate, not a real memory measurement, so modeling a machine with more/less available memory for this decision is exactly changing this one field, not an OS-level memory limit on the process | done |
+| ID | Ref | Kind | Case | Result | Status | Test |
+|----|----|----|----|----|----|----|
+| LOOP-001-A, LOOP-001-B, LOOP-001-C, LOOP-001-D, LOOP-001-E, LOOP-001-F | 8.4 | V/N | large/tiny/exact-divide/remainder/symbolic-skip/memory-pressure `TilingDecision` cases | plan matches shapes (pure C++, no MLIR) | done | [test_tiling_decision.cpp:29](../../tests/codegen/test_tiling_decision.cpp#L29), [test_tiling_decision.cpp:42](../../tests/codegen/test_tiling_decision.cpp#L42), [test_tiling_decision.cpp:53](../../tests/codegen/test_tiling_decision.cpp#L53), [test_tiling_decision.cpp:64](../../tests/codegen/test_tiling_decision.cpp#L64), [test_tiling_decision.cpp:76](../../tests/codegen/test_tiling_decision.cpp#L76), [test_tiling_decision.cpp:95](../../tests/codegen/test_tiling_decision.cpp#L95) |
+| LOOP-002 | 8.4 | V | tiled loop nest structure after `MatmulTilingPass` | tiled copy has `scf.for`, untiled copy does not | done | [test_codegen_e2e.cpp:27](../../tests/codegen/test_codegen_e2e.cpp#L27) |
+| LOOP-003 | 8.4 | V | tiled vs untiled numerical equivalence | both compute the hand-verified reference value, JIT-executed | done | [test_tiling_e2e.cpp:230](../../tests/codegen/test_tiling_e2e.cpp#L230) |
+| LOOP-004 | 8.4 | V | tiled vs untiled wall-clock, 1024x1024x1024, tile=128 | reported (real speedup, single-run methodology, not a rigorous claim on its own) | done | [test_tiling_e2e.cpp:246](../../tests/codegen/test_tiling_e2e.cpp#L246) |
+| LOOP-005-A/B | ARCH-009 | V/V | `MlirLowerer`'s own `LivenessAnalysis` call (not a hand-built `LivenessResult`) drives the tile-size choice through the real lowering path | tile_sizes={32,32,32} with no memory pressure; {16,16,16} once an unused 1.37 MiB weight alone pushes peak live bytes over the 1 MiB budget | done | [test_liveness_tiling_e2e.cpp](../../tests/codegen/test_liveness_tiling_e2e.cpp) |
+| LOOP-005-C | ARCH-009 | V | a plain 512x512x512 matmul (no extra weight fixture) already exceeds the default 1 MiB budget from its own operand sizes (3 MiB total) | tile_sizes={16,16,16} | done | [test_liveness_tiling_e2e.cpp:138](../../tests/codegen/test_liveness_tiling_e2e.cpp#L138) |
+| LOOP-005-D | ARCH-009 | V | the identical 512x512x512 matmul, lowered under a 4 MiB `TilingPolicy::memoryBudgetBytes` instead of the 1 MiB default | tile_sizes={32,32,32} -- confirms the "budget" is a policy field compared against a static shape-based estimate, not a real memory measurement, so modeling a machine with more/less available memory for this decision is exactly changing this one field, not an OS-level memory limit on the process | done | [test_liveness_tiling_e2e.cpp:158](../../tests/codegen/test_liveness_tiling_e2e.cpp#L158) |
 
 **Measured tile-size evidence** (`tools/benchmark_matmul_tiling`, not a
 CTest case — a reporting tool, best-of-5-runs per config, this
@@ -308,19 +312,19 @@ and compares results.
 
 ## Lowering (RM 3.22)
 
-| ID | RM | Kind | Case | Result | Status |
-|----|----|------|------|--------|--------|
-| LOW-001 | 3.22 | V | matmul (rank 2) -> `linalg.matmul` (zero-filled accumulator); matmul (rank >= 2 with leading batch axes, incl. broadcasting) -> `linalg.generic` contraction; linear (rank(x) 1 or >= 3) -> `linalg.generic` batched vector-matrix contraction, no separate M axis | numerically verified via JIT (LOW-E2E-MLP, LOOP-002/003, NATIVE-001, RANK-E2E) | done |
-| LOW-002 | 3.22 | V | conv -> `linalg.conv_2d_nchw_fchw`, zero-filled accumulator, `tensor.pad` when padding>0, channel-broadcast bias | numerically verified via JIT, padding=0 (LOW-009, E2E-002) and padding=1 (LOW-009b, exercises the `tensor.pad` path specifically) | done |
-| LOW-003 | 3.22 | V | relu/bias -> `linalg.generic` (incl. linear+relu fusion into one generic body) | numerically verified via JIT (LOW-E2E-MLP, NATIVE-001) | done |
-| LOW-004 | 3.22 | V | softmax expansion (max-shift, `math.exp`, sum, normalize — 4 chained `linalg.generic` ops) | numerically verified via JIT against a non-trivial (non-saturated) input (LOW-008, E2E-002, E2E-004) | done |
-| LOW-005 | 3.22 | V | concrete dim -> static; symbolic -> dynamic `?` | `lowerTensorType` implements this per ARCH-005 | broken (confirmed, not just untested) — `lowerTensorType` correctly lowers a symbolic dim to a dynamic `?` *type*, but every lowering function that materializes a fresh tensor (`tensor.empty()` in elementwise, relu, matmul/conv2d's zero-filled accumulator, etc.) calls it with zero dynamic-size operands, so a module with any symbolic dimension fails MLIR verification (`incorrect number of dynamic sizes`). Found by running the real `tensora` CLI driver against `examples/mlp.tns` (a symbolic-batch source file that already passes semantic analysis); the driver now rejects symbolic shapes before lowering with a clear message (INT-FULL-SYMBOLIC-REJECT) rather than hitting this. Fixing it properly means threading a same-shape existing SSA value (to query dynamic dims from via `tensor.dim`) through every lowering function -- a real, separate piece of work, not a one-line patch. |
-| LOW-006 | 3.14 | V | transpose -> `linalg.transpose` | numerically verified via JIT (LOW-006, E2E-004) | done |
-| LOW-007 | 3.13 | V | flatten -> `tensor.collapse_shape` (reassociation `[[0],[1..rank-1]]`) | numerically verified via JIT (LOW-007, E2E-002) | done |
-| LOW-010 | 3.15 | V | sum -> rank-reducing `linalg.generic` reduction (drops the named axis entirely, unlike softmax's keep-dims) | numerically verified via JIT (LOW-010) | done |
-| LOW-011 | 3.15 | V | mean -> sum + divide-by-axis-size elementwise pass | numerically verified via JIT (LOW-011) | done |
-| LOW-012 | 3.17 | V | maxpool -> `linalg.pooling_nchw_max` (-inf-filled accumulator, shape-only window operand) | numerically verified via JIT (LOW-012) | done |
-| LOW-013 | 3.8 | V | elementwise add with real tensor-tensor broadcasting (a shorter-rank operand, not a tensor-scalar op) -> `linalg.generic` with `broadcastOperandMap` | numerically verified via JIT (LOW-013): `[[1,2,3],[4,5,6]] + [10,20,30]` | done |
+| ID | RM | Kind | Case | Result | Status | Test |
+|----|----|----|----|----|----|----|
+| LOW-001 | [3.22](../language/03_LANGUAGE_REFERENCE_MANUAL.md#322-execution-model) | V | matmul (rank 2) -> `linalg.matmul` (zero-filled accumulator); matmul (rank >= 2 with leading batch axes, incl. broadcasting) -> `linalg.generic` contraction; linear (rank(x) 1 or >= 3) -> `linalg.generic` batched vector-matrix contraction, no separate M axis | numerically verified via JIT (LOW-E2E-MLP, LOOP-002/003, NATIVE-001, RANK-E2E) | done | [test_rank_e2e.cpp](../../tests/codegen/test_rank_e2e.cpp), [test_mlp_e2e.cpp](../../tests/codegen/test_mlp_e2e.cpp) |
+| LOW-002 | [3.22](../language/03_LANGUAGE_REFERENCE_MANUAL.md#322-execution-model) | V | conv -> `linalg.conv_2d_nchw_fchw`, zero-filled accumulator, `tensor.pad` when padding>0, channel-broadcast bias | numerically verified via JIT, padding=0 (LOW-009, E2E-002) and padding=1 (LOW-009b, exercises the `tensor.pad` path specifically) | done | [test_new_ops_e2e.cpp](../../tests/codegen/test_new_ops_e2e.cpp) |
+| LOW-003 | [3.22](../language/03_LANGUAGE_REFERENCE_MANUAL.md#322-execution-model) | V | relu/bias -> `linalg.generic` (incl. linear+relu fusion into one generic body) | numerically verified via JIT (LOW-E2E-MLP, NATIVE-001) | done | [test_mlp_e2e.cpp](../../tests/codegen/test_mlp_e2e.cpp) |
+| LOW-004 | [3.22](../language/03_LANGUAGE_REFERENCE_MANUAL.md#322-execution-model) | V | softmax expansion (max-shift, `math.exp`, sum, normalize — 4 chained `linalg.generic` ops) | numerically verified via JIT against a non-trivial (non-saturated) input (LOW-008, E2E-002, E2E-004) | done | [test_new_ops_e2e.cpp](../../tests/codegen/test_new_ops_e2e.cpp) |
+| LOW-005 | [3.22](../language/03_LANGUAGE_REFERENCE_MANUAL.md#322-execution-model) | V | concrete dim -> static; symbolic -> dynamic `?` | `lowerTensorType` implements this per ARCH-005 | broken (confirmed, not just untested) — `lowerTensorType` correctly lowers a symbolic dim to a dynamic `?` *type*, but every lowering function that materializes a fresh tensor (`tensor.empty()` in elementwise, relu, matmul/conv2d's zero-filled accumulator, etc.) calls it with zero dynamic-size operands, so a module with any symbolic dimension fails MLIR verification (`incorrect number of dynamic sizes`). Found by running the real `tensora` CLI driver against `examples/mlp.tns` (a symbolic-batch source file that already passes semantic analysis); the driver now rejects symbolic shapes before lowering with a clear message (INT-FULL-SYMBOLIC-REJECT) rather than hitting this. Fixing it properly means threading a same-shape existing SSA value (to query dynamic dims from via `tensor.dim`) through every lowering function -- a real, separate piece of work, not a one-line patch. | [cli_tests.txt](../../tests/cli/cli_tests.txt) |
+| LOW-006 | [3.14](../language/03_LANGUAGE_REFERENCE_MANUAL.md#314-transpose) | V | transpose -> `linalg.transpose` | numerically verified via JIT (LOW-006, E2E-004) | done | [test_new_ops_e2e.cpp:1](../../tests/codegen/test_new_ops_e2e.cpp#L1) |
+| LOW-007 | [3.13](../language/03_LANGUAGE_REFERENCE_MANUAL.md#313-flatten) | V | flatten -> `tensor.collapse_shape` (reassociation `[[0],[1..rank-1]]`) | numerically verified via JIT (LOW-007, E2E-002) | done | [test_new_ops_e2e.cpp:204](../../tests/codegen/test_new_ops_e2e.cpp#L204) |
+| LOW-010 | [3.15](../language/03_LANGUAGE_REFERENCE_MANUAL.md#315-sum--mean) | V | sum -> rank-reducing `linalg.generic` reduction (drops the named axis entirely, unlike softmax's keep-dims) | numerically verified via JIT (LOW-010) | done | [test_new_ops_e2e.cpp:451](../../tests/codegen/test_new_ops_e2e.cpp#L451) |
+| LOW-011 | [3.15](../language/03_LANGUAGE_REFERENCE_MANUAL.md#315-sum--mean) | V | mean -> sum + divide-by-axis-size elementwise pass | numerically verified via JIT (LOW-011) | done | [test_new_ops_e2e.cpp:499](../../tests/codegen/test_new_ops_e2e.cpp#L499) |
+| LOW-012 | [3.17](../language/03_LANGUAGE_REFERENCE_MANUAL.md#317-maxpool) | V | maxpool -> `linalg.pooling_nchw_max` (-inf-filled accumulator, shape-only window operand) | numerically verified via JIT (LOW-012) | done | [test_new_ops_e2e.cpp:547](../../tests/codegen/test_new_ops_e2e.cpp#L547) |
+| LOW-013 | [3.8](../language/03_LANGUAGE_REFERENCE_MANUAL.md#38-elementwise-arithmetic-and-broadcasting) | V | elementwise add with real tensor-tensor broadcasting (a shorter-rank operand, not a tensor-scalar op) -> `linalg.generic` with `broadcastOperandMap` | numerically verified via JIT (LOW-013): `[[1,2,3],[4,5,6]] + [10,20,30]` | done | [test_new_ops_e2e.cpp:101](../../tests/codegen/test_new_ops_e2e.cpp#L101) |
 
 The transpose/flatten/softmax/conv2d(+padding)/sum/mean/maxpool lowering
 checks above (LOW-006..013) run as one CTest, **LOW-NEWOPS**
@@ -342,15 +346,15 @@ Every RM 3.x frozen operator except general reshape is now lowered.
 
 ## End-to-End (RM 3.22, whitepaper §10)
 
-| ID | Kind | Case | Result | Status |
-|----|------|------|--------|--------|
-| E2E-001 | V | MLP compile+run vs hand-computed reference | within tol (exact match) | done — `LOW-E2E-MLP` (JIT) and `NATIVE-001` (ahead-of-time object file + system linker + standalone executable) both compute linear->relu->linear = 3.0 |
-| E2E-002 | V | CNN classifier vs reference | within tol (1e-4) | done — `test_cnn_e2e.cpp`: conv2d(stride=2)->relu->flatten->linear->softmax, checked against a Python-double-computed reference (0.539902); actual JIT result 0.539915, well within f32 tolerance |
-| E2E-003 | V | Transformer FFN vs reference | within tol (exact match) | done — `test_ffn_e2e.cpp`: position-wise linear->relu->linear at FFN shapes (seq_len=2, d_model=4, hidden=8), reusing the same lowering LOW-E2E-MLP already proved (no new ops needed); residual connection and layer-norm are not modeled (neither is a lowered op) |
-| E2E-004 | V | (single-head) scaled dot-product attention vs reference | within tol (1e-4) | done for single head — `test_attention_e2e.cpp`: matmul->transpose->scale->softmax->matmul, checked against a Python-double-computed reference (1.660477); multi-head specifically is not started (needs batched matmul) |
-| E2E-005 | V | matmul-heavy model, tiled vs untiled vs reference | within tol + timing | done — `LOOP-002/003/004` (single 8x8x8 matmul; timing reported, not asserted, since the workload is too small for tiling to pay off) |
-| E2E-006 | V | differential random small graphs | — | not started |
-| E2E-007 | V | real-world inference demos vs PyTorch (MLP placement / STL-10 10-class CNN / self-attention text) | within tol (1e-3/1e-4) | done — `make demo-mlp-placement`/`demo-cnn-image-classifier`/`demo-attn-text-classifier`: each runs PyTorch-trained weights on real held-out inputs through the real CLI (`--run --data-dir`) and checks against a saved PyTorch reference. These exercise **multi-channel** conv2d/maxpool (STL-10, natively 96x96 -- no upscaling, see ARCH-017: 3->16->32->64->64 channels, 4 conv/pool blocks) and batched rank-3 attention end-to-end — coverage the C++ e2e tests above (single-channel conv, rank-2 attention) do not. They also exercise graphs with >7 inputs/weights (the CNN has 11), i.e. the packed JIT invocation (ARCH-016). Not CTest cases (need PyTorch to prepare artifacts); the loader path they rely on is CTest-covered by `INT-DATALOAD-*` |
+| ID | Kind | Case | Result | Status | Test |
+|----|----|----|----|----|----|
+| E2E-001 | V | MLP compile+run vs hand-computed reference | within tol (exact match) | done — `LOW-E2E-MLP` (JIT) and `NATIVE-001` (ahead-of-time object file + system linker + standalone executable) both compute linear->relu->linear = 3.0 | [test_mlp_e2e.cpp](../../tests/codegen/test_mlp_e2e.cpp), [mlp_native_driver.c](../../tests/codegen/mlp_native_driver.c) |
+| E2E-002 | V | CNN classifier vs reference | within tol (1e-4) | done — `test_cnn_e2e.cpp`: conv2d(stride=2)->relu->flatten->linear->softmax, checked against a Python-double-computed reference (0.539902); actual JIT result 0.539915, well within f32 tolerance | [test_codegen_e2e.cpp:39](../../tests/codegen/test_codegen_e2e.cpp#L39) |
+| E2E-003 | V | Transformer FFN vs reference | within tol (exact match) | done — `test_ffn_e2e.cpp`: position-wise linear->relu->linear at FFN shapes (seq_len=2, d_model=4, hidden=8), reusing the same lowering LOW-E2E-MLP already proved (no new ops needed); residual connection and layer-norm are not modeled (neither is a lowered op) | [test_codegen_e2e.cpp:45](../../tests/codegen/test_codegen_e2e.cpp#L45) |
+| E2E-004 | V | (single-head) scaled dot-product attention vs reference | within tol (1e-4) | done for single head — `test_attention_e2e.cpp`: matmul->transpose->scale->softmax->matmul, checked against a Python-double-computed reference (1.660477); multi-head specifically is not started (needs batched matmul) | [test_codegen_e2e.cpp:42](../../tests/codegen/test_codegen_e2e.cpp#L42) |
+| E2E-005 | V | matmul-heavy model, tiled vs untiled vs reference | within tol + timing | done — `LOOP-002/003/004` (single 8x8x8 matmul; timing reported, not asserted, since the workload is too small for tiling to pay off) | [test_tiling_e2e.cpp](../../tests/codegen/test_tiling_e2e.cpp) |
+| E2E-006 | V | differential random small graphs | — | not started | — |
+| E2E-007 | V | real-world inference demos vs PyTorch (MLP placement / STL-10 10-class CNN / self-attention text) | within tol (1e-3/1e-4) | done — `make demo-mlp-placement`/`demo-cnn-image-classifier`/`demo-attn-text-classifier`: each runs PyTorch-trained weights on real held-out inputs through the real CLI (`--run --data-dir`) and checks against a saved PyTorch reference. These exercise **multi-channel** conv2d/maxpool (STL-10, natively 96x96 -- no upscaling, see ARCH-017: 3->16->32->64->64 channels, 4 conv/pool blocks) and batched rank-3 attention end-to-end — coverage the C++ e2e tests above (single-channel conv, rank-2 attention) do not. They also exercise graphs with >7 inputs/weights (the CNN has 11), i.e. the packed JIT invocation (ARCH-016). Not CTest cases (need PyTorch to prepare artifacts); the loader path they rely on is CTest-covered by `INT-DATALOAD-*` | — |
 
 E2E-001/002/004/005 use a hand-computed (or, for E2E-002/004, a
 Python-double-precision-computed) reference value rather than a literal
@@ -361,33 +365,33 @@ either way.
 
 ## Smoke (TEST_PLAN §2b) — week-1 gate marked
 
-| ID | Checks | Week 1 | Status |
-|----|--------|--------|--------|
-| SMOKE-MLIR | trivial `func.func`+`linalg.matmul` builds, lowers to LLVM, JIT-runs, checks 2x2 matmul result | yes (gate) | done |
-| SMOKE-TILING | MLIR tiling/transform interface callable on a matmul loop nest | yes (gate) | done — folded into `LOOP-002` rather than a separate smoke case, since `MatmulTilingPass` (the real deliverable) already exercises exactly this |
-| SMOKE-BUILD | cmake configure+build; ANTLR generates `TensoraLexer`/`TensoraParser` from `grammar/Tensora.g4` & compiles | yes | done — verified via a full `cmake -S . -B build && cmake --build build` from a clean tree; INTEG-003 additionally pins the MLIR/LLVM 21 apt packages required |
-| SMOKE-CLI | `tensora --check hello.tns` exits 0 | | planned |
-| SMOKE-E2E | `tensora matmul.tns -o m && ./m` runs | | planned |
+| ID | Checks | Week 1 | Status | Test |
+|----|----|----|----|----|
+| SMOKE-MLIR | trivial `func.func`+`linalg.matmul` builds, lowers to LLVM, JIT-runs, checks 2x2 matmul result | yes (gate) | done | [smoke_mlir.cpp:1](../../tests/smoke/smoke_mlir.cpp#L1) |
+| SMOKE-TILING | MLIR tiling/transform interface callable on a matmul loop nest | yes (gate) | done — folded into `LOOP-002` rather than a separate smoke case, since `MatmulTilingPass` (the real deliverable) already exercises exactly this | [test_tiling_e2e.cpp](../../tests/codegen/test_tiling_e2e.cpp) |
+| SMOKE-BUILD | cmake configure+build; ANTLR generates `TensoraLexer`/`TensoraParser` from `grammar/Tensora.g4` & compiles | yes | done — verified via a full `cmake -S . -B build && cmake --build build` from a clean tree; INTEG-003 additionally pins the MLIR/LLVM 21 apt packages required | — |
+| SMOKE-CLI | `tensora --check hello.tns` exits 0 |  | planned | — |
+| SMOKE-E2E | `tensora matmul.tns -o m && ./m` runs |  | planned | — |
 
 ## Integration (TEST_PLAN §9a) — real phases, no mocks
 
-| ID | Boundary (INTERFACES) | Case | Result | Status |
-|----|-----------------------|------|--------|--------|
-| INT-LEXPARSE | Lexer→Parser | source → AST (golden) | ast | planned |
-| INT-PARSESEMA | Parser→Sema | source → typed SSA graph (golden) | graph | planned |
-| INT-SEMAOPT | Sema→Passes | typed graph → optimized (before/after) | changed | planned |
-| INT-ANALYSISDEC | Analysis→Decision | liveness estimate drives a choice | decision varies | done — `LIVE-004`/`LOOP-001-F`: a `LivenessResult` over budget selects `TilingDecision`'s conservative tile size instead of the default |
-| INT-GRAPHMLIR | Lowering | typed graph → MLIR (golden) | mlir | partial — verified via numerical JIT/native-execution correctness (LOW-E2E-MLP, LOOP-002/003, NATIVE-001), not a literal golden-MLIR-text diff |
-| INT-MLIRLLVM | Backend | MLIR → LLVM → object | links | done — `NATIVE-001`: `codegen_mlp_native` emits a real x86-64 ELF object via `llvm::TargetMachine` (verified with `file`), linked by the system linker into a standalone executable (verified with `ldd`: only libc, no MLIR/LLVM runtime) |
-| INT-FULL-MLP | full pipeline | MLP source → executable | runs | done — the real `tensora` CLI (`src/driver/main.cpp`) now runs `examples/mlp_concrete.tns` through Lexer→Parser→SemanticAnalyzer→Level-1 passes→`MatmulTilingPass`→`MlirLowerer`→standard MLIR/LLVM lowering, both JIT (`--run`, `INT-FULL-MLP-RUN`, hand-verified result 145 for all-ones synthetic input) and ahead-of-time object-file emission (`-o`, verified via `file`) |
-| INT-FULL-MM | full pipeline | matmul-heavy source → executable | runs | done — `examples/matmul_large.tns` (256x256x256, above `MatmulTilingPass`'s default tiling threshold) compiles and JIT-runs through the same CLI (`INT-FULL-MM-RUN`); `--emit-mlir` shows 3 nested `scf.for` loops confirming the tiling pass actually fired, and the result (256, the contracted dimension, for all-ones inputs) is hand-verified |
-| INT-FULL-CNN | full pipeline | CNN source → executable | runs | done — `examples/cnn.tns` compiles and JIT-runs through the same CLI (`INT-FULL-CNN-RUN`), hand-verified result 0.5/0.5 (symmetric logits from an all-ones conv+linear stack) |
-| INT-FULL-SYMBOLS | Sema (RM 3.6) | `--emit-symbols` on a non-trivial program | golden symbol-table text | done — `INT-FULL-SYMBOLS`: `examples/mlp.tns` through the real CLI, checked against a `PASS_REGULAR_EXPRESSION` golden fragment; full determinism/scope/shadowing/error-path coverage is in `SYM-001`..`008` above |
-| INT-DATALOAD-EQUIV | Driver `--data-dir` (ARCH-016) | all-ones `.npy` inputs reproduce the built-in all-ones result | element[0] = 145 | done — `examples/mlp_concrete.tns` with `--data-dir tests/driver/mlp_ones` gives the same result as the default all-ones `--run` (`INT-FULL-MLP-RUN`), proving the `.npy` loader is transparent |
-| INT-DATALOAD-MISSING | Driver `--data-dir` | a declared param has no `.npy` file | reject: clear error, nonzero exit | done — `WILL_FAIL` |
-| INT-DATALOAD-BADSHAPE | Driver `--data-dir` | a param's `.npy` shape != declared shape | reject: clear error, nonzero exit | done — `WILL_FAIL` |
-| INT-DATALOAD-BADDTYPE | Driver `--data-dir` | a param's `.npy` dtype is not float32 | reject: clear error, nonzero exit | done — `WILL_FAIL` |
-| INT-POLY-* | Driver `--polyhedral` (ARCH-018) | linalg lowered through the MLIR affine dialect + `affine-loop-tile`, instead of the default `convert-linalg-to-loops` | result matches the default path exactly | done — `INT-POLY-MLP-RUN`/`MM-RUN`/`CNN-RUN`/`ATTN-RUN`/`CNNSTL10-RUN` each reuse their `INT-FULL-*-RUN` twin's expected value, so a match proves the polyhedral path is numerically identical, not just that it runs. The generated LLVM IR differs (real transform, not a no-op); see ARCH-018 |
+| ID | Boundary (INTERFACES) | Case | Result | Status | Test |
+|----|----|----|----|----|----|
+| INT-LEXPARSE | Lexer→Parser | source → AST (golden) | ast | planned | — |
+| INT-PARSESEMA | Parser→Sema | source → typed SSA graph (golden) | graph | planned | — |
+| INT-SEMAOPT | Sema→Passes | typed graph → optimized (before/after) | changed | planned | — |
+| INT-ANALYSISDEC | Analysis→Decision | liveness estimate drives a choice | decision varies | done — `LIVE-004`/`LOOP-001-F`: a `LivenessResult` over budget selects `TilingDecision`'s conservative tile size instead of the default | — |
+| INT-GRAPHMLIR | Lowering | typed graph → MLIR (golden) | mlir | partial — verified via numerical JIT/native-execution correctness (LOW-E2E-MLP, LOOP-002/003, NATIVE-001), not a literal golden-MLIR-text diff | — |
+| INT-MLIRLLVM | Backend | MLIR → LLVM → object | links | done — `NATIVE-001`: `codegen_mlp_native` emits a real x86-64 ELF object via `llvm::TargetMachine` (verified with `file`), linked by the system linker into a standalone executable (verified with `ldd`: only libc, no MLIR/LLVM runtime) | [codegen_mlp_native.cpp](../../tools/codegen_mlp_native.cpp) |
+| INT-FULL-MLP | full pipeline | MLP source → executable | runs | done — the real `tensora` CLI (`src/driver/main.cpp`) now runs `examples/mlp_concrete.tns` through Lexer→Parser→SemanticAnalyzer→Level-1 passes→`MatmulTilingPass`→`MlirLowerer`→standard MLIR/LLVM lowering, both JIT (`--run`, `INT-FULL-MLP-RUN`, hand-verified result 145 for all-ones synthetic input) and ahead-of-time object-file emission (`-o`, verified via `file`) | [cli_tests.txt:16](../../tests/cli/cli_tests.txt#L16), [cli_tests.txt:17](../../tests/cli/cli_tests.txt#L17) |
+| INT-FULL-MM | full pipeline | matmul-heavy source → executable | runs | done — `examples/matmul_large.tns` (256x256x256, above `MatmulTilingPass`'s default tiling threshold) compiles and JIT-runs through the same CLI (`INT-FULL-MM-RUN`); `--emit-mlir` shows 3 nested `scf.for` loops confirming the tiling pass actually fired, and the result (256, the contracted dimension, for all-ones inputs) is hand-verified | [cli_tests.txt:18](../../tests/cli/cli_tests.txt#L18) |
+| INT-FULL-CNN | full pipeline | CNN source → executable | runs | done — `examples/cnn.tns` compiles and JIT-runs through the same CLI (`INT-FULL-CNN-RUN`), hand-verified result 0.5/0.5 (symmetric logits from an all-ones conv+linear stack) | [cli_tests.txt:19](../../tests/cli/cli_tests.txt#L19) |
+| INT-FULL-SYMBOLS | Sema (RM 3.6) | `--emit-symbols` on a non-trivial program | golden symbol-table text | done — `INT-FULL-SYMBOLS`: `examples/mlp.tns` through the real CLI, checked against a `PASS_REGULAR_EXPRESSION` golden fragment; full determinism/scope/shadowing/error-path coverage is in `SYM-001`..`008` above | [cli_tests.txt:15](../../tests/cli/cli_tests.txt#L15) |
+| INT-DATALOAD-EQUIV | Driver `--data-dir` (ARCH-016) | all-ones `.npy` inputs reproduce the built-in all-ones result | element[0] = 145 | done — `examples/mlp_concrete.tns` with `--data-dir tests/driver/mlp_ones` gives the same result as the default all-ones `--run` (`INT-FULL-MLP-RUN`), proving the `.npy` loader is transparent | [cli_tests.txt:25](../../tests/cli/cli_tests.txt#L25) |
+| INT-DATALOAD-MISSING | Driver `--data-dir` | a declared param has no `.npy` file | reject: clear error, nonzero exit | done — `WILL_FAIL` | [cli_tests.txt:26](../../tests/cli/cli_tests.txt#L26) |
+| INT-DATALOAD-BADSHAPE | Driver `--data-dir` | a param's `.npy` shape != declared shape | reject: clear error, nonzero exit | done — `WILL_FAIL` | [cli_tests.txt:27](../../tests/cli/cli_tests.txt#L27) |
+| INT-DATALOAD-BADDTYPE | Driver `--data-dir` | a param's `.npy` dtype is not float32 | reject: clear error, nonzero exit | done — `WILL_FAIL` | [cli_tests.txt:28](../../tests/cli/cli_tests.txt#L28) |
+| INT-POLY-* | Driver `--polyhedral` (ARCH-018) | linalg lowered through the MLIR affine dialect + `affine-loop-tile`, instead of the default `convert-linalg-to-loops` | result matches the default path exactly | done — `INT-POLY-MLP-RUN`/`MM-RUN`/`CNN-RUN`/`ATTN-RUN`/`CNNSTL10-RUN` each reuse their `INT-FULL-*-RUN` twin's expected value, so a match proves the polyhedral path is numerically identical, not just that it runs. The generated LLVM IR differs (real transform, not a no-op); see ARCH-018 | [cli_tests.txt:41](../../tests/cli/cli_tests.txt#L41), [cli_tests.txt:42](../../tests/cli/cli_tests.txt#L42), [cli_tests.txt:43](../../tests/cli/cli_tests.txt#L43), [cli_tests.txt:44](../../tests/cli/cli_tests.txt#L44), [cli_tests.txt:48](../../tests/cli/cli_tests.txt#L48) |
 
 The CLI driver (`tensora --emit-tokens/--emit-ast/--check/--emit-symbols/--emit-graph/--explain/--emit-mlir/--emit-llvm/--run/-o`)
 did not exist before this pass; building and testing it against real `.tns` source is what surfaced the LOW-005
@@ -401,40 +405,40 @@ rank-4 multi-head attention example is simply not yet written, not blocked on mi
 
 ## Boundary (TEST_PLAN §9b) — min / max / just-inside / just-outside
 
-| ID | Rule | Case | Result | Status |
-|----|------|------|--------|--------|
-| BND-MM-001 | 3.7 | matmul `K=1` | accept | done |
-| BND-MM-002 | 3.7 | matmul `M=1` or `N=1` | accept | done |
-| BND-BC-001 | 3.8 | broadcast size-1 each side | accept | done |
-| BND-RS-001 | 3.12 | reshape product off by one | reject: SemaReshapeCount | done |
-| BND-FL-001 | 3.13 | flatten symbolic trailing dim | reject: SemaUnresolvableShape | done |
-| BND-CV-001 | 3.16 | conv output exact-divide vs remainder | accept / reject | done |
-| BND-CV-002 | 3.16 | kernel = input size (output 1) | accept | done |
-| BND-RD-001 | 3.15 | reduce axis 0 / last / only axis | accept | done |
-| BND-TR-001 | 3.14 | identity perm; full-reverse perm | accept | done |
-| BND-DIM-001 | 3.4 | just inside vs just outside affine subset | accept / SemaUnresolvableShape | done |
-| BND-LIVE-001 | ARCH-009 | value never used / only at return / all live | intervals correct | planned |
-| BND-TILE-001 | 8.4 | dim divisible / = tile / < tile / = 1 | plan correct | planned |
-| BND-LEX-001 | 3.1 | empty file | only eof, at line 1 col 1 | done |
-| BND-LEX-002 | 3.1 | comments-only file (single + multiple lines) | only eof | done |
-| BND-LEX-003 | 3.1 | token at EOF, no trailing newline, per token category | token then eof | done |
-| BND-LEX-004 | 3.1 | first token of any file starts at line 1, col 1, offset 0 | span correct | done |
-| BND-PAR-001 | 3.2, 3.24 | graph body that is only `return` (zero statements) vs a single statement | ast | done |
-| BND-PAR-002 | 3.2, 3.24 | minimal legal program: zero decls, exactly one graph, return-only body | ast | done |
-| BND-PAR-003 | 3.3 | `tensorType` axis-count extremes: 1 axis (min) vs 4 axes (conv-style) | ast | done |
-| BND-PAR-004 | 3.16, 3.24 | call arg-count extreme: `conv2d`'s 5-arg call (3 positional + 2 keyword) | ast | done |
+| ID | Rule | Case | Result | Status | Test |
+|----|----|----|----|----|----|
+| BND-MM-001 | [3.7](../language/03_LANGUAGE_REFERENCE_MANUAL.md#37-matrix-multiplication) | matmul `K=1` | accept | done | [test_semantic.cpp:659](../../tests/semantic/test_semantic.cpp#L659) |
+| BND-MM-002 | [3.7](../language/03_LANGUAGE_REFERENCE_MANUAL.md#37-matrix-multiplication) | matmul `M=1` or `N=1` | accept | done | [test_semantic.cpp:667](../../tests/semantic/test_semantic.cpp#L667) |
+| BND-BC-001 | [3.8](../language/03_LANGUAGE_REFERENCE_MANUAL.md#38-elementwise-arithmetic-and-broadcasting) | broadcast size-1 each side | accept | done | [test_semantic.cpp:680](../../tests/semantic/test_semantic.cpp#L680) |
+| BND-RS-001 | [3.12](../language/03_LANGUAGE_REFERENCE_MANUAL.md#312-reshape) | reshape product off by one | reject: SemaReshapeCount | done | [test_semantic.cpp:693](../../tests/semantic/test_semantic.cpp#L693) |
+| BND-FL-001 | [3.13](../language/03_LANGUAGE_REFERENCE_MANUAL.md#313-flatten) | flatten symbolic trailing dim | reject: SemaUnresolvableShape | done | [test_semantic.cpp:701](../../tests/semantic/test_semantic.cpp#L701) |
+| BND-CV-001 | [3.16](../language/03_LANGUAGE_REFERENCE_MANUAL.md#316-conv2d) | conv output exact-divide vs remainder | accept / reject | done | [test_semantic.cpp:709](../../tests/semantic/test_semantic.cpp#L709) |
+| BND-CV-002 | [3.16](../language/03_LANGUAGE_REFERENCE_MANUAL.md#316-conv2d) | kernel = input size (output 1) | accept | done | [test_semantic.cpp:730](../../tests/semantic/test_semantic.cpp#L730) |
+| BND-RD-001 | [3.15](../language/03_LANGUAGE_REFERENCE_MANUAL.md#315-sum--mean) | reduce axis 0 / last / only axis | accept | done | [test_semantic.cpp:745](../../tests/semantic/test_semantic.cpp#L745) |
+| BND-TR-001 | [3.14](../language/03_LANGUAGE_REFERENCE_MANUAL.md#314-transpose) | identity perm; full-reverse perm | accept | done | [test_semantic.cpp:763](../../tests/semantic/test_semantic.cpp#L763) |
+| BND-DIM-001 | [3.4](../language/03_LANGUAGE_REFERENCE_MANUAL.md#34-symbolic-dimensions) | just inside vs just outside affine subset | accept / SemaUnresolvableShape | done | [test_semantic.cpp:783](../../tests/semantic/test_semantic.cpp#L783) |
+| BND-LIVE-001 | ARCH-009 | value never used / only at return / all live | intervals correct | planned | — |
+| BND-TILE-001 | 8.4 | dim divisible / = tile / < tile / = 1 | plan correct | planned | — |
+| BND-LEX-001 | [3.1](../language/03_LANGUAGE_REFERENCE_MANUAL.md#31-lexical-structure) | empty file | only eof, at line 1 col 1 | done | [test_lexer.cpp:393](../../tests/lexer/test_lexer.cpp#L393) |
+| BND-LEX-002 | [3.1](../language/03_LANGUAGE_REFERENCE_MANUAL.md#31-lexical-structure) | comments-only file (single + multiple lines) | only eof | done | [test_lexer.cpp:400](../../tests/lexer/test_lexer.cpp#L400) |
+| BND-LEX-003 | [3.1](../language/03_LANGUAGE_REFERENCE_MANUAL.md#31-lexical-structure) | token at EOF, no trailing newline, per token category | token then eof | done | [test_lexer.cpp:415](../../tests/lexer/test_lexer.cpp#L415) |
+| BND-LEX-004 | [3.1](../language/03_LANGUAGE_REFERENCE_MANUAL.md#31-lexical-structure) | first token of any file starts at line 1, col 1, offset 0 | span correct | done | [test_lexer.cpp:438](../../tests/lexer/test_lexer.cpp#L438) |
+| BND-PAR-001 | [3.2](../language/03_LANGUAGE_REFERENCE_MANUAL.md#32-program-structure), [3.24](../language/03_LANGUAGE_REFERENCE_MANUAL.md#324-grammar-summary) | graph body that is only `return` (zero statements) vs a single statement | ast | done | [test_parser.cpp:668](../../tests/parser/test_parser.cpp#L668) |
+| BND-PAR-002 | [3.2](../language/03_LANGUAGE_REFERENCE_MANUAL.md#32-program-structure), [3.24](../language/03_LANGUAGE_REFERENCE_MANUAL.md#324-grammar-summary) | minimal legal program: zero decls, exactly one graph, return-only body | ast | done | [test_parser.cpp:684](../../tests/parser/test_parser.cpp#L684) |
+| BND-PAR-003 | [3.3](../language/03_LANGUAGE_REFERENCE_MANUAL.md#33-tensor-types) | `tensorType` axis-count extremes: 1 axis (min) vs 4 axes (conv-style) | ast | done | [test_parser.cpp:696](../../tests/parser/test_parser.cpp#L696) |
+| BND-PAR-004 | [3.16](../language/03_LANGUAGE_REFERENCE_MANUAL.md#316-conv2d), [3.24](../language/03_LANGUAGE_REFERENCE_MANUAL.md#324-grammar-summary) | call arg-count extreme: `conv2d`'s 5-arg call (3 positional + 2 keyword) | ast | done | [test_parser.cpp:717](../../tests/parser/test_parser.cpp#L717) |
 
 ## User / Acceptance (TEST_PLAN §9c) — CLI + diagnostics + viva
 
-| ID | Case | Result | Status |
-|----|------|--------|--------|
-| USER-CLI-001 | each stage flag emits documented artifact + exit code | correct | planned |
-| USER-LEARN-001 | MLP: check → explain → build → run vs reference | matches tutorial | planned |
-| USER-FIXIT-001 | shape bug rejected with located values; fix compiles | clear diagnostic | planned |
-| USER-DIAG-001 | every error class: category+location+expected/actual | UX contract met | planned |
-| USER-VIVA-001 | 2 working programs run correctly | pass | planned |
-| USER-VIVA-002 | 2 failing programs rejected with right diagnostics | pass | planned |
-| USER-EXPLAIN-001 | `explain` output matches tutorial for reference programs | matches | planned |
+| ID | Case | Result | Status | Test |
+|----|----|----|----|----|
+| USER-CLI-001 | each stage flag emits documented artifact + exit code | correct | planned | — |
+| USER-LEARN-001 | MLP: check → explain → build → run vs reference | matches tutorial | planned | — |
+| USER-FIXIT-001 | shape bug rejected with located values; fix compiles | clear diagnostic | planned | — |
+| USER-DIAG-001 | every error class: category+location+expected/actual | UX contract met | planned | — |
+| USER-VIVA-001 | 2 working programs run correctly | pass | planned | — |
+| USER-VIVA-002 | 2 failing programs rejected with right diagnostics | pass | planned | — |
+| USER-EXPLAIN-001 | `explain` output matches tutorial for reference programs | matches | planned | — |
 
 ## Coverage roll-up
 

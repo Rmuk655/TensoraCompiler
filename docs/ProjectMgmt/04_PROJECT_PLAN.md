@@ -2,7 +2,7 @@
 
 ## 4.1 Objectives
 
-Deliver a complete Tensora compiler by the course deadline while
+Deliver a complete Tensora academic compiler by its deadline while
 concentrating engineering effort on semantic analysis and code
 generation/optimization.
 
@@ -200,7 +200,7 @@ The repository should include:
 -   benchmark scripts;
 -   issue templates;
 -   license selected by the team/institution;
--   tagged course release.
+-   tagged academic-compiler release.
 
 ## 4.8 Research-Readiness Plan
 
@@ -215,5 +215,5 @@ one:
 -   ablation-friendly pass infrastructure;
 -   precise statement of which facts each optimization consumes.
 
-A post-course research question can then be scoped with faculty using
+A research question, once this academic compiler is done, can then be scoped with faculty using
 measured evidence.

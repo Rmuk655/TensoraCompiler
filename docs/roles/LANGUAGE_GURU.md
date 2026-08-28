@@ -34,7 +34,7 @@ LLVM
 Native execution
 ```
 
-The semester implementation primarily targets forward computation suitable for inference.
+The academic compiler's implementation primarily targets forward computation suitable for inference.
 
 The project is graded approximately:
 
@@ -111,7 +111,7 @@ For example:
 Tensora Language Baseline 0.1
 ```
 
-A baseline is immutable once frozen for a course milestone unless the team formally approves a language change.
+A baseline is immutable once frozen for an academic compiler milestone unless the team formally approves a language change.
 
 ### 4. Language Change Process
 
@@ -200,7 +200,7 @@ Classify features:
 CORE
 SHOULD HAVE
 STRETCH
-POST-COURSE
+POST-ACADEMIC-COMPILER
 RESEARCH
 REJECTED
 ```
@@ -267,7 +267,7 @@ When reviewing a proposed change:
 - implementation requires unsupported information;
 - the feature conflicts with existing rules;
 - the feature cannot be explained clearly;
-- the feature is too large for the semester;
+- the feature is too large for the academic compiler;
 - the feature duplicates a lower-level compiler concern.
 
 ### Escalate if
@@ -288,7 +288,7 @@ Distinguish:
 
 ```text
 known prior art
-course-level contribution
+academic compiler contribution
 possible research extension
 ```
 

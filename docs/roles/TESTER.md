@@ -71,7 +71,7 @@ Cover:
 
 ### 3. Semantic Tests
 
-This is the largest suite because semantic analysis receives 30% of the course marks.
+This is the largest suite because semantic analysis receives 30% of this academic compiler's grading weight.
 
 Cover:
 
