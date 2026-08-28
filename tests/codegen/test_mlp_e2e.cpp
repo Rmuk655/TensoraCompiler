@@ -26,6 +26,7 @@
 #include "tensora/codegen/DialectSetup.h"
 #include "tensora/codegen/MlirLowerer.h"
 #include "tensora/optimization/GraphPass.h"
+#include "support/JitHarness.h"
 
 namespace tns = tensora;
 using namespace mlir;
@@ -145,40 +146,18 @@ int run_mlp_e2e() {
     return 1;
   }
 
-  // --- Standard MLIR/LLVM lowering pipeline. ---
-  mlir::PassManager mlirPm(&ctx);
-  bufferization::OneShotBufferizePassOptions bufOpts;
-  bufOpts.bufferizeFunctionBoundaries = true;  // needed once there's more than one func + a call between them
-  mlirPm.addPass(bufferization::createOneShotBufferizePass(bufOpts));
-  mlirPm.addPass(createConvertLinalgToLoopsPass());
-  mlirPm.addPass(createSCFToControlFlowPass());
-  mlirPm.addPass(createConvertControlFlowToLLVMPass());
-  mlirPm.addPass(createArithToLLVMConversionPass());
-  mlirPm.addPass(createFinalizeMemRefToLLVMConversionPass());
-  mlirPm.addPass(createConvertFuncToLLVMPass());
-  mlirPm.addPass(createReconcileUnrealizedCastsPass());
-  if (failed(mlirPm.run(module))) {
-    fprintf(stderr, "LOW-E2E-MLP FAIL: standard lowering pipeline failed\n");
-    module.dump();
-    return 1;
-  }
+  // --- Standard MLIR/LLVM lowering pipeline, then JIT execution
+  // (tests/support/JitHarness.h). bufferizeFunctionBoundaries is needed
+  // once there's more than one func + a call between them; no other
+  // JitPipelineOptions flag applies to this plain linear/relu graph.
+  tensora::testing::JitPipelineOptions jitOpts;
+  if (!tensora::testing::runStandardLoweringPipeline(ctx, module, jitOpts, "LOW-E2E-MLP")) return 1;
 
-  llvm::InitializeNativeTarget();
-  llvm::InitializeNativeTargetAsmPrinter();
-  auto maybeEngine = ExecutionEngine::create(module);
-  if (!maybeEngine) {
-    fprintf(stderr, "LOW-E2E-MLP FAIL: ExecutionEngine::create failed\n");
-    return 1;
-  }
-  auto engine = std::move(*maybeEngine);
-
-  auto maybeFn = engine->lookup("test_main");
-  if (!maybeFn) {
-    fprintf(stderr, "LOW-E2E-MLP FAIL: could not look up 'test_main'\n");
-    return 1;
-  }
-  auto fn = reinterpret_cast<float (*)()>(*maybeFn);
-  float result = fn();
+  auto maybeEngine = tensora::testing::createJitEngine(module, jitOpts, "LOW-E2E-MLP");
+  if (!maybeEngine) return 1;
+  auto maybeFn = tensora::testing::lookupJitEntry<float (*)()>(**maybeEngine, "test_main", "LOW-E2E-MLP");
+  if (!maybeFn) return 1;
+  float result = (*maybeFn)();
 
   if (result != 3.0f) {
     fprintf(stderr, "LOW-E2E-MLP FAIL: expected 3.0, got %f\n", result);

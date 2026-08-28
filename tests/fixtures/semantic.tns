@@ -1,0 +1,359 @@
+# GENERATED-FROM-SOURCE fixture file (see docs/testing/TEST_MATRIX.md for
+# what each ID checks). Hand-edited, NOT tool-generated: this is real .tns
+# source, kept syntax-highlightable, one case per '### ID | description'
+# block. tools/gen_fixture_cases.py turns this into a generated .cpp with one
+# TEST_CASE(...) per entry (see cmake/Tests.cmake). Each block runs until the
+# next '### ' line or end of file.
+#
+# expect: ok               -- program is accepted, no further check
+# expect: reject <DiagCode> -- program is rejected, and the FIRST reported
+#                              diagnostic must have this DiagCode
+
+### SEM-DECL-001 | duplicate global name is rejected
+### expect: reject SemaRedeclaration
+input x: Tensor[a=1]
+weight x: Tensor[a=1]
+graph g { return x }
+
+### SEM-DECL-002 | duplicate graph name is rejected
+### expect: reject SemaRedeclaration
+input a: Tensor[x=1]
+graph g { return a }
+graph g { return a }
+
+### SEM-DECL-003 | a graph-local assignment cannot shadow a global input/weight (different kind)
+### expect: reject SemaRedeclaration
+input x: Tensor[a=1]
+graph g {
+  x = relu(x)
+  return x
+}
+
+### SEM-DECL-004 | a duplicate axis name within one tensor type is rejected (RM 3.3, ARCH-013)
+### expect: reject SemaDuplicateAxisName
+input x: Tensor[batch=4, batch=8]
+graph g { return x }
+
+### SEM-DECL-005 | a duplicate axis name in a reshape target is rejected (RM 3.3, ARCH-013)
+### expect: reject SemaDuplicateAxisName
+input x: Tensor[batch=4, feat=8]
+graph g {
+  y = reshape(x, [batch=4, batch=8])
+  return y
+}
+
+### SEM-NAME-001 | use of an undefined name is rejected
+### expect: reject SemaUndefinedName
+graph g {
+  y = relu(x)
+  return y
+}
+
+### SEM-NAME-002 | return of an unbound name is rejected
+### expect: reject SemaUndefinedName
+input x: Tensor[a=1]
+graph g {
+  y = relu(x)
+  return z
+}
+
+### SEM-NAME-003 | calling an operator name outside the frozen set is rejected
+### expect: reject SemaUndefinedName
+input x: Tensor[a=1]
+graph g {
+  y = sigmoid(x)
+  return y
+}
+
+### SEM-SCOPE-002 | a value name from graph A is not visible in graph B
+### expect: reject SemaUndefinedName
+input x: Tensor[a=1]
+graph a { h = relu(x)
+ return h }
+graph b { return h }
+
+### SEM-TYPE-001 | matmul with a scalar operand (x @ 0.5) requires a tensor
+### expect: reject SemaTypeMismatch
+input x: Tensor[a=1,b=2]
+graph g {
+  y = x @ 0.5
+  return y
+}
+
+### SEM-ARITY-001 | linear with 2 args instead of 3 is rejected
+### expect: reject SemaArgCount
+input x: Tensor[a=1,b=2]
+weight w: Tensor[b=2,c=3]
+graph g {
+  y = linear(x, w)
+  return y
+}
+
+### SEM-ARITY-002 | conv2d missing the stride keyword is rejected
+### expect: reject SemaArgCount
+input x: Tensor[batch=B,channel=3,height=4,width=4]
+weight w: Tensor[out_channel=2,in_channel=3,kh=3,kw=3]
+weight b: Tensor[out_channel=2]
+graph g {
+  y = conv2d(x, w, b, padding=1)
+  return y
+}
+
+### SEM-ARITY-003 | softmax axis given as an integer instead of an identifier
+### expect: reject SemaArgKind
+input x: Tensor[a=1,b=2]
+graph g {
+  y = softmax(x, axis=1)
+  return y
+}
+
+### SEM-ARITY-004 | relu with an unknown keyword argument is rejected
+### expect: reject SemaArgKind
+input x: Tensor[a=1]
+graph g {
+  y = relu(x, foo=1)
+  return y
+}
+
+### SEM-ARITY-005 | transpose missing perm is rejected
+### expect: reject SemaArgCount
+input x: Tensor[a=1,b=2]
+graph g {
+  y = transpose(x)
+  return y
+}
+
+### SEM-MM-002 | matmul: contraction dims 784 != 512 is rejected
+### expect: reject SemaShapeMismatch
+input x: Tensor[batch=B,feat=784]
+weight w: Tensor[in=512,out=256]
+graph g {
+  y = x @ w
+  return y
+}
+
+### SEM-MM-003 | matmul: symbolic contraction K unifies (near-miss of MM-002)
+### expect: ok
+input x: Tensor[batch=B,feat=K]
+weight w: Tensor[in=K,out=256]
+graph g {
+  y = x @ w
+  return y
+}
+
+### SEM-MM-004 | matmul: batched leading-axis mismatch is rejected
+### expect: reject SemaBroadcast
+input a: Tensor[batch=8,head=12,m=4,k=16]
+input b: Tensor[batch=8,head=16,k=16,n=4]
+graph g {
+  y = a @ b
+  return y
+}
+
+### SEM-LIN-002 | linear: bias size mismatch is rejected
+### expect: reject SemaShapeMismatch
+input x: Tensor[batch=B,in=784]
+weight w: Tensor[in=784,out=256]
+weight b: Tensor[out=10]
+graph g {
+  y = linear(x, w, b)
+  return y
+}
+
+### SEM-LIN-003 | linear: bias axis-name mismatch is rejected
+### expect: reject SemaAxisNameMismatch
+input x: Tensor[batch=B,in=784]
+weight w: Tensor[in=784,out=256]
+weight b: Tensor[hidden=256]
+graph g {
+  y = linear(x, w, b)
+  return y
+}
+
+### SEM-EW-001 | elementwise: equal shapes and names is accepted
+### expect: ok
+input a: Tensor[batch=B,feat=4]
+input b: Tensor[batch=B,feat=4]
+graph g {
+  y = a + b
+  return y
+}
+
+### SEM-EW-003 | elementwise: equal sizes but swapped axis names is rejected
+### expect: reject SemaAxisNameMismatch
+input a: Tensor[batch=32,feat=64]
+input b: Tensor[feat=64,batch=32]
+graph g {
+  y = a + b
+  return y
+}
+
+### SEM-EW-004 | elementwise: incompatible sizes is rejected
+### expect: reject SemaBroadcast
+input a: Tensor[batch=B,feat=4]
+input b: Tensor[batch=B,feat=5]
+graph g {
+  y = a + b
+  return y
+}
+
+### SEM-RS-002 | reshape: 768 -> [head=10,dim=64] (640) is rejected
+### expect: reject SemaReshapeCount
+input x: Tensor[feat=768]
+graph g {
+  y = reshape(x, [head=10,dim=64])
+  return y
+}
+
+### SEM-RS-003 | reshape: unrelated symbolic factors cannot be statically resolved
+### expect: reject SemaUnresolvableShape
+input x: Tensor[batch=B,feat=768]
+graph g {
+  y = reshape(x, [batch=C,head=12,dim=64])
+  return y
+}
+
+### SEM-RS-004 | reshape: matching symbolic factor cancels correctly (near-miss of RS-003)
+### expect: ok
+input x: Tensor[batch=B,feat=768]
+graph g {
+  y = reshape(x, [batch=B,head=12,dim=64])
+  return y
+}
+
+### SEM-FL-002 | flatten: a symbolic trailing dim is rejected
+### expect: reject SemaUnresolvableShape
+input x: Tensor[batch=B,feat=S]
+graph g {
+  y = flatten(x)
+  return y
+}
+
+### SEM-TR-002 | transpose: a repeated perm index is rejected
+### expect: reject SemaTransposePerm
+input x: Tensor[a=1,b=2,c=3]
+graph g {
+  y = transpose(x, perm=[0,0,2])
+  return y
+}
+
+### SEM-TR-003 | transpose: an out-of-range perm index is rejected
+### expect: reject SemaTransposePerm
+input x: Tensor[a=1,b=2,c=3]
+graph g {
+  y = transpose(x, perm=[0,1,3])
+  return y
+}
+
+### SEM-RD-002 | mean: a nonexistent axis name is rejected
+### expect: reject SemaAxisNotFound
+input x: Tensor[batch=B,feat=4]
+graph g {
+  y = mean(x, axis=nope)
+  return y
+}
+
+### SEM-SM-002 | softmax: a nonexistent axis is rejected
+### expect: reject SemaAxisNotFound
+input x: Tensor[batch=B,feat=4]
+graph g {
+  y = softmax(x, axis=nope)
+  return y
+}
+
+### SEM-CV-002 | conv2d: channel mismatch 3 != 16 is rejected
+### expect: reject SemaConvChannel
+input x: Tensor[batch=B,channel=3,height=224,width=224]
+weight w: Tensor[out_channel=32,in_channel=16,kh=3,kw=3]
+weight b: Tensor[out_channel=32]
+graph g {
+  y = conv2d(x, w, b, stride=1, padding=1)
+  return y
+}
+
+### SEM-CV-003 | conv2d: non-dividing spatial arithmetic is rejected
+### expect: reject SemaConvArithmetic
+input x: Tensor[batch=B,channel=3,height=7,width=7]
+weight w: Tensor[out_channel=3,in_channel=3,kh=3,kw=3]
+weight b: Tensor[out_channel=3]
+graph g {
+  y = conv2d(x, w, b, stride=3, padding=0)
+  return y
+}
+
+### SEM-CV-004 | conv2d: stride=2 at 224x224 with a config that would only floor-divide is rejected, not floored
+### expect: reject SemaConvArithmetic
+input x: Tensor[batch=B,channel=3,height=224,width=224]
+weight w: Tensor[out_channel=64,in_channel=3,kh=3,kw=3]
+weight b: Tensor[out_channel=64]
+graph g {
+  y = conv2d(x, w, b, stride=2, padding=1)
+  return y
+}
+
+### SEM-PL-002 | maxpool: stride defaults to size when omitted
+### expect: ok
+input x: Tensor[batch=B,channel=32,height=112,width=112]
+graph g {
+  y = maxpool(x, size=2)
+  return y
+}
+
+### SEM-DIM-001 | equality/unification of symbolic B across two operands
+### expect: ok
+input a: Tensor[batch=B,feat=4]
+input b: Tensor[batch=B,feat=4]
+graph g {
+  y = a + b
+  return y
+}
+
+### SEM-DIM-002 | a reshape requiring reasoning outside the bounded subset is rejected
+### expect: reject SemaUnresolvableShape
+input x: Tensor[batch=B,feat=768]
+graph g {
+  y = reshape(x, [batch=C,head=12,dim=64])
+  return y
+}
+
+### SEM-DIM-003 | a zero-sized dimension is rejected (RM 3.3, ARCH-013)
+### expect: reject SemaNonPositiveDimension
+input x: Tensor[batch=0, feat=8]
+graph g { return x }
+
+### ATT-002 | mutated attention: Q/K leading axis names swapped breaks the batched matmul
+### expect: reject SemaAxisNameMismatch
+input Q: Tensor[batch=B, head=12, qseq=S, dim=64]
+input K: Tensor[head=B, batch=12, kseq=S, dim=64]
+input V: Tensor[batch=B, head=12, kseq=S, dim=64]
+
+graph attention {
+    kt      = transpose(K, perm=[0, 1, 3, 2])
+    scores  = Q @ kt
+    return scores
+}
+
+### BND-MM-001 | matmul boundary: K=1
+### expect: ok
+input a: Tensor[m=4,k=1]
+input b: Tensor[k=1,n=4]
+graph g {
+  y = a @ b
+  return y
+}
+
+### BND-RS-001 | reshape boundary: product off by one is rejected
+### expect: reject SemaReshapeCount
+input x: Tensor[feat=768]
+graph g {
+  y = reshape(x, [flat=767])
+  return y
+}
+
+### BND-FL-001 | flatten boundary: a symbolic trailing dim is rejected
+### expect: reject SemaUnresolvableShape
+input x: Tensor[batch=B,seq=S]
+graph g {
+  y = flatten(x)
+  return y
+}

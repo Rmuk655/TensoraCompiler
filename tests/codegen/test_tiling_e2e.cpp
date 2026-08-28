@@ -30,6 +30,7 @@
 #include "tensora/codegen/DialectSetup.h"
 #include "tensora/codegen/MatmulTilingPass.h"
 #include "tensora/codegen/MlirLowerer.h"
+#include "support/JitHarness.h"
 
 namespace tns = tensora;
 using namespace mlir;
@@ -103,62 +104,32 @@ std::pair<float, double> runPipeline(ModuleOp module, MLIRContext& ctx, bool app
     module.walk([&](scf::ForOp) { *sawTiledLoop = true; });
   }
 
-  PassManager pm(&ctx);
-  bufferization::OneShotBufferizePassOptions bufOpts;
-  bufOpts.bufferizeFunctionBoundaries = true;
-  bufOpts.allowReturnAllocsFromLoops = true;  // tiling's scf.for loops carry tensor iter_args/results
-  // The default InferLayoutMap tries to compute a precise (possibly
-  // static-stride) layout per function boundary; the subview-derived
-  // layouts inside a tiled loop nest defeat that inference. Forcing
-  // fully-dynamic-strided memrefs at every function boundary sidesteps
-  // the inference entirely (still correct, just less precise typing).
-  bufOpts.functionBoundaryTypeConversion = bufferization::LayoutMapOption::FullyDynamicLayoutMap;
-  pm.addPass(bufferization::createOneShotBufferizePass(bufOpts));
-  pm.addPass(createConvertLinalgToLoopsPass());
-  pm.addPass(createSCFToControlFlowPass());
-  pm.addPass(createConvertControlFlowToLLVMPass());
-  // memref.subview (introduced by tiling) lowers to LLVM only after its
-  // offset/stride metadata has been expanded into explicit index
-  // arithmetic; this must run *before* ArithToLLVM so that the
-  // newly-introduced index-typed arithmetic gets converted to i64 in the
-  // same sweep as everything else, instead of being stranded afterward.
-  pm.addPass(memref::createExpandStridedMetadataPass());
-  // ExpandStridedMetadata computes subview offsets via affine.apply;
-  // that needs lowering to arith before ArithToLLVM can see it.
-  pm.addPass(createLowerAffinePass());
-  pm.addPass(createArithToLLVMConversionPass());
-  pm.addPass(createFinalizeMemRefToLLVMConversionPass());
-  pm.addPass(createConvertFuncToLLVMPass());
-  pm.addPass(createReconcileUnrealizedCastsPass());
-  if (failed(pm.run(module))) {
-    fprintf(stderr, "standard lowering pipeline failed\n");
-    module.dump();
-    return {NAN, 0.0};
-  }
+  // --- Standard MLIR/LLVM lowering pipeline, then JIT execution
+  // (tests/support/JitHarness.h). Same profile as CNN's full profile
+  // minus convertMathToLLVM (no math.* op here): tiling's scf.for loops
+  // carry tensor iter_args/results (allowReturnAllocsFromLoops), the
+  // subview-derived layouts inside a tiled loop nest defeat the default
+  // per-function layout inference (fullyDynamicFunctionBoundaryLayout),
+  // and memref.subview's offsets need expanding before ArithToLLVM
+  // (expandStridedMetadataAndLowerAffine). Tiling's per-tile
+  // memref.copy on non-identity-layout subviews lowers to a call to the
+  // `memrefCopy` runtime helper, which lives in MLIR's own
+  // runner-support shared library (useCRunnerUtilsSharedLib).
+  tensora::testing::JitPipelineOptions jitOpts;
+  jitOpts.allowReturnAllocsFromLoops = true;
+  jitOpts.fullyDynamicFunctionBoundaryLayout = true;
+  jitOpts.expandStridedMetadataAndLowerAffine = true;
+  jitOpts.useCRunnerUtilsSharedLib = true;
+  if (!tensora::testing::runStandardLoweringPipeline(ctx, module, jitOpts, "LOOP")) return {NAN, 0.0};
 
-  // Tiling's per-tile memref.copy on non-identity-layout subviews lowers
-  // to a call to the `memrefCopy` runtime helper (a strided element-wise
-  // copy loop; not something the LLVM conversion inlines), which lives
-  // in MLIR's own runner-support shared library, not in this process.
-  ExecutionEngineOptions engineOpts;
-  static const std::string kRunnerUtils = MLIR_C_RUNNER_UTILS_PATH;
-  static const llvm::SmallVector<llvm::StringRef, 1> kSharedLibs = {kRunnerUtils};
-  engineOpts.sharedLibPaths = kSharedLibs;
-  auto maybeEngine = ExecutionEngine::create(module, engineOpts);
-  if (!maybeEngine) {
-    fprintf(stderr, "ExecutionEngine::create failed\n");
-    module.dump();
-    return {NAN, 0.0};
-  }
+  auto maybeEngine = tensora::testing::createJitEngine(module, jitOpts, "LOOP");
+  if (!maybeEngine) return {NAN, 0.0};
   auto engine = std::move(*maybeEngine);
-  auto maybeFn = engine->lookup("_mlir_ciface_mm");
-  if (!maybeFn) {
-    fprintf(stderr, "could not look up '_mlir_ciface_mm'\n");
-    return {NAN, 0.0};
-  }
   using CIfaceMatmul = void (*)(StridedMemRefType<float, 2>*, StridedMemRefType<float, 2>*,
                                  StridedMemRefType<float, 2>*);
-  auto fn = reinterpret_cast<CIfaceMatmul>(*maybeFn);
+  auto maybeFn = tensora::testing::lookupJitEntry<CIfaceMatmul>(*engine, "_mlir_ciface_mm", "LOOP");
+  if (!maybeFn) return {NAN, 0.0};
+  auto fn = *maybeFn;
 
   std::vector<float> aData(kDim * kDim, 1.0f);
   std::vector<float> bData(kDim * kDim, 1.0f);

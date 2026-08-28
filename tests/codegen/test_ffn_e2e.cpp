@@ -35,6 +35,7 @@
 #include "tensora/codegen/DialectSetup.h"
 #include "tensora/codegen/MlirLowerer.h"
 #include "tensora/optimization/GraphPass.h"
+#include "support/JitHarness.h"
 
 namespace tns = tensora;
 using namespace mlir;
@@ -144,36 +145,17 @@ int run_ffn_e2e() {
     return 1;
   }
 
-  mlir::PassManager mlirPm(&ctx);
-  bufferization::OneShotBufferizePassOptions bufOpts;
-  bufOpts.bufferizeFunctionBoundaries = true;
-  mlirPm.addPass(bufferization::createOneShotBufferizePass(bufOpts));
-  mlirPm.addPass(createConvertLinalgToLoopsPass());
-  mlirPm.addPass(createSCFToControlFlowPass());
-  mlirPm.addPass(createConvertControlFlowToLLVMPass());
-  mlirPm.addPass(createArithToLLVMConversionPass());
-  mlirPm.addPass(createFinalizeMemRefToLLVMConversionPass());
-  mlirPm.addPass(createConvertFuncToLLVMPass());
-  mlirPm.addPass(createReconcileUnrealizedCastsPass());
-  if (failed(mlirPm.run(module))) {
-    fprintf(stderr, "E2E-003 FAIL: standard lowering pipeline failed\n");
-    module.dump();
-    return 1;
-  }
+  // --- Standard MLIR/LLVM lowering pipeline, then JIT execution
+  // (tests/support/JitHarness.h). Same minimal profile as LOW-E2E-MLP:
+  // bufferizeFunctionBoundaries only, no extra passes needed.
+  tensora::testing::JitPipelineOptions jitOpts;
+  if (!tensora::testing::runStandardLoweringPipeline(ctx, module, jitOpts, "E2E-003")) return 1;
 
-  auto maybeEngine = ExecutionEngine::create(module);
-  if (!maybeEngine) {
-    fprintf(stderr, "E2E-003 FAIL: ExecutionEngine::create failed\n");
-    return 1;
-  }
-  auto engine = std::move(*maybeEngine);
-  auto maybeFn = engine->lookup("test_main");
-  if (!maybeFn) {
-    fprintf(stderr, "E2E-003 FAIL: could not look up 'test_main'\n");
-    return 1;
-  }
-  auto testMain = reinterpret_cast<float (*)()>(*maybeFn);
-  float result = testMain();
+  auto maybeEngine = tensora::testing::createJitEngine(module, jitOpts, "E2E-003");
+  if (!maybeEngine) return 1;
+  auto maybeFn = tensora::testing::lookupJitEntry<float (*)()>(**maybeEngine, "test_main", "E2E-003");
+  if (!maybeFn) return 1;
+  float result = (*maybeFn)();
 
   if (std::fabs(result - 2.08f) > 1e-4f) {
     fprintf(stderr, "E2E-003 FAIL: expected 2.08, got %f\n", result);
