@@ -3,6 +3,16 @@
 // fixtures (ARCH-008), not the full source pipeline. This is fast and
 // precise, and it is what 08_TEST_PLAN.md recommends for optimization
 // tests.
+//
+// Deliberately not externalized to .tns fixture files (unlike
+// tests/parser/test_parser.cpp and tests/semantic/test_semantic.cpp):
+// going through the front end here would route every pass test through
+// Parser and SemanticAnalyzer too, turning a fast, isolated pass unit
+// test into an integration test whose pass/fail also depends on those
+// two phases staying correct. buildLinearFixture() below (not .tns
+// text) is how the OPT-LBA-*/OPT-FIX-* cases avoid repeating their
+// shared graph, while staying a plain in-memory GraphBuilder call, no
+// parsing involved.
 #include <string>
 #include <vector>
 
@@ -21,6 +31,32 @@ const TensorType* t2(TypeContext& types, const char* n0, int64_t s0, const char*
 }
 
 bool hasFact(const TypedGraph& g, NodeId id, const std::string& fact) { return g.node(id).facts.has(fact); }
+
+bool isVerifierClean(const TypedGraph& g) { return GraphVerifier().verify(g).empty(); }
+
+// OPT-LBA-*/OPT-FIX-* all start from the same small "linear" graph: x:
+// Tensor[batch=2,in=3], w: Tensor[in=3,out=4], b: Tensor[out=4], lin =
+// linear(x,w,b): Tensor[batch=2,out=4]. Each case then attaches its own
+// consumer(s) to `lin` before finishing the graph, so this returns the
+// builder still open (not yet .finish()ed).
+struct LinearFixture {
+  GraphBuilder b{"g"};
+  ValueId x, w, bias, lin;
+  const TensorType* y;
+};
+
+LinearFixture buildLinearFixture(TypeContext& types) {
+  LinearFixture f;
+  const TensorType* x = t2(types, "batch", 2, "in", 3);
+  const TensorType* w = t2(types, "in", 3, "out", 4);
+  const TensorType* bias = types.tensor({Axis{"out", Dimension::makeConst(4)}});
+  f.y = t2(types, "batch", 2, "out", 4);
+  f.x = f.b.addInput("x", x, {});
+  f.w = f.b.addWeight("w", w, {});
+  f.bias = f.b.addWeight("b", bias, {});
+  f.lin = f.b.emit(OpKind::Linear, {f.x, f.w, f.bias}, {}, f.y, {}, "lin");
+  return f;
+}
 
 }  // namespace
 
@@ -43,8 +79,7 @@ CASE(OPT_SF_001, "OPT-SF-001", "ShapeFolding: a reshape to the same shape is eli
   R.check(r.changed && r.stats.numChanges == 1, "the no-op reshape is folded away");
   R.check(g.nodes().size() == 1 && g.nodes()[0].op == OpKind::Relu, "only relu remains");
   R.check(g.nodes()[0].inputs[0] == x, "relu now reads x directly");
-  GraphVerifier verifier;
-  R.check(verifier.verify(g).empty(), "GraphVerifier-clean");
+  R.check(isVerifierClean(g), "GraphVerifier-clean");
 }
 
 CASE(OPT_SF_002, "OPT-SF-002", "ShapeFolding near-miss: a reshape that actually changes shape is kept") {
@@ -83,8 +118,7 @@ CASE(OPT_DCE_001, "OPT-DCE-001", "DeadOpElimination drops a value not reaching r
   PassResult r = createDeadOpEliminationPass()->run(g, ctx);
   R.check(r.changed && r.stats.numChanges == 1, "one dead node removed");
   R.check(g.nodes().size() == 1, "only the live node remains");
-  GraphVerifier verifier;
-  R.check(verifier.verify(g).empty(), "GraphVerifier-clean");
+  R.check(isVerifierClean(g), "GraphVerifier-clean");
 }
 
 CASE(OPT_DCE_002, "OPT-DCE-002", "DeadOpElimination near-miss: a value reaching return is kept") {
@@ -129,8 +163,7 @@ CASE(OPT_DCE_003, "OPT-DCE-003", "DeadOpElimination removes a whole dead chain, 
   PassResult r = createDeadOpEliminationPass()->run(g, ctx);
   R.check(r.changed && r.stats.numChanges == 2, "both dead nodes are removed in one pass, not just the first");
   R.check(g.nodes().size() == 2, "only the two live nodes remain");
-  GraphVerifier verifier;
-  R.check(verifier.verify(g).empty(), "GraphVerifier-clean");
+  R.check(isVerifierClean(g), "GraphVerifier-clean");
 }
 
 // --- OPT-RC-001: ReshapeCancellation merges a chain into one reshape. ---
@@ -159,8 +192,7 @@ CASE(OPT_RC_001, "OPT-RC-001", "ReshapeCancellation merges reshape(reshape(x,A),
     R.check(g.nodes()[0].inputs[0] == x, "the single reshape now reads x directly");
     R.check(g.nodes()[0].attrs.reshapeTarget.size() == 2, "its target is B (the outer target)");
   }
-  GraphVerifier verifier;
-  R.check(verifier.verify(g).empty(), "GraphVerifier-clean");
+  R.check(isVerifierClean(g), "GraphVerifier-clean");
 }
 
 CASE(OPT_RC_002, "OPT-RC-002", "ReshapeCancellation near-miss: inner reshape used elsewhere is kept") {
@@ -243,8 +275,7 @@ CASE(OPT_TC_001, "OPT-TC-001", "TransposeCancellation: inverse perms cancel comp
   R.check(r.changed && r.stats.numChanges == 2, "both transpose nodes are removed");
   R.check(g.nodes().empty(), "no nodes remain");
   R.check(g.output == x, "output is x directly");
-  GraphVerifier verifier;
-  R.check(verifier.verify(g).empty(), "GraphVerifier-clean");
+  R.check(isVerifierClean(g), "GraphVerifier-clean");
 }
 
 CASE(OPT_TC_002, "OPT-TC-002", "TransposeCancellation: non-inverse perms compose into one transpose") {
@@ -343,18 +374,10 @@ CASE(OPT_EF_002, "OPT-EF-002", "ElementwiseFusion near-miss: a lone elementwise 
 // --- OPT-LBA-001/002: LinearBiasActivationFusion. ---
 CASE(OPT_LBA_001, "OPT-LBA-001", "LinearBiasActivationFusion tags linear immediately followed by relu") {
   TypeContext types;
-  const TensorType* x = t2(types, "batch", 2, "in", 3);
-  const TensorType* w = t2(types, "in", 3, "out", 4);
-  const TensorType* bias = types.tensor({Axis{"out", Dimension::makeConst(4)}});
-  const TensorType* y = t2(types, "batch", 2, "out", 4);
-  GraphBuilder b("g");
-  ValueId xId = b.addInput("x", x, {});
-  ValueId wId = b.addWeight("w", w, {});
-  ValueId bId = b.addWeight("b", bias, {});
-  ValueId lin = b.emit(OpKind::Linear, {xId, wId, bId}, {}, y, {}, "lin");
-  ValueId relu = b.emit(OpKind::Relu, {lin}, {}, y, {}, "relu");
-  b.setOutput(relu);
-  TypedGraph g = b.finish();
+  LinearFixture f = buildLinearFixture(types);
+  ValueId relu = f.b.emit(OpKind::Relu, {f.lin}, {}, f.y, {}, "relu");
+  f.b.setOutput(relu);
+  TypedGraph g = f.b.finish();
 
   DiagnosticEngine d;
   PassContext ctx{types, d};
@@ -366,20 +389,12 @@ CASE(OPT_LBA_001, "OPT-LBA-001", "LinearBiasActivationFusion tags linear immedia
 
 CASE(OPT_LBA_002, "OPT-LBA-002", "LinearBiasActivationFusion near-miss: linear+softmax is not tagged") {
   TypeContext types;
-  const TensorType* x = t2(types, "batch", 2, "in", 3);
-  const TensorType* w = t2(types, "in", 3, "out", 4);
-  const TensorType* bias = types.tensor({Axis{"out", Dimension::makeConst(4)}});
-  const TensorType* y = t2(types, "batch", 2, "out", 4);
-  GraphBuilder b("g");
-  ValueId xId = b.addInput("x", x, {});
-  ValueId wId = b.addWeight("w", w, {});
-  ValueId bId = b.addWeight("b", bias, {});
-  ValueId lin = b.emit(OpKind::Linear, {xId, wId, bId}, {}, y, {}, "lin");
+  LinearFixture f = buildLinearFixture(types);
   NodeAttrs smAttrs;
   smAttrs.axisName = "out";
-  ValueId sm = b.emit(OpKind::Softmax, {lin}, smAttrs, y, {}, "sm");
-  b.setOutput(sm);
-  TypedGraph g = b.finish();
+  ValueId sm = f.b.emit(OpKind::Softmax, {f.lin}, smAttrs, f.y, {}, "sm");
+  f.b.setOutput(sm);
+  TypedGraph g = f.b.finish();
 
   DiagnosticEngine d;
   PassContext ctx{types, d};
@@ -402,20 +417,12 @@ CASE(OPT_LBA_002, "OPT-LBA-002", "LinearBiasActivationFusion near-miss: linear+s
 CASE(OPT_FIX_001, "OPT-FIX-001",
      "DeadOpElimination removing a linear's dead consumer lets a later sweep fuse the surviving relu") {
   TypeContext types;
-  const TensorType* x = t2(types, "batch", 2, "in", 3);
-  const TensorType* w = t2(types, "in", 3, "out", 4);
-  const TensorType* bias = types.tensor({Axis{"out", Dimension::makeConst(4)}});
-  const TensorType* y = t2(types, "batch", 2, "out", 4);
-  GraphBuilder b("g");
-  ValueId xId = b.addInput("x", x, {});
-  ValueId wId = b.addWeight("w", w, {});
-  ValueId bId = b.addWeight("b", bias, {});
-  ValueId lin = b.emit(OpKind::Linear, {xId, wId, bId}, {}, y, {}, "lin");
-  ValueId dead = b.emit(OpKind::Relu, {lin}, {}, y, {}, "dead");  // never reaches return
-  ValueId live = b.emit(OpKind::Relu, {lin}, {}, y, {}, "live");
+  LinearFixture f = buildLinearFixture(types);
+  ValueId dead = f.b.emit(OpKind::Relu, {f.lin}, {}, f.y, {}, "dead");  // never reaches return
+  ValueId live = f.b.emit(OpKind::Relu, {f.lin}, {}, f.y, {}, "live");
   (void)dead;
-  b.setOutput(live);
-  TypedGraph g = b.finish();
+  f.b.setOutput(live);
+  TypedGraph g = f.b.finish();
 
   DiagnosticEngine d;
   PassContext ctx{types, d};
@@ -432,27 +439,18 @@ CASE(OPT_FIX_001, "OPT-FIX-001",
     R.check(hasFact(g, 0, "fused_linear_relu_0") && hasFact(g, 1, "fused_linear_relu_0"),
             "lin+live are tagged fused, even though that was not possible in the first sweep");
   }
-  GraphVerifier verifier;
-  R.check(verifier.verify(g).empty(), "GraphVerifier-clean");
+  R.check(isVerifierClean(g), "GraphVerifier-clean");
 }
 
 CASE(OPT_FIX_002, "OPT-FIX-002",
      "near-miss: a single sweep (no re-run) leaves the same pair untagged") {
   TypeContext types;
-  const TensorType* x = t2(types, "batch", 2, "in", 3);
-  const TensorType* w = t2(types, "in", 3, "out", 4);
-  const TensorType* bias = types.tensor({Axis{"out", Dimension::makeConst(4)}});
-  const TensorType* y = t2(types, "batch", 2, "out", 4);
-  GraphBuilder b("g");
-  ValueId xId = b.addInput("x", x, {});
-  ValueId wId = b.addWeight("w", w, {});
-  ValueId bId = b.addWeight("b", bias, {});
-  ValueId lin = b.emit(OpKind::Linear, {xId, wId, bId}, {}, y, {}, "lin");
-  ValueId dead = b.emit(OpKind::Relu, {lin}, {}, y, {}, "dead");
-  ValueId live = b.emit(OpKind::Relu, {lin}, {}, y, {}, "live");
+  LinearFixture f = buildLinearFixture(types);
+  ValueId dead = f.b.emit(OpKind::Relu, {f.lin}, {}, f.y, {}, "dead");
+  ValueId live = f.b.emit(OpKind::Relu, {f.lin}, {}, f.y, {}, "live");
   (void)dead;
-  b.setOutput(live);
-  TypedGraph g = b.finish();
+  f.b.setOutput(live);
+  TypedGraph g = f.b.finish();
 
   DiagnosticEngine d;
   PassContext ctx{types, d};

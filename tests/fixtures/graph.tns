@@ -1,0 +1,22 @@
+### GR-001 | MLP program's TypedGraph has the expected structural shape
+input  x:  Tensor[batch=B, feat=784]
+weight W1: Tensor[in=784, out=256]
+weight b1: Tensor[out=256]
+weight W2: Tensor[in=256, out=10]
+weight b2: Tensor[out=10]
+
+graph mlp {
+    h = linear(x, W1, b1)
+    h = relu(h)
+    y = linear(h, W2, b2)
+    return y
+}
+
+### GR-007 | referencing the same global input twice adds exactly one param (lazy dedup)
+input x: Tensor[a=4]
+
+graph g {
+  h1 = relu(x)
+  h2 = relu(x)
+  return h2
+}

@@ -75,16 +75,21 @@ tensora_unit_test(test_lexer    tests/lexer/test_lexer.cpp         tensora_lexer
 tensora_discover_cases(test_lexer    ${CMAKE_SOURCE_DIR}/tests/lexer/test_lexer.cpp)
 
 tensora_unit_test(test_parser   tests/parser/test_parser.cpp       tensora_parser)
-target_compile_definitions(test_parser PRIVATE FIXTURE_PARSER_PATH="${CMAKE_SOURCE_DIR}/tests/fixtures/parser.tns")
+target_compile_definitions(test_parser PRIVATE
+  FIXTURE_PARSER_PATH="${CMAKE_SOURCE_DIR}/tests/fixtures/parser.tns"
+  FIXTURE_PARSER_STRUCTURAL_PATH="${CMAKE_SOURCE_DIR}/tests/fixtures/parser_structural.tns")
 tensora_discover_cases(test_parser   ${CMAKE_SOURCE_DIR}/tests/parser/test_parser.cpp)
 tensora_discover_fixture_cases(test_parser ${CMAKE_SOURCE_DIR}/tests/fixtures/parser.tns)
 
 tensora_unit_test(test_semantic tests/semantic/test_semantic.cpp   tensora_semantic)
-target_compile_definitions(test_semantic PRIVATE FIXTURE_SEMANTIC_PATH="${CMAKE_SOURCE_DIR}/tests/fixtures/semantic.tns")
+target_compile_definitions(test_semantic PRIVATE
+  FIXTURE_SEMANTIC_PATH="${CMAKE_SOURCE_DIR}/tests/fixtures/semantic.tns"
+  FIXTURE_SEMANTIC_STRUCTURAL_PATH="${CMAKE_SOURCE_DIR}/tests/fixtures/semantic_structural.tns")
 tensora_discover_cases(test_semantic ${CMAKE_SOURCE_DIR}/tests/semantic/test_semantic.cpp)
 tensora_discover_fixture_cases(test_semantic ${CMAKE_SOURCE_DIR}/tests/fixtures/semantic.tns)
 
 tensora_unit_test(test_graph    tests/semantic/test_graph.cpp      tensora_semantic)
+target_compile_definitions(test_graph PRIVATE FIXTURE_GRAPH_PATH="${CMAKE_SOURCE_DIR}/tests/fixtures/graph.tns")
 tensora_discover_cases(test_graph    ${CMAKE_SOURCE_DIR}/tests/semantic/test_graph.cpp)
 
 tensora_unit_test(test_passes   tests/optimization/test_passes.cpp tensora_optimization)
