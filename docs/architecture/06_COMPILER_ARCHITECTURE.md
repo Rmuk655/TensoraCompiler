@@ -284,22 +284,25 @@ documentation:
 
 ## 6.13 LLVM and Native Execution
 
-MLIR lowering reaches the `LLVM` dialect. The project proves two
-separate execution paths:
+MLIR lowering reaches the `LLVM` dialect, then two standard,
+unmodified MLIR/LLVM paths take it from there:
 
 - **JIT**, through `mlir::ExecutionEngine`. Every numeric-correctness
   test uses this path: it calls `engine->lookup(name)` and casts the
   raw result to a function pointer, instead of using the templated
   `invoke()`, which is unreliable for plain scalar returns.
-- **Ahead-of-time native compilation** (`tools/codegen_mlp_native.cpp`).
-  This path turns the lowered module into LLVM IR
-  (`mlir::translateModuleToLLVMIR`), then calls
-  `llvm::TargetMachine::addPassesToEmitFile` to write a real object
-  file. CMake links this object file, along with a small dependency-free
-  C driver, into a standalone executable using the system linker. `file`
-  confirms this is a real ELF object, and `ldd` confirms it depends only
-  on `libc`, with zero MLIR/LLVM runtime dependency. This is the "native
-  executable, not an interpreter" deliverable.
+- **Ahead-of-time native compilation** (`tools/codegen_mlp_native.cpp`):
+  `mlir::translateModuleToLLVMIR` then
+  `llvm::TargetMachine::addPassesToEmitFile` write a real object file,
+  which CMake links (with a small C driver) into a standalone
+  executable. `ldd` confirms it depends only on `libc` — zero
+  MLIR/LLVM runtime dependency.
+
+Tensora does not invent a new way to reach CPU machine code; the
+novelty is that its own frontend, semantics, typed IR, and
+optimization passes are wired all the way through this standard
+pipeline to genuinely executable code, not stopped at an AST, a
+printed MLIR dump, or an interpreter.
 
 ## 6.14 Driver
 

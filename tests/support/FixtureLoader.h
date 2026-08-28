@@ -73,11 +73,15 @@ inline const char* diagCodeName(DiagCode c) {
 struct FixtureEntry {
   std::string id;
   std::string desc;
+  bool hasExpect = false;
   bool expectOk = false;
   std::string expectDiag;  // only meaningful when !expectOk
   std::string src;
 };
 
+// A '### expect:' line is optional. An entry without one is a
+// source-only entry (see loadFixtureSource, below) -- not meant to be
+// auto-registered as a case (registerFixtureCases rejects it).
 inline std::vector<FixtureEntry> loadFixtureFile(const std::string& path) {
   std::ifstream in(path);
   if (!in) throw std::runtime_error("FixtureLoader: cannot open " + path);
@@ -100,18 +104,19 @@ inline std::vector<FixtureEntry> loadFixtureFile(const std::string& path) {
     e.desc = header.substr(sep + 3);
     ++i;
     const std::string kExpectPrefix = "### expect: ";
-    if (i >= lines.size() || !startsWith(lines[i], kExpectPrefix))
-      throw std::runtime_error("FixtureLoader: " + e.id + ": missing '### expect:' line");
-    std::string expect = lines[i].substr(kExpectPrefix.size());
-    if (expect == "ok") {
-      e.expectOk = true;
-    } else if (startsWith(expect, "reject ")) {
-      e.expectOk = false;
-      e.expectDiag = expect.substr(std::string("reject ").size());
-    } else {
-      throw std::runtime_error("FixtureLoader: " + e.id + ": bad expect line: " + expect);
+    if (i < lines.size() && startsWith(lines[i], kExpectPrefix)) {
+      e.hasExpect = true;
+      std::string expect = lines[i].substr(kExpectPrefix.size());
+      if (expect == "ok") {
+        e.expectOk = true;
+      } else if (startsWith(expect, "reject ")) {
+        e.expectOk = false;
+        e.expectDiag = expect.substr(std::string("reject ").size());
+      } else {
+        throw std::runtime_error("FixtureLoader: " + e.id + ": bad expect line: " + expect);
+      }
+      ++i;
     }
-    ++i;
     std::ostringstream src;
     while (i < lines.size() && !startsWith(lines[i], "### ")) {
       src << lines[i] << "\n";
@@ -126,6 +131,21 @@ inline std::vector<FixtureEntry> loadFixtureFile(const std::string& path) {
   return entries;
 }
 
+// Returns the raw .tns source for the single entry `id` in
+// `fixturePath`. For hand-written CASE(...) bodies (e.g.
+// tests/semantic/test_semantic.cpp, tests/semantic/test_graph.cpp,
+// tests/parser/test_parser.cpp) that need a real C++ assertion on the
+// parsed/analyzed result -- not just the ok/reject-plus-DiagCode check
+// registerFixtureCases automates -- so the case body stays hand-written,
+// but its .tns source still lives as one real Tensora program in a
+// fixture file, not as an escaped C++ string literal.
+inline std::string loadFixtureSource(const std::string& fixturePath, const std::string& id) {
+  for (FixtureEntry& e : loadFixtureFile(fixturePath)) {
+    if (e.id == id) return e.src;
+  }
+  throw std::runtime_error("FixtureLoader: no entry '" + id + "' in " + fixturePath);
+}
+
 // Registers every case in `fixturePath` into the shared harness registry,
 // exactly like TEST_CASE(...) does for a hand-written case. `runPhase`
 // runs one phase (parse, or parse+analyze) over a fixture entry's source
@@ -134,6 +154,7 @@ inline std::vector<FixtureEntry> loadFixtureFile(const std::string& path) {
 inline void registerFixtureCases(const std::string& fixturePath,
                                   std::function<std::pair<bool, std::string>(const std::string&)> runPhase) {
   for (FixtureEntry& e : loadFixtureFile(fixturePath)) {
+    if (!e.hasExpect) throw std::runtime_error("FixtureLoader: " + e.id + ": missing '### expect:' line");
     Category category = categoryOf(e.id);
     registry().push_back({e.id, e.desc, category, [e, runPhase](Reporter& R) {
                              auto [accepted, diag] = runPhase(e.src);

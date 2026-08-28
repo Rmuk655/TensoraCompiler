@@ -42,13 +42,10 @@
 namespace tns = tensora;
 using namespace mlir;
 using MlirValue = mlir::Value;
+using tensora::testing::constTensor;
 
 namespace {
 
-MlirValue constTensor(OpBuilder& b, Location loc, RankedTensorType type, ArrayRef<float> values) {
-  auto attr = DenseElementsAttr::get(type, values);
-  return arith::ConstantOp::create(b, loc, type, attr);
-}
 
 tns::TypedProgram buildAttentionGraph(tns::TypeContext& types) {
   tns::GraphBuilder builder("attention");
@@ -143,16 +140,11 @@ int run_attention_e2e() {
     return 1;
   }
 
-  // --- Standard MLIR/LLVM lowering pipeline, then JIT execution
+  // Standard MLIR/LLVM lowering pipeline, then JIT execution
   // (tests/support/JitHarness.h). Same full profile as E2E-002 (CNN):
-  // softmax's math.exp needs convertMathToLLVM, and the
-  // reshape/tiled-matmul lowering needs the alloc/layout/subview flags.
-  tensora::testing::JitPipelineOptions jitOpts;
-  jitOpts.allowReturnAllocsFromLoops = true;
-  jitOpts.fullyDynamicFunctionBoundaryLayout = true;
-  jitOpts.expandStridedMetadataAndLowerAffine = true;
-  jitOpts.convertMathToLLVM = true;
-  jitOpts.useCRunnerUtilsSharedLib = true;
+  // softmax's math.exp and the reshape/tiled-matmul lowering both need
+  // it (see JitPipelineOptions::full()).
+  auto jitOpts = tensora::testing::JitPipelineOptions::full();
   if (!tensora::testing::runStandardLoweringPipeline(ctx, module, jitOpts, "E2E-004")) return 1;
 
   auto maybeEngine = tensora::testing::createJitEngine(module, jitOpts, "E2E-004");

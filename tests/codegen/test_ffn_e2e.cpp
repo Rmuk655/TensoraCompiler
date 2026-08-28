@@ -40,13 +40,10 @@
 namespace tns = tensora;
 using namespace mlir;
 using MlirValue = mlir::Value;
+using tensora::testing::constTensor;
 
 namespace {
 
-MlirValue constTensor(OpBuilder& b, Location loc, RankedTensorType type, ArrayRef<float> values) {
-  auto attr = DenseElementsAttr::get(type, values);
-  return arith::ConstantOp::create(b, loc, type, attr);
-}
 
 tns::TypedGraph buildFfnGraph(tns::TypeContext& types) {
   tns::GraphBuilder builder("ffn");

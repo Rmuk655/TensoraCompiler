@@ -46,26 +46,26 @@ production has a direct test" criterion (§2a Unit).
 
 | ID | RM | Kind | Case | Result | Status | Test |
 |----|----|----|----|----|----|----|
-| PAR-001 | [3.2](../language/03_LANGUAGE_REFERENCE_MANUAL.md#32-program-structure), [3.24](../language/03_LANGUAGE_REFERENCE_MANUAL.md#324-grammar-summary) | V | MLP program (whitepaper 10.1) -> AST golden | ast | done | [test_parser.cpp:52](../../tests/parser/test_parser.cpp#L52) |
-| PAR-002 | [3.2](../language/03_LANGUAGE_REFERENCE_MANUAL.md#32-program-structure), [3.24](../language/03_LANGUAGE_REFERENCE_MANUAL.md#324-grammar-summary) | V | CNN program (whitepaper 10.2) -> AST golden | ast | done | [test_parser.cpp:98](../../tests/parser/test_parser.cpp#L98) |
-| PAR-003 | [3.2](../language/03_LANGUAGE_REFERENCE_MANUAL.md#32-program-structure), [3.24](../language/03_LANGUAGE_REFERENCE_MANUAL.md#324-grammar-summary) | V | Transformer FFN program (whitepaper 10.3) -> AST golden | ast | done | [test_parser.cpp:153](../../tests/parser/test_parser.cpp#L153) |
-| PAR-004 | [3.2](../language/03_LANGUAGE_REFERENCE_MANUAL.md#32-program-structure), [3.24](../language/03_LANGUAGE_REFERENCE_MANUAL.md#324-grammar-summary) | V | multi-head attention program (whitepaper 10.4) -> AST golden | ast | done | [test_parser.cpp:182](../../tests/parser/test_parser.cpp#L182) |
-| PAR-005 | [3.3](../language/03_LANGUAGE_REFERENCE_MANUAL.md#33-tensor-types) | V | `tensorType`/`axis`: 1 axis, 2 axes, 4 axes; concrete and symbolic `dimSize` | ast | done | [test_parser.cpp:231](../../tests/parser/test_parser.cpp#L231) |
-| PAR-006 | [3.2](../language/03_LANGUAGE_REFERENCE_MANUAL.md#32-program-structure) | V | `decl`: `inputDecl` alone, `weightDecl` alone, both, multiple of each | ast | done | [test_parser.cpp:257](../../tests/parser/test_parser.cpp#L257) |
-| PAR-007 | [3.2](../language/03_LANGUAGE_REFERENCE_MANUAL.md#32-program-structure), [3.24](../language/03_LANGUAGE_REFERENCE_MANUAL.md#324-grammar-summary) | V | `program`: multiple `graphDecl`s (`graphDecl+` repetition) | ast | done | [test_parser.cpp:278](../../tests/parser/test_parser.cpp#L278) |
-| PAR-008 | [3.2](../language/03_LANGUAGE_REFERENCE_MANUAL.md#32-program-structure) | V | `statement`: two statements with no terminator; a bare-identifier statement (`y = h`) | ast | done | [test_parser.cpp:297](../../tests/parser/test_parser.cpp#L297) |
-| PAR-009 | [3.24](../language/03_LANGUAGE_REFERENCE_MANUAL.md#324-grammar-summary) | V | `expression`/`binop`: each of `@ + - * /` with identifier and float-literal `operand` | ast | done | [test_parser.cpp:320](../../tests/parser/test_parser.cpp#L320) |
-| PAR-010 | [3.24](../language/03_LANGUAGE_REFERENCE_MANUAL.md#324-grammar-summary) | V | `callExpr`: one positional arg, multiple positional args | ast | done | [test_parser.cpp:354](../../tests/parser/test_parser.cpp#L354) |
-| PAR-011 | [3.24](../language/03_LANGUAGE_REFERENCE_MANUAL.md#324-grammar-summary) | V | `arg` kinds: keyword arg (int value), keyword arg (identifier value), reshape axis-list arg, all three mixed in one call | ast | done | [test_parser.cpp:375](../../tests/parser/test_parser.cpp#L375) |
-| PAR-012 | [3.12](../language/03_LANGUAGE_REFERENCE_MANUAL.md#312-reshape), [3.14](../language/03_LANGUAGE_REFERENCE_MANUAL.md#314-transpose), [3.24](../language/03_LANGUAGE_REFERENCE_MANUAL.md#324-grammar-summary) | V | `argValue` kinds: `intLit` (`stride=1`), identifier (`axis=kseq`), `intList` (`perm=[0,1,3,2]`) | ast | done | [test_parser.cpp:408](../../tests/parser/test_parser.cpp#L408) |
-| PAR-013 | [3.16](../language/03_LANGUAGE_REFERENCE_MANUAL.md#316-conv2d), [3.24](../language/03_LANGUAGE_REFERENCE_MANUAL.md#324-grammar-summary) | V | `conv2d`-shaped call: multiple positional + multiple keyword args together | ast | done | [test_parser.cpp:434](../../tests/parser/test_parser.cpp#L434) |
+| PAR-001 | [3.2](../language/03_LANGUAGE_REFERENCE_MANUAL.md#32-program-structure), [3.24](../language/03_LANGUAGE_REFERENCE_MANUAL.md#324-grammar-summary) | V | MLP program (whitepaper 10.1) -> AST golden | ast | done | [test_parser.cpp:55](../../tests/parser/test_parser.cpp#L55) |
+| PAR-002 | [3.2](../language/03_LANGUAGE_REFERENCE_MANUAL.md#32-program-structure), [3.24](../language/03_LANGUAGE_REFERENCE_MANUAL.md#324-grammar-summary) | V | CNN program (whitepaper 10.2) -> AST golden | ast | done | [test_parser.cpp:90](../../tests/parser/test_parser.cpp#L90) |
+| PAR-003 | [3.2](../language/03_LANGUAGE_REFERENCE_MANUAL.md#32-program-structure), [3.24](../language/03_LANGUAGE_REFERENCE_MANUAL.md#324-grammar-summary) | V | Transformer FFN program (whitepaper 10.3) -> AST golden | ast | done | [test_parser.cpp:127](../../tests/parser/test_parser.cpp#L127) |
+| PAR-004 | [3.2](../language/03_LANGUAGE_REFERENCE_MANUAL.md#32-program-structure), [3.24](../language/03_LANGUAGE_REFERENCE_MANUAL.md#324-grammar-summary) | V | multi-head attention program (whitepaper 10.4) -> AST golden | ast | done | [test_parser.cpp:145](../../tests/parser/test_parser.cpp#L145) |
+| PAR-005 | [3.3](../language/03_LANGUAGE_REFERENCE_MANUAL.md#33-tensor-types) | V | `tensorType`/`axis`: 1 axis, 2 axes, 4 axes; concrete and symbolic `dimSize` | ast | done | [test_parser.cpp:183](../../tests/parser/test_parser.cpp#L183) |
+| PAR-006 | [3.2](../language/03_LANGUAGE_REFERENCE_MANUAL.md#32-program-structure) | V | `decl`: `inputDecl` alone, `weightDecl` alone, both, multiple of each | ast | done | [test_parser.cpp:206](../../tests/parser/test_parser.cpp#L206) |
+| PAR-007 | [3.2](../language/03_LANGUAGE_REFERENCE_MANUAL.md#32-program-structure), [3.24](../language/03_LANGUAGE_REFERENCE_MANUAL.md#324-grammar-summary) | V | `program`: multiple `graphDecl`s (`graphDecl+` repetition) | ast | done | [test_parser.cpp:223](../../tests/parser/test_parser.cpp#L223) |
+| PAR-008 | [3.2](../language/03_LANGUAGE_REFERENCE_MANUAL.md#32-program-structure) | V | `statement`: two statements with no terminator; a bare-identifier statement (`y = h`) | ast | done | [test_parser.cpp:240](../../tests/parser/test_parser.cpp#L240) |
+| PAR-009 | [3.24](../language/03_LANGUAGE_REFERENCE_MANUAL.md#324-grammar-summary) | V | `expression`/`binop`: each of `@ + - * /` with identifier and float-literal `operand` | ast | done | [test_parser.cpp:259](../../tests/parser/test_parser.cpp#L259) |
+| PAR-010 | [3.24](../language/03_LANGUAGE_REFERENCE_MANUAL.md#324-grammar-summary) | V | `callExpr`: one positional arg, multiple positional args | ast | done | [test_parser.cpp:286](../../tests/parser/test_parser.cpp#L286) |
+| PAR-011 | [3.24](../language/03_LANGUAGE_REFERENCE_MANUAL.md#324-grammar-summary) | V | `arg` kinds: keyword arg (int value), keyword arg (identifier value), reshape axis-list arg, all three mixed in one call | ast | done | [test_parser.cpp:303](../../tests/parser/test_parser.cpp#L303) |
+| PAR-012 | [3.12](../language/03_LANGUAGE_REFERENCE_MANUAL.md#312-reshape), [3.14](../language/03_LANGUAGE_REFERENCE_MANUAL.md#314-transpose), [3.24](../language/03_LANGUAGE_REFERENCE_MANUAL.md#324-grammar-summary) | V | `argValue` kinds: `intLit` (`stride=1`), identifier (`axis=kseq`), `intList` (`perm=[0,1,3,2]`) | ast | done | [test_parser.cpp:333](../../tests/parser/test_parser.cpp#L333) |
+| PAR-013 | [3.16](../language/03_LANGUAGE_REFERENCE_MANUAL.md#316-conv2d), [3.24](../language/03_LANGUAGE_REFERENCE_MANUAL.md#324-grammar-summary) | V | `conv2d`-shaped call: multiple positional + multiple keyword args together | ast | done | [test_parser.cpp:354](../../tests/parser/test_parser.cpp#L354) |
 | PAR-014 | [3.2](../language/03_LANGUAGE_REFERENCE_MANUAL.md#32-program-structure) | X | missing `=` in a statement | reject: ParseExpected | done | [parser.tns:12](../../tests/fixtures/parser.tns#L12) |
 | PAR-015 | [3.3](../language/03_LANGUAGE_REFERENCE_MANUAL.md#33-tensor-types) | X | missing `]` closing a `tensorType` | reject: ParseExpected | done | [parser.tns:19](../../tests/fixtures/parser.tns#L19) |
 | PAR-016 | [3.3](../language/03_LANGUAGE_REFERENCE_MANUAL.md#33-tensor-types) | X | missing `[` opening a `tensorType` | reject: ParseExpected | done | [parser.tns:24](../../tests/fixtures/parser.tns#L24) |
 | PAR-017 | [3.3](../language/03_LANGUAGE_REFERENCE_MANUAL.md#33-tensor-types) | X | empty `tensorType` (`Tensor[]`; `axis` list requires >= 1) | reject: ParseExpected | done | [parser.tns:29](../../tests/fixtures/parser.tns#L29) |
 | PAR-018 | [3.3](../language/03_LANGUAGE_REFERENCE_MANUAL.md#33-tensor-types) | X | missing `=` in an `axis` | reject: ParseExpected | done | [parser.tns:34](../../tests/fixtures/parser.tns#L34) |
 | PAR-019 | [3.2](../language/03_LANGUAGE_REFERENCE_MANUAL.md#32-program-structure), [3.24](../language/03_LANGUAGE_REFERENCE_MANUAL.md#324-grammar-summary) | X | `graphDecl` missing `returnStmt` before `}` | reject: ParseExpected | done | [parser.tns:39](../../tests/fixtures/parser.tns#L39) |
-| PAR-020 | [3.2](../language/03_LANGUAGE_REFERENCE_MANUAL.md#32-program-structure) | X | `graphDecl` missing closing `}` | reject: ParseExpected | done | [test_parser.cpp:452](../../tests/parser/test_parser.cpp#L452) |
+| PAR-020 | [3.2](../language/03_LANGUAGE_REFERENCE_MANUAL.md#32-program-structure) | X | `graphDecl` missing closing `}` | reject: ParseExpected | done | [test_parser.cpp:369](../../tests/parser/test_parser.cpp#L369) |
 | PAR-021 | [3.24](../language/03_LANGUAGE_REFERENCE_MANUAL.md#324-grammar-summary) | X | `returnStmt` missing its identifier | reject: ParseExpected | done | [parser.tns:45](../../tests/fixtures/parser.tns#L45) |
 | PAR-022 | [3.24](../language/03_LANGUAGE_REFERENCE_MANUAL.md#324-grammar-summary) | X | zero-arg call (`relu()`; `arg` list requires >= 1) | reject: ParseExpected | done | [parser.tns:51](../../tests/fixtures/parser.tns#L51) |
 | PAR-023 | [3.24](../language/03_LANGUAGE_REFERENCE_MANUAL.md#324-grammar-summary) | X | missing closing `)` on a call | reject: ParseExpected | done | [parser.tns:58](../../tests/fixtures/parser.tns#L58) |
@@ -73,11 +73,11 @@ production has a direct test" criterion (§2a Unit).
 | PAR-025 | [3.24](../language/03_LANGUAGE_REFERENCE_MANUAL.md#324-grammar-summary) | X | keyword arg with no value (`stride=)`) | reject: ParseExpected | done | [parser.tns:72](../../tests/fixtures/parser.tns#L72) |
 | PAR-026 | [3.2](../language/03_LANGUAGE_REFERENCE_MANUAL.md#32-program-structure), [3.24](../language/03_LANGUAGE_REFERENCE_MANUAL.md#324-grammar-summary) | X | a `decl` after a `graphDecl` (violates `decl* graphDecl+` ordering) | reject: ParseExpected | done | [parser.tns:79](../../tests/fixtures/parser.tns#L79) |
 | PAR-027 | [3.2](../language/03_LANGUAGE_REFERENCE_MANUAL.md#32-program-structure), [3.24](../language/03_LANGUAGE_REFERENCE_MANUAL.md#324-grammar-summary) | X | a program with zero `graphDecl`s (`graphDecl+` requires >= 1) | reject: ParseExpected | done | [parser.tns:84](../../tests/fixtures/parser.tns#L84) |
-| PAR-028 | recovery | X | two independent syntax errors in different sections (one in a `decl`, one in a graph body) both reported | 2 diagnostics | done | [test_parser.cpp:462](../../tests/parser/test_parser.cpp#L462) |
-| PAR-029 | recovery | X | two independent malformed statements in the same graph body both reported | 2 diagnostics | done | [test_parser.cpp:493](../../tests/parser/test_parser.cpp#L493) |
-| PAR-030 | span | X | a missing-token diagnostic's `SourceSpan` (line/col) points at the actual offending token | span correct | done | [test_parser.cpp:505](../../tests/parser/test_parser.cpp#L505) |
-| PAR-031 | regression | X | bare int literal as a binop operand (BUG-002/REG-002: used to segfault) | reject: diagnostic, not a crash | done | [test_parser.cpp:524](../../tests/parser/test_parser.cpp#L524) |
-| PAR-032 | regression | X | illegal axis `dimSize` token (BUG-003/REG-003: used to segfault) | reject: diagnostic, not a crash | done | [test_parser.cpp:536](../../tests/parser/test_parser.cpp#L536) |
+| PAR-028 | recovery | X | two independent syntax errors in different sections (one in a `decl`, one in a graph body) both reported | 2 diagnostics | done | [test_parser.cpp:379](../../tests/parser/test_parser.cpp#L379) |
+| PAR-029 | recovery | X | two independent malformed statements in the same graph body both reported | 2 diagnostics | done | [test_parser.cpp:404](../../tests/parser/test_parser.cpp#L404) |
+| PAR-030 | span | X | a missing-token diagnostic's `SourceSpan` (line/col) points at the actual offending token | span correct | done | [test_parser.cpp:416](../../tests/parser/test_parser.cpp#L416) |
+| PAR-031 | regression | X | bare int literal as a binop operand (BUG-002/REG-002: used to segfault) | reject: diagnostic, not a crash | done | [test_parser.cpp:435](../../tests/parser/test_parser.cpp#L435) |
+| PAR-032 | regression | X | illegal axis `dimSize` token (BUG-003/REG-003: used to segfault) | reject: diagnostic, not a crash | done | [test_parser.cpp:447](../../tests/parser/test_parser.cpp#L447) |
 
 Boundary cases for RM 3.2/3.3/3.24 are tracked as `BND-PAR-*` below (empty
 statement list, minimal program, axis-count and arg-count extremes).
@@ -109,34 +109,34 @@ real language behavior.
 | SEM-NAME-001 | [3.6](../language/03_LANGUAGE_REFERENCE_MANUAL.md#36-name-and-scope-rules) | X | use of undefined name | reject: SemaUndefinedName | done | [semantic.tns:45](../../tests/fixtures/semantic.tns#L45) |
 | SEM-NAME-002 | [3.6](../language/03_LANGUAGE_REFERENCE_MANUAL.md#36-name-and-scope-rules) | X | `return` of unbound name | reject: SemaUndefinedName | done | [semantic.tns:52](../../tests/fixtures/semantic.tns#L52) |
 | SEM-NAME-003 | [3.24](../language/03_LANGUAGE_REFERENCE_MANUAL.md#324-grammar-summary) | X | call to an operator name outside the frozen set | reject: SemaUndefinedName | done | [semantic.tns:60](../../tests/fixtures/semantic.tns#L60) |
-| SEM-SCOPE-001 | [3.6](../language/03_LANGUAGE_REFERENCE_MANUAL.md#36-name-and-scope-rules) | V | rebinding `h = relu(h)` (shadowing) | accept | done | [test_semantic.cpp:49](../../tests/semantic/test_semantic.cpp#L49) |
+| SEM-SCOPE-001 | [3.6](../language/03_LANGUAGE_REFERENCE_MANUAL.md#36-name-and-scope-rules) | V | rebinding `h = relu(h)` (shadowing) | accept | done | [test_semantic.cpp:53](../../tests/semantic/test_semantic.cpp#L53) |
 | SEM-SCOPE-002 | [3.6](../language/03_LANGUAGE_REFERENCE_MANUAL.md#36-name-and-scope-rules) | X | name from graph A used in graph B | reject: SemaUndefinedName | done | [semantic.tns:68](../../tests/fixtures/semantic.tns#L68) |
-| SYM-001 | [3.6](../language/03_LANGUAGE_REFERENCE_MANUAL.md#36-name-and-scope-rules) | V | `SemanticAnalyzer::symbolTable()`: globals recorded in declaration order with correct kind/type | 2 globals, `x`(Input) then `W`(Weight), verified decl type | done | [test_semantic.cpp:394](../../tests/semantic/test_semantic.cpp#L394) |
-| SYM-002 | [3.6](../language/03_LANGUAGE_REFERENCE_MANUAL.md#36-name-and-scope-rules) | V | graph-local symbol recorded with its inferred (not declared) type | `h`, kind Value, relu's inferred type | done | [test_semantic.cpp:416](../../tests/semantic/test_semantic.cpp#L416) |
-| SYM-003 | [3.6](../language/03_LANGUAGE_REFERENCE_MANUAL.md#36-name-and-scope-rules) | V | shadowing (`h = relu(h)`) collapses to one recorded local entry | 1 entry, not 2 | done | [test_semantic.cpp:436](../../tests/semantic/test_semantic.cpp#L436) |
-| SYM-004 | [3.6](../language/03_LANGUAGE_REFERENCE_MANUAL.md#36-name-and-scope-rules) | V | resolution log: `global::`/`local::`, deduped per distinct referenced name | 3 entries for x/h/y referenced across 3 statements | done | [test_semantic.cpp:451](../../tests/semantic/test_semantic.cpp#L451) |
-| SYM-005 | [3.6](../language/03_LANGUAGE_REFERENCE_MANUAL.md#36-name-and-scope-rules) | X | resolution log records an unresolved reference as `undefined`, not silently absent | logged, no crash | done | [test_semantic.cpp:470](../../tests/semantic/test_semantic.cpp#L470) |
-| SYM-006 | [3.6](../language/03_LANGUAGE_REFERENCE_MANUAL.md#36-name-and-scope-rules) | X | a rejected global redeclaration never enters the recorded global scope | 1 entry (the original), not 2 | done | [test_semantic.cpp:488](../../tests/semantic/test_semantic.cpp#L488) |
-| SYM-007 | [3.6](../language/03_LANGUAGE_REFERENCE_MANUAL.md#36-name-and-scope-rules) | X | a rejected local rebind of a global name never enters the recorded local scope | 0 local entries | done | [test_semantic.cpp:503](../../tests/semantic/test_semantic.cpp#L503) |
-| SYM-008 | [3.6](../language/03_LANGUAGE_REFERENCE_MANUAL.md#36-name-and-scope-rules) | V | multiple graphs each get their own recorded scope, in program order | 2 graph scopes, no cross-graph leakage | done | [test_semantic.cpp:517](../../tests/semantic/test_semantic.cpp#L517) |
+| SYM-001 | [3.6](../language/03_LANGUAGE_REFERENCE_MANUAL.md#36-name-and-scope-rules) | V | `SemanticAnalyzer::symbolTable()`: globals recorded in declaration order with correct kind/type | 2 globals, `x`(Input) then `W`(Weight), verified decl type | done | [test_semantic.cpp:371](../../tests/semantic/test_semantic.cpp#L371) |
+| SYM-002 | [3.6](../language/03_LANGUAGE_REFERENCE_MANUAL.md#36-name-and-scope-rules) | V | graph-local symbol recorded with its inferred (not declared) type | `h`, kind Value, relu's inferred type | done | [test_semantic.cpp:392](../../tests/semantic/test_semantic.cpp#L392) |
+| SYM-003 | [3.6](../language/03_LANGUAGE_REFERENCE_MANUAL.md#36-name-and-scope-rules) | V | shadowing (`h = relu(h)`) collapses to one recorded local entry | 1 entry, not 2 | done | [test_semantic.cpp:412](../../tests/semantic/test_semantic.cpp#L412) |
+| SYM-004 | [3.6](../language/03_LANGUAGE_REFERENCE_MANUAL.md#36-name-and-scope-rules) | V | resolution log: `global::`/`local::`, deduped per distinct referenced name | 3 entries for x/h/y referenced across 3 statements | done | [test_semantic.cpp:427](../../tests/semantic/test_semantic.cpp#L427) |
+| SYM-005 | [3.6](../language/03_LANGUAGE_REFERENCE_MANUAL.md#36-name-and-scope-rules) | X | resolution log records an unresolved reference as `undefined`, not silently absent | logged, no crash | done | [test_semantic.cpp:446](../../tests/semantic/test_semantic.cpp#L446) |
+| SYM-006 | [3.6](../language/03_LANGUAGE_REFERENCE_MANUAL.md#36-name-and-scope-rules) | X | a rejected global redeclaration never enters the recorded global scope | 1 entry (the original), not 2 | done | [test_semantic.cpp:464](../../tests/semantic/test_semantic.cpp#L464) |
+| SYM-007 | [3.6](../language/03_LANGUAGE_REFERENCE_MANUAL.md#36-name-and-scope-rules) | X | a rejected local rebind of a global name never enters the recorded local scope | 0 local entries | done | [test_semantic.cpp:479](../../tests/semantic/test_semantic.cpp#L479) |
+| SYM-008 | [3.6](../language/03_LANGUAGE_REFERENCE_MANUAL.md#36-name-and-scope-rules) | V | multiple graphs each get their own recorded scope, in program order | 2 graph scopes, no cross-graph leakage | done | [test_semantic.cpp:493](../../tests/semantic/test_semantic.cpp#L493) |
 | SEM-TYPE-001 | [3.8](../language/03_LANGUAGE_REFERENCE_MANUAL.md#38-elementwise-arithmetic-and-broadcasting) | X | scalar where tensor operand required (`x @ 0.5`) | reject: SemaTypeMismatch | done | [semantic.tns:75](../../tests/fixtures/semantic.tns#L75) |
 | SEM-ARITY-001 | [3.9](../language/03_LANGUAGE_REFERENCE_MANUAL.md#39-linear) | X | `linear` with 2 args | reject: SemaArgCount | done | [semantic.tns:83](../../tests/fixtures/semantic.tns#L83) |
 | SEM-ARITY-002 | [3.16](../language/03_LANGUAGE_REFERENCE_MANUAL.md#316-conv2d) | X | `conv2d` missing `stride` | reject: SemaArgCount | done | [semantic.tns:92](../../tests/fixtures/semantic.tns#L92) |
 | SEM-ARITY-003 | [3.11](../language/03_LANGUAGE_REFERENCE_MANUAL.md#311-softmax) | X | `softmax` axis given as integer | reject: SemaArgKind | done | [semantic.tns:102](../../tests/fixtures/semantic.tns#L102) |
 | SEM-ARITY-004 | [3.24](../language/03_LANGUAGE_REFERENCE_MANUAL.md#324-grammar-summary) | X | `relu` with an unknown keyword argument | reject: SemaArgKind | done | [semantic.tns:110](../../tests/fixtures/semantic.tns#L110) |
 | SEM-ARITY-005 | [3.14](../language/03_LANGUAGE_REFERENCE_MANUAL.md#314-transpose) | X | `transpose` missing `perm` | reject: SemaArgCount | done | [semantic.tns:118](../../tests/fixtures/semantic.tns#L118) |
-| SEM-POISON-001 | ARCH-007 | X | one bad statement does not cascade into spurious follow-on errors later in the same graph | 1 diagnostic only | done | [test_semantic.cpp:59](../../tests/semantic/test_semantic.cpp#L59) |
-| SEM-POISON-002 | recovery | X | two independent semantic errors (different graphs) are both reported in one pass | 2 diagnostics | done | [test_semantic.cpp:75](../../tests/semantic/test_semantic.cpp#L75) |
+| SEM-POISON-001 | ARCH-007 | X | one bad statement does not cascade into spurious follow-on errors later in the same graph | 1 diagnostic only | done | [test_semantic.cpp:63](../../tests/semantic/test_semantic.cpp#L63) |
+| SEM-POISON-002 | recovery | X | two independent semantic errors (different graphs) are both reported in one pass | 2 diagnostics | done | [test_semantic.cpp:73](../../tests/semantic/test_semantic.cpp#L73) |
 
 ## Semantic — matmul / linear (RM 3.7, 3.9)
 
 | ID | RM | Kind | Case | Result | Status | Test |
 |----|----|----|----|----|----|----|
-| SEM-MM-001 | [3.7](../language/03_LANGUAGE_REFERENCE_MANUAL.md#37-matrix-multiplication) | V | `[batch=B,feat=784]@[in=784,out=256]` | accept -> `[batch=B,out=256]` | done | [test_semantic.cpp:85](../../tests/semantic/test_semantic.cpp#L85) |
+| SEM-MM-001 | [3.7](../language/03_LANGUAGE_REFERENCE_MANUAL.md#37-matrix-multiplication) | V | `[batch=B,feat=784]@[in=784,out=256]` | accept -> `[batch=B,out=256]` | done | [test_semantic.cpp:83](../../tests/semantic/test_semantic.cpp#L83) |
 | SEM-MM-002 | [3.7](../language/03_LANGUAGE_REFERENCE_MANUAL.md#37-matrix-multiplication) | X | `784 != 512` | reject: SemaShapeMismatch (784!=512) | done | [semantic.tns:126](../../tests/fixtures/semantic.tns#L126) |
 | SEM-MM-003 | [3.7](../language/03_LANGUAGE_REFERENCE_MANUAL.md#37-matrix-multiplication) | N | symbolic contraction `K` unifies | accept | done | [semantic.tns:135](../../tests/fixtures/semantic.tns#L135) |
 | SEM-MM-004 | [3.7](../language/03_LANGUAGE_REFERENCE_MANUAL.md#37-matrix-multiplication) | X | batched leading-axis mismatch | reject: SemaShapeMismatch | done | [semantic.tns:144](../../tests/fixtures/semantic.tns#L144) |
-| SEM-LIN-001 | [3.9](../language/03_LANGUAGE_REFERENCE_MANUAL.md#39-linear) | V | linear with matching bias | accept | done | [test_semantic.cpp:99](../../tests/semantic/test_semantic.cpp#L99) |
+| SEM-LIN-001 | [3.9](../language/03_LANGUAGE_REFERENCE_MANUAL.md#39-linear) | V | linear with matching bias | accept | done | [test_semantic.cpp:96](../../tests/semantic/test_semantic.cpp#L96) |
 | SEM-LIN-002 | [3.9](../language/03_LANGUAGE_REFERENCE_MANUAL.md#39-linear) | X | bias size mismatch | reject: SemaShapeMismatch | done | [semantic.tns:153](../../tests/fixtures/semantic.tns#L153) |
 | SEM-LIN-003 | [3.9](../language/03_LANGUAGE_REFERENCE_MANUAL.md#39-linear) | X | bias axis-name mismatch | reject: SemaAxisNameMismatch | done | [semantic.tns:163](../../tests/fixtures/semantic.tns#L163) |
 
@@ -145,44 +145,44 @@ real language behavior.
 | ID | RM | Kind | Case | Result | Status | Test |
 |----|----|----|----|----|----|----|
 | SEM-EW-001 | [3.8](../language/03_LANGUAGE_REFERENCE_MANUAL.md#38-elementwise-arithmetic-and-broadcasting) | V | equal shapes and names | accept | done | [semantic.tns:173](../../tests/fixtures/semantic.tns#L173) |
-| SEM-EW-002 | [3.8](../language/03_LANGUAGE_REFERENCE_MANUAL.md#38-elementwise-arithmetic-and-broadcasting) | V | size-1 broadcast | accept | done | [test_semantic.cpp:112](../../tests/semantic/test_semantic.cpp#L112) |
+| SEM-EW-002 | [3.8](../language/03_LANGUAGE_REFERENCE_MANUAL.md#38-elementwise-arithmetic-and-broadcasting) | V | size-1 broadcast | accept | done | [test_semantic.cpp:108](../../tests/semantic/test_semantic.cpp#L108) |
 | SEM-EW-003 | [3.8](../language/03_LANGUAGE_REFERENCE_MANUAL.md#38-elementwise-arithmetic-and-broadcasting) | X | **equal sizes, swapped axis names** | reject: SemaAxisNameMismatch | done | [semantic.tns:182](../../tests/fixtures/semantic.tns#L182) |
 | SEM-EW-004 | [3.8](../language/03_LANGUAGE_REFERENCE_MANUAL.md#38-elementwise-arithmetic-and-broadcasting) | X | incompatible sizes | reject: SemaBroadcast | done | [semantic.tns:191](../../tests/fixtures/semantic.tns#L191) |
-| SEM-EW-005 | [3.8](../language/03_LANGUAGE_REFERENCE_MANUAL.md#38-elementwise-arithmetic-and-broadcasting) | V | tensor-scalar `x * 0.125` | accept | done | [test_semantic.cpp:124](../../tests/semantic/test_semantic.cpp#L124) |
+| SEM-EW-005 | [3.8](../language/03_LANGUAGE_REFERENCE_MANUAL.md#38-elementwise-arithmetic-and-broadcasting) | V | tensor-scalar `x * 0.125` | accept | done | [test_semantic.cpp:120](../../tests/semantic/test_semantic.cpp#L120) |
 
 ## Semantic — reshape / flatten (RM 3.12, 3.13)
 
 | ID | RM | Kind | Case | Result | Status | Test |
 |----|----|----|----|----|----|----|
-| SEM-RS-001 | [3.12](../language/03_LANGUAGE_REFERENCE_MANUAL.md#312-reshape) | V | `768 -> [head=12,dim=64]` | accept | done | [test_semantic.cpp:135](../../tests/semantic/test_semantic.cpp#L135) |
+| SEM-RS-001 | [3.12](../language/03_LANGUAGE_REFERENCE_MANUAL.md#312-reshape) | V | `768 -> [head=12,dim=64]` | accept | done | [test_semantic.cpp:131](../../tests/semantic/test_semantic.cpp#L131) |
 | SEM-RS-002 | [3.12](../language/03_LANGUAGE_REFERENCE_MANUAL.md#312-reshape) | X | `768 -> [head=10,dim=64]` (640) | reject: SemaReshapeCount (640!=768) | done | [semantic.tns:200](../../tests/fixtures/semantic.tns#L200) |
 | SEM-RS-003 | [3.4](../language/03_LANGUAGE_REFERENCE_MANUAL.md#34-symbolic-dimensions), [3.12](../language/03_LANGUAGE_REFERENCE_MANUAL.md#312-reshape) | X | symbolic-factor multiset mismatch (`[batch=B,feat=768]` vs `[batch=C,head=12,dim=64]`, unrelated symbols) -- outside the bounded subset (RM 3.4), not a decided count mismatch | reject: SemaUnresolvableShape | done | [semantic.tns:208](../../tests/fixtures/semantic.tns#L208) |
 | SEM-RS-004 | [3.12](../language/03_LANGUAGE_REFERENCE_MANUAL.md#312-reshape) | N | symbolic factor cancels correctly (`[batch=B,feat=768]` -> `[batch=B,head=12,dim=64]`), near-miss of RS-003 | accept | done | [semantic.tns:216](../../tests/fixtures/semantic.tns#L216) |
-| SEM-FL-001 | [3.13](../language/03_LANGUAGE_REFERENCE_MANUAL.md#313-flatten) | V | concrete tail flattens to `flat=200704` | accept | done | [test_semantic.cpp:148](../../tests/semantic/test_semantic.cpp#L148) |
+| SEM-FL-001 | [3.13](../language/03_LANGUAGE_REFERENCE_MANUAL.md#313-flatten) | V | concrete tail flattens to `flat=200704` | accept | done | [test_semantic.cpp:144](../../tests/semantic/test_semantic.cpp#L144) |
 | SEM-FL-002 | [3.13](../language/03_LANGUAGE_REFERENCE_MANUAL.md#313-flatten) | X | symbolic tail dim | reject: SemaUnresolvableShape | done | [semantic.tns:224](../../tests/fixtures/semantic.tns#L224) |
 
 ## Semantic — transpose / reductions / softmax (RM 3.14, 3.11, 3.15)
 
 | ID | RM | Kind | Case | Result | Status | Test |
 |----|----|----|----|----|----|----|
-| SEM-TR-001 | [3.14](../language/03_LANGUAGE_REFERENCE_MANUAL.md#314-transpose) | V | valid perm on rank-4 | accept | done | [test_semantic.cpp:164](../../tests/semantic/test_semantic.cpp#L164) |
+| SEM-TR-001 | [3.14](../language/03_LANGUAGE_REFERENCE_MANUAL.md#314-transpose) | V | valid perm on rank-4 | accept | done | [test_semantic.cpp:160](../../tests/semantic/test_semantic.cpp#L160) |
 | SEM-TR-002 | [3.14](../language/03_LANGUAGE_REFERENCE_MANUAL.md#314-transpose) | X | repeated perm index | reject: SemaTransposePerm | done | [semantic.tns:232](../../tests/fixtures/semantic.tns#L232) |
 | SEM-TR-003 | [3.14](../language/03_LANGUAGE_REFERENCE_MANUAL.md#314-transpose) | X | out-of-range perm index | reject: SemaTransposePerm | done | [semantic.tns:240](../../tests/fixtures/semantic.tns#L240) |
-| SEM-RD-001 | [3.15](../language/03_LANGUAGE_REFERENCE_MANUAL.md#315-sum--mean) | V | `sum(x, axis=feat)` existing axis | accept (axis removed) | done | [test_semantic.cpp:176](../../tests/semantic/test_semantic.cpp#L176) |
+| SEM-RD-001 | [3.15](../language/03_LANGUAGE_REFERENCE_MANUAL.md#315-sum--mean) | V | `sum(x, axis=feat)` existing axis | accept (axis removed) | done | [test_semantic.cpp:172](../../tests/semantic/test_semantic.cpp#L172) |
 | SEM-RD-002 | [3.15](../language/03_LANGUAGE_REFERENCE_MANUAL.md#315-sum--mean) | X | nonexistent axis name | reject: SemaAxisNotFound | done | [semantic.tns:248](../../tests/fixtures/semantic.tns#L248) |
-| SEM-SM-001 | [3.11](../language/03_LANGUAGE_REFERENCE_MANUAL.md#311-softmax) | V | `softmax(scores, axis=kseq)` | accept | done | [test_semantic.cpp:186](../../tests/semantic/test_semantic.cpp#L186) |
+| SEM-SM-001 | [3.11](../language/03_LANGUAGE_REFERENCE_MANUAL.md#311-softmax) | V | `softmax(scores, axis=kseq)` | accept | done | [test_semantic.cpp:182](../../tests/semantic/test_semantic.cpp#L182) |
 | SEM-SM-002 | [3.11](../language/03_LANGUAGE_REFERENCE_MANUAL.md#311-softmax) | X | softmax nonexistent axis | reject: SemaAxisNotFound | done | [semantic.tns:256](../../tests/fixtures/semantic.tns#L256) |
 
 ## Semantic — conv / pooling (RM 3.16, 3.17)
 
 | ID | RM | Kind | Case | Result | Status | Test |
 |----|----|----|----|----|----|----|
-| SEM-CV-001 | [3.16](../language/03_LANGUAGE_REFERENCE_MANUAL.md#316-conv2d) | V | conv `stride=1,padding=1` preserves HxW | accept | done | [test_semantic.cpp:199](../../tests/semantic/test_semantic.cpp#L199) |
+| SEM-CV-001 | [3.16](../language/03_LANGUAGE_REFERENCE_MANUAL.md#316-conv2d) | V | conv `stride=1,padding=1` preserves HxW | accept | done | [test_semantic.cpp:195](../../tests/semantic/test_semantic.cpp#L195) |
 | SEM-CV-002 | [3.16](../language/03_LANGUAGE_REFERENCE_MANUAL.md#316-conv2d) | X | channel mismatch `3 != 16` | reject: SemaConvChannel | done | [semantic.tns:264](../../tests/fixtures/semantic.tns#L264) |
 | SEM-CV-003 | [3.16](../language/03_LANGUAGE_REFERENCE_MANUAL.md#316-conv2d) | X | non-dividing spatial arithmetic | reject: SemaConvArithmetic | done | [semantic.tns:274](../../tests/fixtures/semantic.tns#L274) |
 | SEM-CV-004 | [3.16](../language/03_LANGUAGE_REFERENCE_MANUAL.md#316-conv2d) | X | stride=2 at 224x224 that would only floor-divide (a common-framework convention) is rejected, not floored | reject: SemaConvArithmetic | done | [semantic.tns:284](../../tests/fixtures/semantic.tns#L284) |
-| SEM-CV-005 | [3.16](../language/03_LANGUAGE_REFERENCE_MANUAL.md#316-conv2d) | V | stride=2 at 224x224 exactly halves H/W when the division is exact | accept, output [64,112,112] | done | [test_semantic.cpp:215](../../tests/semantic/test_semantic.cpp#L215) |
-| SEM-PL-001 | [3.17](../language/03_LANGUAGE_REFERENCE_MANUAL.md#317-maxpool) | V | `maxpool size=2` halves HxW | accept | done | [test_semantic.cpp:231](../../tests/semantic/test_semantic.cpp#L231) |
+| SEM-CV-005 | [3.16](../language/03_LANGUAGE_REFERENCE_MANUAL.md#316-conv2d) | V | stride=2 at 224x224 exactly halves H/W when the division is exact | accept, output [64,112,112] | done | [test_semantic.cpp:209](../../tests/semantic/test_semantic.cpp#L209) |
+| SEM-PL-001 | [3.17](../language/03_LANGUAGE_REFERENCE_MANUAL.md#317-maxpool) | V | `maxpool size=2` halves HxW | accept | done | [test_semantic.cpp:223](../../tests/semantic/test_semantic.cpp#L223) |
 | SEM-PL-002 | [3.17](../language/03_LANGUAGE_REFERENCE_MANUAL.md#317-maxpool) | N | `stride` defaults to `size` | accept | done | [semantic.tns:294](../../tests/fixtures/semantic.tns#L294) |
 
 ## Semantic — bounded solver (RM 3.4)
@@ -208,20 +208,20 @@ which had listed SEM-RS-003 as `SemaReshapeCount`.
 
 | ID | RM | Kind | Case | Result | Status | Test |
 |----|----|----|----|----|----|----|
-| ATT-001 | [3.7](../language/03_LANGUAGE_REFERENCE_MANUAL.md#37-matrix-multiplication), [3.8](../language/03_LANGUAGE_REFERENCE_MANUAL.md#38-elementwise-arithmetic-and-broadcasting), [3.11](../language/03_LANGUAGE_REFERENCE_MANUAL.md#311-softmax), [3.14](../language/03_LANGUAGE_REFERENCE_MANUAL.md#314-transpose) | V | the full attention program (whitepaper 10.4) type-checks end to end: batched `@`, rank-4 `transpose`, scalar `*`, `softmax(axis=kseq)` | accept | done | [test_semantic.cpp:246](../../tests/semantic/test_semantic.cpp#L246) |
+| ATT-001 | [3.7](../language/03_LANGUAGE_REFERENCE_MANUAL.md#37-matrix-multiplication), [3.8](../language/03_LANGUAGE_REFERENCE_MANUAL.md#38-elementwise-arithmetic-and-broadcasting), [3.11](../language/03_LANGUAGE_REFERENCE_MANUAL.md#311-softmax), [3.14](../language/03_LANGUAGE_REFERENCE_MANUAL.md#314-transpose) | V | the full attention program (whitepaper 10.4) type-checks end to end: batched `@`, rank-4 `transpose`, scalar `*`, `softmax(axis=kseq)` | accept | done | [test_semantic.cpp:238](../../tests/semantic/test_semantic.cpp#L238) |
 | ATT-002 | [3.8](../language/03_LANGUAGE_REFERENCE_MANUAL.md#38-elementwise-arithmetic-and-broadcasting) | X | mutated ATT-001: swap `Q`'s and `K`'s leading axis names (`batch`/`head` transposed on one operand) so the batched matmul's leading-axis broadcast fails | reject: SemaAxisNameMismatch | done | [semantic.tns:324](../../tests/fixtures/semantic.tns#L324) |
 
 ## Graph (RM 3.18, 3.20; IR.md)
 
 | ID | RM | Kind | Case | Result | Status | Test |
 |----|----|----|----|----|----|----|
-| GR-001 | [3.20](../language/03_LANGUAGE_REFERENCE_MANUAL.md#320-typed-computation-graph) | V | MLP program analyzed end to end: golden structural TCG (node count/kinds/order, param count) | graph | done | [test_graph.cpp:32](../../tests/semantic/test_graph.cpp#L32) |
-| GR-002 | IR §1 | X | hand-built `GraphBuilder` fixture with a cycle | GraphVerifier reject: IrInvariantViolation | done | [test_graph.cpp:63](../../tests/semantic/test_graph.cpp#L63) |
-| GR-003 | IR §1 | X | hand-built fixture with a dangling operand (out-of-range ValueId) | GraphVerifier reject: IrInvariantViolation | done | [test_graph.cpp:85](../../tests/semantic/test_graph.cpp#L85) |
-| GR-004 | [3.18](../language/03_LANGUAGE_REFERENCE_MANUAL.md#318-graph-semantics) | V | producer/consumer queries correct on a small hand-built chain | accept | done | [test_graph.cpp:102](../../tests/semantic/test_graph.cpp#L102) |
-| GR-005 | [3.20](../language/03_LANGUAGE_REFERENCE_MANUAL.md#320-typed-computation-graph) | V | single reachable output; every node in topological order | accept | done | [test_graph.cpp:124](../../tests/semantic/test_graph.cpp#L124) |
-| GR-006 | ARCH-008 | V | a `GraphVerifier`-clean fixture built entirely by hand (no sema) passes, demonstrating the mock-enabler contract | accept | done | [test_graph.cpp:140](../../tests/semantic/test_graph.cpp#L140) |
-| GR-007 | [3.18](../language/03_LANGUAGE_REFERENCE_MANUAL.md#318-graph-semantics) | V | a graph referencing the same global input twice adds it as exactly one param (lazy dedup) | 1 param, 2 consumers | done | [test_graph.cpp:165](../../tests/semantic/test_graph.cpp#L165) |
+| GR-001 | [3.20](../language/03_LANGUAGE_REFERENCE_MANUAL.md#320-typed-computation-graph) | V | MLP program analyzed end to end: golden structural TCG (node count/kinds/order, param count) | graph | done | [test_graph.cpp:33](../../tests/semantic/test_graph.cpp#L33) |
+| GR-002 | IR §1 | X | hand-built `GraphBuilder` fixture with a cycle | GraphVerifier reject: IrInvariantViolation | done | [test_graph.cpp:52](../../tests/semantic/test_graph.cpp#L52) |
+| GR-003 | IR §1 | X | hand-built fixture with a dangling operand (out-of-range ValueId) | GraphVerifier reject: IrInvariantViolation | done | [test_graph.cpp:74](../../tests/semantic/test_graph.cpp#L74) |
+| GR-004 | [3.18](../language/03_LANGUAGE_REFERENCE_MANUAL.md#318-graph-semantics) | V | producer/consumer queries correct on a small hand-built chain | accept | done | [test_graph.cpp:91](../../tests/semantic/test_graph.cpp#L91) |
+| GR-005 | [3.20](../language/03_LANGUAGE_REFERENCE_MANUAL.md#320-typed-computation-graph) | V | single reachable output; every node in topological order | accept | done | [test_graph.cpp:113](../../tests/semantic/test_graph.cpp#L113) |
+| GR-006 | ARCH-008 | V | a `GraphVerifier`-clean fixture built entirely by hand (no sema) passes, demonstrating the mock-enabler contract | accept | done | [test_graph.cpp:129](../../tests/semantic/test_graph.cpp#L129) |
+| GR-007 | [3.18](../language/03_LANGUAGE_REFERENCE_MANUAL.md#318-graph-semantics) | V | a graph referencing the same global input twice adds it as exactly one param (lazy dedup) | 1 param, 2 consumers | done | [test_graph.cpp:154](../../tests/semantic/test_graph.cpp#L154) |
 
 `--emit-graph`'s textual dump format (IR.md §7) is not implemented by this
 phase (driver/CLI work); GR-001's "golden" comparison is a structural
@@ -408,25 +408,25 @@ rank-4 multi-head attention example is simply not yet written, not blocked on mi
 | ID | Rule | Case | Result | Status | Test |
 |----|----|----|----|----|----|
 | BND-MM-001 | [3.7](../language/03_LANGUAGE_REFERENCE_MANUAL.md#37-matrix-multiplication) | matmul `K=1` | accept | done | [semantic.tns:336](../../tests/fixtures/semantic.tns#L336) |
-| BND-MM-002 | [3.7](../language/03_LANGUAGE_REFERENCE_MANUAL.md#37-matrix-multiplication) | matmul `M=1` or `N=1` | accept | done | [test_semantic.cpp:271](../../tests/semantic/test_semantic.cpp#L271) |
-| BND-BC-001 | [3.8](../language/03_LANGUAGE_REFERENCE_MANUAL.md#38-elementwise-arithmetic-and-broadcasting) | broadcast size-1 each side | accept | done | [test_semantic.cpp:284](../../tests/semantic/test_semantic.cpp#L284) |
+| BND-MM-002 | [3.7](../language/03_LANGUAGE_REFERENCE_MANUAL.md#37-matrix-multiplication) | matmul `M=1` or `N=1` | accept | done | [test_semantic.cpp:252](../../tests/semantic/test_semantic.cpp#L252) |
+| BND-BC-001 | [3.8](../language/03_LANGUAGE_REFERENCE_MANUAL.md#38-elementwise-arithmetic-and-broadcasting) | broadcast size-1 each side | accept | done | [test_semantic.cpp:265](../../tests/semantic/test_semantic.cpp#L265) |
 | BND-RS-001 | [3.12](../language/03_LANGUAGE_REFERENCE_MANUAL.md#312-reshape) | reshape product off by one | reject: SemaReshapeCount | done | [semantic.tns:345](../../tests/fixtures/semantic.tns#L345) |
 | BND-FL-001 | [3.13](../language/03_LANGUAGE_REFERENCE_MANUAL.md#313-flatten) | flatten symbolic trailing dim | reject: SemaUnresolvableShape | done | [semantic.tns:353](../../tests/fixtures/semantic.tns#L353) |
-| BND-CV-001 | [3.16](../language/03_LANGUAGE_REFERENCE_MANUAL.md#316-conv2d) | conv output exact-divide vs remainder | accept / reject | done | [test_semantic.cpp:297](../../tests/semantic/test_semantic.cpp#L297) |
-| BND-CV-002 | [3.16](../language/03_LANGUAGE_REFERENCE_MANUAL.md#316-conv2d) | kernel = input size (output 1) | accept | done | [test_semantic.cpp:318](../../tests/semantic/test_semantic.cpp#L318) |
-| BND-RD-001 | [3.15](../language/03_LANGUAGE_REFERENCE_MANUAL.md#315-sum--mean) | reduce axis 0 / last / only axis | accept | done | [test_semantic.cpp:333](../../tests/semantic/test_semantic.cpp#L333) |
-| BND-TR-001 | [3.14](../language/03_LANGUAGE_REFERENCE_MANUAL.md#314-transpose) | identity perm; full-reverse perm | accept | done | [test_semantic.cpp:351](../../tests/semantic/test_semantic.cpp#L351) |
-| BND-DIM-001 | [3.4](../language/03_LANGUAGE_REFERENCE_MANUAL.md#34-symbolic-dimensions) | just inside vs just outside affine subset | accept / SemaUnresolvableShape | done | [test_semantic.cpp:371](../../tests/semantic/test_semantic.cpp#L371) |
+| BND-CV-001 | [3.16](../language/03_LANGUAGE_REFERENCE_MANUAL.md#316-conv2d) | conv output exact-divide vs remainder | accept / reject | done | [test_semantic.cpp:278](../../tests/semantic/test_semantic.cpp#L278) |
+| BND-CV-002 | [3.16](../language/03_LANGUAGE_REFERENCE_MANUAL.md#316-conv2d) | kernel = input size (output 1) | accept | done | [test_semantic.cpp:297](../../tests/semantic/test_semantic.cpp#L297) |
+| BND-RD-001 | [3.15](../language/03_LANGUAGE_REFERENCE_MANUAL.md#315-sum--mean) | reduce axis 0 / last / only axis | accept | done | [test_semantic.cpp:310](../../tests/semantic/test_semantic.cpp#L310) |
+| BND-TR-001 | [3.14](../language/03_LANGUAGE_REFERENCE_MANUAL.md#314-transpose) | identity perm; full-reverse perm | accept | done | [test_semantic.cpp:328](../../tests/semantic/test_semantic.cpp#L328) |
+| BND-DIM-001 | [3.4](../language/03_LANGUAGE_REFERENCE_MANUAL.md#34-symbolic-dimensions) | just inside vs just outside affine subset | accept / SemaUnresolvableShape | done | [test_semantic.cpp:348](../../tests/semantic/test_semantic.cpp#L348) |
 | BND-LIVE-001 | ARCH-009 | value never used / only at return / all live | intervals correct | planned | — |
 | BND-TILE-001 | 8.4 | dim divisible / = tile / < tile / = 1 | plan correct | planned | — |
 | BND-LEX-001 | [3.1](../language/03_LANGUAGE_REFERENCE_MANUAL.md#31-lexical-structure) | empty file | only eof, at line 1 col 1 | done | [test_lexer.cpp:393](../../tests/lexer/test_lexer.cpp#L393) |
 | BND-LEX-002 | [3.1](../language/03_LANGUAGE_REFERENCE_MANUAL.md#31-lexical-structure) | comments-only file (single + multiple lines) | only eof | done | [test_lexer.cpp:400](../../tests/lexer/test_lexer.cpp#L400) |
 | BND-LEX-003 | [3.1](../language/03_LANGUAGE_REFERENCE_MANUAL.md#31-lexical-structure) | token at EOF, no trailing newline, per token category | token then eof | done | [test_lexer.cpp:415](../../tests/lexer/test_lexer.cpp#L415) |
 | BND-LEX-004 | [3.1](../language/03_LANGUAGE_REFERENCE_MANUAL.md#31-lexical-structure) | first token of any file starts at line 1, col 1, offset 0 | span correct | done | [test_lexer.cpp:438](../../tests/lexer/test_lexer.cpp#L438) |
-| BND-PAR-001 | [3.2](../language/03_LANGUAGE_REFERENCE_MANUAL.md#32-program-structure), [3.24](../language/03_LANGUAGE_REFERENCE_MANUAL.md#324-grammar-summary) | graph body that is only `return` (zero statements) vs a single statement | ast | done | [test_parser.cpp:545](../../tests/parser/test_parser.cpp#L545) |
-| BND-PAR-002 | [3.2](../language/03_LANGUAGE_REFERENCE_MANUAL.md#32-program-structure), [3.24](../language/03_LANGUAGE_REFERENCE_MANUAL.md#324-grammar-summary) | minimal legal program: zero decls, exactly one graph, return-only body | ast | done | [test_parser.cpp:561](../../tests/parser/test_parser.cpp#L561) |
-| BND-PAR-003 | [3.3](../language/03_LANGUAGE_REFERENCE_MANUAL.md#33-tensor-types) | `tensorType` axis-count extremes: 1 axis (min) vs 4 axes (conv-style) | ast | done | [test_parser.cpp:573](../../tests/parser/test_parser.cpp#L573) |
-| BND-PAR-004 | [3.16](../language/03_LANGUAGE_REFERENCE_MANUAL.md#316-conv2d), [3.24](../language/03_LANGUAGE_REFERENCE_MANUAL.md#324-grammar-summary) | call arg-count extreme: `conv2d`'s 5-arg call (3 positional + 2 keyword) | ast | done | [test_parser.cpp:594](../../tests/parser/test_parser.cpp#L594) |
+| BND-PAR-001 | [3.2](../language/03_LANGUAGE_REFERENCE_MANUAL.md#32-program-structure), [3.24](../language/03_LANGUAGE_REFERENCE_MANUAL.md#324-grammar-summary) | graph body that is only `return` (zero statements) vs a single statement | ast | done | [test_parser.cpp:456](../../tests/parser/test_parser.cpp#L456) |
+| BND-PAR-002 | [3.2](../language/03_LANGUAGE_REFERENCE_MANUAL.md#32-program-structure), [3.24](../language/03_LANGUAGE_REFERENCE_MANUAL.md#324-grammar-summary) | minimal legal program: zero decls, exactly one graph, return-only body | ast | done | [test_parser.cpp:472](../../tests/parser/test_parser.cpp#L472) |
+| BND-PAR-003 | [3.3](../language/03_LANGUAGE_REFERENCE_MANUAL.md#33-tensor-types) | `tensorType` axis-count extremes: 1 axis (min) vs 4 axes (conv-style) | ast | done | [test_parser.cpp:484](../../tests/parser/test_parser.cpp#L484) |
+| BND-PAR-004 | [3.16](../language/03_LANGUAGE_REFERENCE_MANUAL.md#316-conv2d), [3.24](../language/03_LANGUAGE_REFERENCE_MANUAL.md#324-grammar-summary) | call arg-count extreme: `conv2d`'s 5-arg call (3 positional + 2 keyword) | ast | done | [test_parser.cpp:503](../../tests/parser/test_parser.cpp#L503) |
 
 ## User / Acceptance (TEST_PLAN §9c) — CLI + diagnostics + demo programs
 

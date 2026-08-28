@@ -31,6 +31,7 @@
 namespace tns = tensora;
 using namespace mlir;
 using MlirValue = mlir::Value;
+using tensora::testing::constTensor;
 
 namespace {
 
@@ -64,10 +65,6 @@ const tns::TensorType* buildMlpGraph(tns::TypeContext& types, tns::GraphBuilder&
   return yT;
 }
 
-MlirValue constTensor(OpBuilder& b, Location loc, RankedTensorType type, ArrayRef<float> values) {
-  auto attr = DenseElementsAttr::get(type, values);
-  return arith::ConstantOp::create(b, loc, type, attr);
-}
 
 }  // namespace
 

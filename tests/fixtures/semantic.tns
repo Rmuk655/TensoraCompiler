@@ -1,9 +1,9 @@
-# GENERATED-FROM-SOURCE fixture file (see docs/testing/TEST_MATRIX.md for
-# what each ID checks). Hand-edited, NOT tool-generated: this is real .tns
-# source, kept syntax-highlightable, one case per '### ID | description'
-# block. tools/gen_fixture_cases.py turns this into a generated .cpp with one
-# TEST_CASE(...) per entry (see cmake/Tests.cmake). Each block runs until the
-# next '### ' line or end of file.
+# This fixture file holds real .tns source, kept syntax-highlightable,
+# one case per '### ID | description' block. tests/support/FixtureLoader.h
+# reads this file at runtime and registers one test case per entry (see
+# cmake/Tests.cmake's tensora_discover_fixture_cases for how each entry
+# also gets its own CTest). Each block runs until the next '### ' line
+# or end of file.
 #
 # expect: ok               -- program is accepted, no further check
 # expect: reject <DiagCode> -- program is rejected, and the FIRST reported

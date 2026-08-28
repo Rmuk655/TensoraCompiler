@@ -1,15 +1,18 @@
 // Phase 3 semantic tests (RM 3.4-3.19; ARCHITECTURE.md §6). These cover
-// every required course check and every Tensora-specific operator
+// every required language check and every Tensora-specific operator
 // contract. Each case has its own name (SEM-*, ATT-*, BND-*), matching
 // docs/testing/TEST_MATRIX.md. See tests/support/TestHarness.h for the
 // harness (shared with test_lexer.cpp/test_parser.cpp).
 //
 // Cases that only check ok/reject-plus-DiagCode (no AST/type structure
 // inspection) live in tests/fixtures/semantic.tns instead, one real
-// .tns program per case -- tools/gen_fixture_cases.py expands that file
-// into a generated TEST_CASE(...) per entry (see cmake/Tests.cmake).
-// Cases that need a real C++ assertion on the resulting type/symbol
-// table stay here, hand-written.
+// .tns program per case, loaded and registered at runtime
+// (support/FixtureLoader.h; see cmake/Tests.cmake). Cases that need a
+// real C++ assertion on the resulting type/symbol table stay here,
+// hand-written -- but their .tns source still lives in
+// tests/fixtures/semantic_structural.tns (loaded via
+// FixtureLoader.h's loadFixtureSource), not as an escaped C++ string
+// literal.
 #include <string>
 #include <vector>
 
@@ -32,6 +35,22 @@ Result<TypedProgram> analyze(const std::string& code, TypeContext& types, Diagno
   return analyzer.analyze(parsed.value());
 }
 
+// SYM-* cases need the analyzer itself afterward (to inspect its
+// symbolTable()), unlike analyze() above, which discards it.
+struct AnalyzedSymbols {
+  Result<TypedProgram> result;
+  SemanticAnalyzer analyzer;
+};
+
+AnalyzedSymbols analyzeForSymbols(const std::string& code, TypeContext& types, DiagnosticEngine& diags) {
+  SourceBuffer buf("test.tns", code);
+  Parser parser(buf, diags);
+  Result<ast::AstProgram> parsed = parser.parseProgram();
+  SemanticAnalyzer analyzer(types, diags);
+  Result<TypedProgram> result = analyzer.analyze(parsed.value());
+  return AnalyzedSymbols{std::move(result), std::move(analyzer)};
+}
+
 const TensorType* asTensor(const Type* t) {
   return t->kind() == Type::Kind::Tensor ? static_cast<const TensorType*>(t) : nullptr;
 }
@@ -50,7 +69,7 @@ bool firstDiagIs(const DiagnosticEngine& d, DiagCode code) {
 CASE(SEM_SCOPE_001, "SEM-SCOPE-001", "rebinding h = relu(h) shadows the prior binding (accept)") {
   TypeContext types;
   DiagnosticEngine d;
-  auto r = analyze("input x: Tensor[a=1]\ngraph g {\n  h = relu(x)\n  h = relu(h)\n  return h\n}\n", types, d);
+  auto r = analyze(tensora::testing::loadFixtureSource(FIXTURE_SEMANTIC_STRUCTURAL_PATH, "SEM-SCOPE-001"), types, d);
   R.check(r.ok(), "rebinding within a graph is accepted");
   R.check(d.all().empty(), "no diagnostics");
 }
@@ -61,13 +80,7 @@ CASE(SEM_POISON_001, "SEM-POISON-001", "one bad statement does not cascade into 
   TypeContext types;
   DiagnosticEngine d;
   auto r = analyze(
-      "input x: Tensor[a=1,b=2]\n"
-      "graph g {\n"
-      "  bad = undefined_name\n"
-      "  ok1 = relu(x)\n"
-      "  ok2 = relu(ok1)\n"
-      "  return ok2\n"
-      "}\n",
+      tensora::testing::loadFixtureSource(FIXTURE_SEMANTIC_STRUCTURAL_PATH, "SEM-POISON-001"),
       types, d);
   R.check(!r.ok(), "the program is rejected overall");
   R.check(d.all().size() == 1, "exactly one diagnostic: the poisoned value never causes a second error");
@@ -76,7 +89,7 @@ CASE(SEM_POISON_001, "SEM-POISON-001", "one bad statement does not cascade into 
 CASE(SEM_POISON_002, "SEM-POISON-002", "two independent errors in different graphs are both reported") {
   TypeContext types;
   DiagnosticEngine d;
-  auto r = analyze("graph a { return undefined1 }\ngraph b { return undefined2 }\n", types, d);
+  auto r = analyze(tensora::testing::loadFixtureSource(FIXTURE_SEMANTIC_STRUCTURAL_PATH, "SEM-POISON-002"), types, d);
   R.check(!r.ok(), "the program is rejected overall");
   R.check(d.all().size() == 2, "both independent undefined-name errors are reported");
 }
@@ -87,8 +100,7 @@ CASE(SEM_MM_001, "SEM-MM-001", "matmul: [batch=B,feat=784] @ [in=784,out=256] ->
   TypeContext types;
   DiagnosticEngine d;
   auto r = analyze(
-      "input x: Tensor[batch=B,feat=784]\nweight w: Tensor[in=784,out=256]\n"
-      "graph g {\n  y = x @ w\n  return y\n}\n",
+      tensora::testing::loadFixtureSource(FIXTURE_SEMANTIC_STRUCTURAL_PATH, "SEM-MM-001"),
       types, d);
   R.check(r.ok(), "valid matmul accepted");
   const TypedGraph& g = r.value().graphs()[0];
@@ -101,8 +113,7 @@ CASE(SEM_LIN_001, "SEM-LIN-001", "linear with a matching bias is accepted") {
   TypeContext types;
   DiagnosticEngine d;
   auto r = analyze(
-      "input x: Tensor[batch=B,in=784]\nweight w: Tensor[in=784,out=256]\nweight b: Tensor[out=256]\n"
-      "graph g {\n  y = linear(x, w, b)\n  return y\n}\n",
+      tensora::testing::loadFixtureSource(FIXTURE_SEMANTIC_STRUCTURAL_PATH, "SEM-LIN-001"),
       types, d);
   R.check(r.ok(), "valid linear accepted");
   const TypedGraph& g = r.value().graphs()[0];
@@ -114,7 +125,7 @@ CASE(SEM_EW_002, "SEM-EW-002", "elementwise: size-1 broadcast is accepted") {
   TypeContext types;
   DiagnosticEngine d;
   auto r = analyze(
-      "input a: Tensor[batch=B,feat=4]\ninput b: Tensor[batch=B,feat=1]\ngraph g {\n  y = a + b\n  return y\n}\n",
+      tensora::testing::loadFixtureSource(FIXTURE_SEMANTIC_STRUCTURAL_PATH, "SEM-EW-002"),
       types, d);
   R.check(r.ok(), "size-1 broadcast axis accepted regardless of name");
   const TypedGraph& g = r.value().graphs()[0];
@@ -125,7 +136,7 @@ CASE(SEM_EW_002, "SEM-EW-002", "elementwise: size-1 broadcast is accepted") {
 CASE(SEM_EW_005, "SEM-EW-005", "elementwise: tensor-scalar x * 0.125 imposes no constraint") {
   TypeContext types;
   DiagnosticEngine d;
-  auto r = analyze("input x: Tensor[a=1,b=2]\ngraph g {\n  y = x * 0.125\n  return y\n}\n", types, d);
+  auto r = analyze(tensora::testing::loadFixtureSource(FIXTURE_SEMANTIC_STRUCTURAL_PATH, "SEM-EW-005"), types, d);
   R.check(r.ok(), "tensor-scalar multiply accepted");
   const TypedGraph& g = r.value().graphs()[0];
   R.check(typesEqual(g.value(g.output).type, g.value(g.params[0]).type), "result type equals x's type exactly");
@@ -136,7 +147,7 @@ CASE(SEM_EW_005, "SEM-EW-005", "elementwise: tensor-scalar x * 0.125 imposes no 
 CASE(SEM_RS_001, "SEM-RS-001", "reshape: 768 -> [head=12,dim=64] is accepted") {
   TypeContext types;
   DiagnosticEngine d;
-  auto r = analyze("input x: Tensor[feat=768]\ngraph g {\n  y = reshape(x, [head=12,dim=64])\n  return y\n}\n",
+  auto r = analyze(tensora::testing::loadFixtureSource(FIXTURE_SEMANTIC_STRUCTURAL_PATH, "SEM-RS-001"),
                     types, d);
   R.check(r.ok(), "12*64 == 768 accepted");
   const TypedGraph& g = r.value().graphs()[0];
@@ -150,7 +161,7 @@ CASE(SEM_FL_001, "SEM-FL-001", "flatten: concrete tail flattens to flat=200704")
   TypeContext types;
   DiagnosticEngine d;
   auto r = analyze(
-      "input x: Tensor[batch=B,channel=64,height=56,width=56]\ngraph g {\n  y = flatten(x)\n  return y\n}\n", types,
+      tensora::testing::loadFixtureSource(FIXTURE_SEMANTIC_STRUCTURAL_PATH, "SEM-FL-001"), types,
       d);
   R.check(r.ok(), "concrete tail flattens");
   const TypedGraph& g = r.value().graphs()[0];
@@ -166,7 +177,7 @@ CASE(SEM_TR_001, "SEM-TR-001", "transpose: a valid perm on rank-4 is accepted") 
   TypeContext types;
   DiagnosticEngine d;
   auto r = analyze(
-      "input x: Tensor[a=1,b=2,c=3,d=4]\ngraph g {\n  y = transpose(x, perm=[0,1,3,2])\n  return y\n}\n", types, d);
+      tensora::testing::loadFixtureSource(FIXTURE_SEMANTIC_STRUCTURAL_PATH, "SEM-TR-001"), types, d);
   R.check(r.ok(), "valid perm accepted");
   const TypedGraph& g = r.value().graphs()[0];
   const TensorType* yType = asTensor(g.value(g.output).type);
@@ -177,7 +188,7 @@ CASE(SEM_TR_001, "SEM-TR-001", "transpose: a valid perm on rank-4 is accepted") 
 CASE(SEM_RD_001, "SEM-RD-001", "sum(x, axis=feat): an existing axis is removed") {
   TypeContext types;
   DiagnosticEngine d;
-  auto r = analyze("input x: Tensor[batch=B,feat=4]\ngraph g {\n  y = sum(x, axis=feat)\n  return y\n}\n", types, d);
+  auto r = analyze(tensora::testing::loadFixtureSource(FIXTURE_SEMANTIC_STRUCTURAL_PATH, "SEM-RD-001"), types, d);
   R.check(r.ok(), "existing axis accepted");
   const TypedGraph& g = r.value().graphs()[0];
   const TensorType* yType = asTensor(g.value(g.output).type);
@@ -188,7 +199,7 @@ CASE(SEM_SM_001, "SEM-SM-001", "softmax(scores, axis=kseq) is accepted, shape un
   TypeContext types;
   DiagnosticEngine d;
   auto r = analyze(
-      "input scores: Tensor[batch=B,qseq=S,kseq=S]\ngraph g {\n  y = softmax(scores, axis=kseq)\n  return y\n}\n",
+      tensora::testing::loadFixtureSource(FIXTURE_SEMANTIC_STRUCTURAL_PATH, "SEM-SM-001"),
       types, d);
   R.check(r.ok(), "existing axis accepted");
   const TypedGraph& g = r.value().graphs()[0];
@@ -201,9 +212,7 @@ CASE(SEM_CV_001, "SEM-CV-001", "conv2d stride=1,padding=1 preserves HxW") {
   TypeContext types;
   DiagnosticEngine d;
   auto r = analyze(
-      "input x: Tensor[batch=B,channel=3,height=224,width=224]\n"
-      "weight w: Tensor[out_channel=32,in_channel=3,kh=3,kw=3]\nweight b: Tensor[out_channel=32]\n"
-      "graph g {\n  y = conv2d(x, w, b, stride=1, padding=1)\n  return y\n}\n",
+      tensora::testing::loadFixtureSource(FIXTURE_SEMANTIC_STRUCTURAL_PATH, "SEM-CV-001"),
       types, d);
   R.check(r.ok(), "valid conv2d accepted");
   const TypedGraph& g = r.value().graphs()[0];
@@ -217,9 +226,7 @@ CASE(SEM_CV_005, "SEM-CV-005", "conv2d: stride=2 at 224x224 exactly halves H and
   TypeContext types;
   DiagnosticEngine d;
   auto r = analyze(
-      "input x: Tensor[batch=B,channel=3,height=224,width=224]\n"
-      "weight w: Tensor[out_channel=64,in_channel=3,kh=4,kw=4]\nweight b: Tensor[out_channel=64]\n"
-      "graph g {\n  y = conv2d(x, w, b, stride=2, padding=1)\n  return y\n}\n",
+      tensora::testing::loadFixtureSource(FIXTURE_SEMANTIC_STRUCTURAL_PATH, "SEM-CV-005"),
       types, d);
   R.check(r.ok(), "(224+2-4)/2 = 222/2 = 111, +1 = 112: exact, accepted");
   const TypedGraph& g = r.value().graphs()[0];
@@ -233,7 +240,7 @@ CASE(SEM_PL_001, "SEM-PL-001", "maxpool size=2 halves HxW") {
   TypeContext types;
   DiagnosticEngine d;
   auto r = analyze(
-      "input x: Tensor[batch=B,channel=32,height=112,width=112]\ngraph g {\n  y = maxpool(x, size=2)\n  return y\n}\n",
+      tensora::testing::loadFixtureSource(FIXTURE_SEMANTIC_STRUCTURAL_PATH, "SEM-PL-001"),
       types, d);
   R.check(r.ok(), "valid maxpool accepted");
   const TypedGraph& g = r.value().graphs()[0];
@@ -248,18 +255,7 @@ CASE(ATT_001, "ATT-001", "the full attention program (whitepaper 10.4) type-chec
   TypeContext types;
   DiagnosticEngine d;
   auto r = analyze(
-      "input Q: Tensor[batch=B, head=12, qseq=S, dim=64]\n"
-      "input K: Tensor[batch=B, head=12, kseq=S, dim=64]\n"
-      "input V: Tensor[batch=B, head=12, kseq=S, dim=64]\n"
-      "\n"
-      "graph attention {\n"
-      "    kt      = transpose(K, perm=[0, 1, 3, 2])\n"
-      "    scores  = Q @ kt\n"
-      "    scores  = scores * 0.125\n"
-      "    weights = softmax(scores, axis=kseq)\n"
-      "    out     = weights @ V\n"
-      "    return out\n"
-      "}\n",
+      tensora::testing::loadFixtureSource(FIXTURE_SEMANTIC_STRUCTURAL_PATH, "ATT-001"),
       types, d);
   R.check(r.ok(), "whitepaper's attention program type-checks with no diagnostics");
   const TypedGraph& g = r.value().graphs()[0];
@@ -273,7 +269,7 @@ CASE(BND_MM_002, "BND-MM-002", "matmul boundary: M=1 or N=1") {
   TypeContext types;
   DiagnosticEngine d;
   auto r = analyze(
-      "input a: Tensor[m=1,k=4]\ninput b: Tensor[k=4,n=4]\ngraph g {\n  y = a @ b\n  return y\n}\n", types, d);
+      tensora::testing::loadFixtureSource(FIXTURE_SEMANTIC_STRUCTURAL_PATH, "BND-MM-002"), types, d);
   R.check(r.ok(), "M=1 is valid");
   DiagnosticEngine d2;
   TypeContext types2;
@@ -286,7 +282,7 @@ CASE(BND_BC_001, "BND-BC-001", "broadcast boundary: size-1 on each side (of diff
   TypeContext types;
   DiagnosticEngine d;
   auto r = analyze(
-      "input a: Tensor[batch=1,feat=4]\ninput b: Tensor[batch=8,feat=1]\ngraph g {\n  y = a + b\n  return y\n}\n",
+      tensora::testing::loadFixtureSource(FIXTURE_SEMANTIC_STRUCTURAL_PATH, "BND-BC-001"),
       types, d);
   R.check(r.ok(), "a broadcasts on batch, b broadcasts on feat: both accepted");
   const TypedGraph& g = r.value().graphs()[0];
@@ -299,9 +295,7 @@ CASE(BND_CV_001, "BND-CV-001", "conv2d boundary: output exact-divide vs remainde
   TypeContext types;
   DiagnosticEngine d;
   auto r = analyze(
-      "input x: Tensor[batch=B,channel=1,height=4,width=4]\n"
-      "weight w: Tensor[out_channel=1,in_channel=1,kh=2,kw=2]\nweight b: Tensor[out_channel=1]\n"
-      "graph g {\n  y = conv2d(x, w, b, stride=2, padding=0)\n  return y\n}\n",
+      tensora::testing::loadFixtureSource(FIXTURE_SEMANTIC_STRUCTURAL_PATH, "BND-CV-001"),
       types, d);
   R.check(r.ok(), "(4-2)/2+1 = 2 exactly: accepted");
 
@@ -320,9 +314,7 @@ CASE(BND_CV_002, "BND-CV-002", "conv2d boundary: kernel size == input size (outp
   TypeContext types;
   DiagnosticEngine d;
   auto r = analyze(
-      "input x: Tensor[batch=B,channel=1,height=5,width=5]\n"
-      "weight w: Tensor[out_channel=1,in_channel=1,kh=5,kw=5]\nweight b: Tensor[out_channel=1]\n"
-      "graph g {\n  y = conv2d(x, w, b, stride=1, padding=0)\n  return y\n}\n",
+      tensora::testing::loadFixtureSource(FIXTURE_SEMANTIC_STRUCTURAL_PATH, "BND-CV-002"),
       types, d);
   R.check(r.ok(), "kernel == input size accepted");
   const TypedGraph& g = r.value().graphs()[0];
@@ -334,7 +326,7 @@ CASE(BND_CV_002, "BND-CV-002", "conv2d boundary: kernel size == input size (outp
 CASE(BND_RD_001, "BND-RD-001", "reduce boundary: axis 0, last axis, and the only axis") {
   TypeContext types;
   DiagnosticEngine d;
-  auto r = analyze("input x: Tensor[a=1,b=2,c=3]\ngraph g {\n  y = sum(x, axis=a)\n  return y\n}\n", types, d);
+  auto r = analyze(tensora::testing::loadFixtureSource(FIXTURE_SEMANTIC_STRUCTURAL_PATH, "BND-RD-001"), types, d);
   R.check(r.ok(), "reducing axis 0 accepted");
 
   TypeContext types2;
@@ -352,7 +344,7 @@ CASE(BND_RD_001, "BND-RD-001", "reduce boundary: axis 0, last axis, and the only
 CASE(BND_TR_001, "BND-TR-001", "transpose boundary: identity perm and full-reverse perm") {
   TypeContext types;
   DiagnosticEngine d;
-  auto r = analyze("input x: Tensor[a=1,b=2,c=3]\ngraph g {\n  y = transpose(x, perm=[0,1,2])\n  return y\n}\n",
+  auto r = analyze(tensora::testing::loadFixtureSource(FIXTURE_SEMANTIC_STRUCTURAL_PATH, "BND-TR-001"),
                     types, d);
   R.check(r.ok(), "identity perm accepted");
   const TypedGraph& g1 = r.value().graphs()[0];
@@ -373,7 +365,7 @@ CASE(BND_DIM_001, "BND-DIM-001", "bounded solver boundary: just inside vs just o
   TypeContext types;
   DiagnosticEngine d;
   auto r = analyze(
-      "input x: Tensor[batch=B,feat=768]\ngraph g {\n  y = reshape(x, [batch=B,head=12,dim=64])\n  return y\n}\n",
+      tensora::testing::loadFixtureSource(FIXTURE_SEMANTIC_STRUCTURAL_PATH, "BND-DIM-001"),
       types, d);
   R.check(r.ok(), "just inside: the same symbol B cancels on both sides");
 
@@ -388,21 +380,17 @@ CASE(BND_DIM_001, "BND-DIM-001", "bounded solver boundary: just inside vs just o
 
 // ============================== SYM (symbol-table report) ==============================
 // These exercise SemanticAnalyzer::symbolTable() (--emit-symbols'
-// source of truth) directly, so they construct SemanticAnalyzer
-// themselves instead of using the `analyze()` helper above, which
-// discards the analyzer once it returns.
+// source of truth) directly, so they use analyzeForSymbols() above
+// (which keeps the analyzer alive) instead of analyze(), which
+// discards it once it returns.
 
 CASE(SYM_001, "SYM-001", "globals appear in declaration order with correct kind and type") {
   TypeContext types;
   DiagnosticEngine d;
-  SourceBuffer buf("test.tns", "input x: Tensor[batch=4, feat=8]\nweight W: Tensor[in=8, out=2]\n"
-                               "graph g { y = linear(x, W, W)\n return y }\n");
-  Parser parser(buf, d);
-  Result<ast::AstProgram> parsed = parser.parseProgram();
-  SemanticAnalyzer analyzer(types, d);
-  analyzer.analyze(parsed.value());
+  auto sym = analyzeForSymbols(tensora::testing::loadFixtureSource(FIXTURE_SEMANTIC_STRUCTURAL_PATH, "SYM-001"),
+                                types, d);
 
-  const SymbolTableReport& report = analyzer.symbolTable();
+  const SymbolTableReport& report = sym.analyzer.symbolTable();
   R.check(report.globals.size() == 2, "two globals recorded");
   if (report.globals.size() == 2) {
     R.check(report.globals[0].name == "x" && report.globals[0].kind == Symbol::Kind::Input,
@@ -417,13 +405,10 @@ CASE(SYM_001, "SYM-001", "globals appear in declaration order with correct kind 
 CASE(SYM_002, "SYM-002", "graph-local symbols are recorded with the resolved (inferred) type, per graph") {
   TypeContext types;
   DiagnosticEngine d;
-  SourceBuffer buf("test.tns", "input x: Tensor[batch=4, feat=8]\ngraph g {\n  h = relu(x)\n  return h\n}\n");
-  Parser parser(buf, d);
-  Result<ast::AstProgram> parsed = parser.parseProgram();
-  SemanticAnalyzer analyzer(types, d);
-  analyzer.analyze(parsed.value());
+  auto sym = analyzeForSymbols(tensora::testing::loadFixtureSource(FIXTURE_SEMANTIC_STRUCTURAL_PATH, "SYM-002"),
+                                types, d);
 
-  const SymbolTableReport& report = analyzer.symbolTable();
+  const SymbolTableReport& report = sym.analyzer.symbolTable();
   R.check(report.graphs.size() == 1 && report.graphs[0].graphName == "g", "one graph, named g");
   if (!report.graphs.empty()) {
     const auto& locals = report.graphs[0].locals;
@@ -437,29 +422,21 @@ CASE(SYM_002, "SYM-002", "graph-local symbols are recorded with the resolved (in
 CASE(SYM_003, "SYM-003", "shadowing (h = relu(h)) collapses to one recorded local entry, not two") {
   TypeContext types;
   DiagnosticEngine d;
-  SourceBuffer buf("test.tns",
-                    "input x: Tensor[batch=4, feat=8]\ngraph g {\n  h = relu(x)\n  h = relu(h)\n  return h\n}\n");
-  Parser parser(buf, d);
-  Result<ast::AstProgram> parsed = parser.parseProgram();
-  SemanticAnalyzer analyzer(types, d);
-  Result<TypedProgram> r = analyzer.analyze(parsed.value());
-  R.check(r.ok(), "shadowing is accepted");
+  auto sym = analyzeForSymbols(tensora::testing::loadFixtureSource(FIXTURE_SEMANTIC_STRUCTURAL_PATH, "SYM-003"),
+                                types, d);
+  R.check(sym.result.ok(), "shadowing is accepted");
 
-  const auto& locals = analyzer.symbolTable().graphs.at(0).locals;
+  const auto& locals = sym.analyzer.symbolTable().graphs.at(0).locals;
   R.check(locals.size() == 1, "one recorded entry for h, not one per binding");
 }
 
 CASE(SYM_004, "SYM-004", "the resolution log records global::/local::/undefined, deduped per name") {
   TypeContext types;
   DiagnosticEngine d;
-  SourceBuffer buf("test.tns",
-                    "input x: Tensor[batch=4, feat=8]\ngraph g {\n  h = relu(x)\n  y = relu(h)\n  return y\n}\n");
-  Parser parser(buf, d);
-  Result<ast::AstProgram> parsed = parser.parseProgram();
-  SemanticAnalyzer analyzer(types, d);
-  analyzer.analyze(parsed.value());
+  auto sym = analyzeForSymbols(tensora::testing::loadFixtureSource(FIXTURE_SEMANTIC_STRUCTURAL_PATH, "SYM-004"),
+                                types, d);
 
-  const auto& res = analyzer.symbolTable().graphs.at(0).resolutions;
+  const auto& res = sym.analyzer.symbolTable().graphs.at(0).resolutions;
   R.check(res.size() == 3, "one entry per distinct referenced name (x, h, y), not one per resolveOperand call");
   if (res.size() == 3) {
     R.check(res[0].first == "x" && res[0].second == "global::x", "x resolves to the global scope");
@@ -471,14 +448,11 @@ CASE(SYM_004, "SYM-004", "the resolution log records global::/local::/undefined,
 CASE(SYM_005, "SYM-005", "an undefined reference logs 'undefined' and is not silently absent") {
   TypeContext types;
   DiagnosticEngine d;
-  SourceBuffer buf("test.tns", "graph g {\n  y = relu(does_not_exist)\n  return y\n}\n");
-  Parser parser(buf, d);
-  Result<ast::AstProgram> parsed = parser.parseProgram();
-  SemanticAnalyzer analyzer(types, d);
-  Result<TypedProgram> r = analyzer.analyze(parsed.value());
-  R.check(!r.ok(), "undefined name is rejected (no crash)");
+  auto sym = analyzeForSymbols(tensora::testing::loadFixtureSource(FIXTURE_SEMANTIC_STRUCTURAL_PATH, "SYM-005"),
+                                types, d);
+  R.check(!sym.result.ok(), "undefined name is rejected (no crash)");
 
-  const auto& res = analyzer.symbolTable().graphs.at(0).resolutions;
+  const auto& res = sym.analyzer.symbolTable().graphs.at(0).resolutions;
   bool found = false;
   for (const auto& [name, resolvedAs] : res) {
     if (name == "does_not_exist") found = (resolvedAs == "undefined");
@@ -489,14 +463,11 @@ CASE(SYM_005, "SYM-005", "an undefined reference logs 'undefined' and is not sil
 CASE(SYM_006, "SYM-006", "a rejected redeclaration never enters the recorded global scope") {
   TypeContext types;
   DiagnosticEngine d;
-  SourceBuffer buf("test.tns", "input x: Tensor[a=1]\nweight x: Tensor[a=1]\ngraph g { return x }\n");
-  Parser parser(buf, d);
-  Result<ast::AstProgram> parsed = parser.parseProgram();
-  SemanticAnalyzer analyzer(types, d);
-  Result<TypedProgram> r = analyzer.analyze(parsed.value());
-  R.check(!r.ok(), "the redeclaration is rejected");
+  auto sym = analyzeForSymbols(tensora::testing::loadFixtureSource(FIXTURE_SEMANTIC_STRUCTURAL_PATH, "SYM-006"),
+                                types, d);
+  R.check(!sym.result.ok(), "the redeclaration is rejected");
 
-  const auto& globals = analyzer.symbolTable().globals;
+  const auto& globals = sym.analyzer.symbolTable().globals;
   R.check(globals.size() == 1, "only the first declaration of x is recorded, not a duplicate entry");
   if (globals.size() == 1) R.check(globals[0].kind == Symbol::Kind::Input, "the surviving entry is the original Input");
 }
@@ -504,30 +475,22 @@ CASE(SYM_006, "SYM-006", "a rejected redeclaration never enters the recorded glo
 CASE(SYM_007, "SYM-007", "a rejected local rebind of a global name never enters the recorded local scope") {
   TypeContext types;
   DiagnosticEngine d;
-  SourceBuffer buf("test.tns", "input x: Tensor[a=1]\ngraph g {\n  x = relu(x)\n  return x\n}\n");
-  Parser parser(buf, d);
-  Result<ast::AstProgram> parsed = parser.parseProgram();
-  SemanticAnalyzer analyzer(types, d);
-  Result<TypedProgram> r = analyzer.analyze(parsed.value());
-  R.check(!r.ok(), "shadowing a global locally is rejected");
+  auto sym = analyzeForSymbols(tensora::testing::loadFixtureSource(FIXTURE_SEMANTIC_STRUCTURAL_PATH, "SYM-007"),
+                                types, d);
+  R.check(!sym.result.ok(), "shadowing a global locally is rejected");
 
-  const auto& locals = analyzer.symbolTable().graphs.at(0).locals;
+  const auto& locals = sym.analyzer.symbolTable().graphs.at(0).locals;
   R.check(locals.empty(), "the rejected local 'x' binding is not recorded (KindConflict never reaches bindLocal's insert)");
 }
 
 CASE(SYM_008, "SYM-008", "multiple graphs each get their own recorded scope, in program order") {
   TypeContext types;
   DiagnosticEngine d;
-  SourceBuffer buf("test.tns",
-                    "input x: Tensor[a=1]\ngraph first { p = relu(x)\n return p }\ngraph second { q = relu(x)\n "
-                    "return q }\n");
-  Parser parser(buf, d);
-  Result<ast::AstProgram> parsed = parser.parseProgram();
-  SemanticAnalyzer analyzer(types, d);
-  Result<TypedProgram> r = analyzer.analyze(parsed.value());
-  R.check(r.ok(), "both graphs are valid");
+  auto sym = analyzeForSymbols(tensora::testing::loadFixtureSource(FIXTURE_SEMANTIC_STRUCTURAL_PATH, "SYM-008"),
+                                types, d);
+  R.check(sym.result.ok(), "both graphs are valid");
 
-  const auto& graphs = analyzer.symbolTable().graphs;
+  const auto& graphs = sym.analyzer.symbolTable().graphs;
   R.check(graphs.size() == 2, "two recorded graph scopes");
   if (graphs.size() == 2) {
     R.check(graphs[0].graphName == "first" && graphs[0].locals.size() == 1 && graphs[0].locals[0].name == "p",
