@@ -516,7 +516,7 @@ std::string shapeStr(const std::vector<int64_t>& shape) {
   return s + "]";
 }
 
-// Runs the Level-1, team-authored graph optimization passes on every
+// Runs the Level-1, project-authored graph optimization passes on every
 // graph in the program, in place. This is a separate function from
 // lowerToModule below, so the CLI can show the optimization phase's
 // own output (--emit-optimized-graph) before lowering ever runs.

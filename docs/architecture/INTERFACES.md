@@ -1,8 +1,9 @@
 # Tensora Cross-Phase Interfaces
 
 > Concrete C++ interface signatures at each compiler boundary. These are
-> the contracts that let five team members build in parallel. Once the
-> team freezes them, they stay stable. Companion files:
+> the contracts that let the frontend, type system, semantic analysis,
+> optimization, and backend work develop in parallel, each against a
+> stable boundary. Once frozen, they stay stable. Companion files:
 > [ARCHITECTURE.md](ARCHITECTURE.md), [IR.md](IR.md). This C++ is
 > illustrative; the exact headers live in `include/tensora/`.
 
@@ -276,7 +277,7 @@ public:
 
 Contract: `LivenessAnalysis` is a read-only data-flow analysis. Its
 `peakLiveBytes` feeds optimization decisions and the evaluation report.
-`TilingDecision` is the team-authored Level-2 contribution: it builds a
+`TilingDecision` is the project-authored Level-2 contribution: it builds a
 plan from verified shapes, and MLIR performs the mechanical loop
 rewrite (ARCH-009).
 

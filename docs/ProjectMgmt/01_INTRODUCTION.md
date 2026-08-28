@@ -60,7 +60,7 @@ The completed project provides:
 3.  tensor-aware semantic analysis, with symbolic shape propagation and
     a symbol table with observable output
 4.  a typed graph Intermediate Representation (Typed Computation Graph) with a verifier;
-5.  six team-authored graph transformations (shape folding, dead-op
+5.  six project-authored graph transformations (shape folding, dead-op
     elimination, reshape/transpose cancellation, elementwise fusion,
     linear-bias-activation fusion — a seventh, constant folding, was
     built and then retired; see `docs/architecture/DECISIONS.md`

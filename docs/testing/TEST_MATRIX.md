@@ -428,7 +428,7 @@ rank-4 multi-head attention example is simply not yet written, not blocked on mi
 | BND-PAR-003 | [3.3](../language/03_LANGUAGE_REFERENCE_MANUAL.md#33-tensor-types) | `tensorType` axis-count extremes: 1 axis (min) vs 4 axes (conv-style) | ast | done | [test_parser.cpp:696](../../tests/parser/test_parser.cpp#L696) |
 | BND-PAR-004 | [3.16](../language/03_LANGUAGE_REFERENCE_MANUAL.md#316-conv2d), [3.24](../language/03_LANGUAGE_REFERENCE_MANUAL.md#324-grammar-summary) | call arg-count extreme: `conv2d`'s 5-arg call (3 positional + 2 keyword) | ast | done | [test_parser.cpp:717](../../tests/parser/test_parser.cpp#L717) |
 
-## User / Acceptance (TEST_PLAN §9c) — CLI + diagnostics + viva
+## User / Acceptance (TEST_PLAN §9c) — CLI + diagnostics + demo programs
 
 | ID | Case | Result | Status | Test |
 |----|----|----|----|----|
@@ -436,8 +436,8 @@ rank-4 multi-head attention example is simply not yet written, not blocked on mi
 | USER-LEARN-001 | MLP: check → explain → build → run vs reference | matches tutorial | planned | — |
 | USER-FIXIT-001 | shape bug rejected with located values; fix compiles | clear diagnostic | planned | — |
 | USER-DIAG-001 | every error class: category+location+expected/actual | UX contract met | planned | — |
-| USER-VIVA-001 | 2 working programs run correctly | pass | planned | — |
-| USER-VIVA-002 | 2 failing programs rejected with right diagnostics | pass | planned | — |
+| USER-DEMO-001 | 2 working programs run correctly | pass | planned | — |
+| USER-DEMO-002 | 2 failing programs rejected with right diagnostics | pass | planned | — |
 | USER-EXPLAIN-001 | `explain` output matches tutorial for reference programs | matches | planned | — |
 
 ## Coverage roll-up
@@ -456,4 +456,4 @@ rank-4 multi-head attention example is simply not yet written, not blocked on mi
 | Test type: smoke | exhaustive | SMOKE-* ; per dependency + subsystem; week-1 gate |
 | Test type: integration | exhaustive | INT-* ; every adjacent interface + every workload |
 | Test type: boundary | exhaustive | BND-* ; min/max/just-in/just-out per limited rule |
-| Test type: user | exhaustive | USER-* ; every CLI flag + error class + 4 viva programs |
+| Test type: user | exhaustive | USER-* ; every CLI flag + error class + 4 demo programs |

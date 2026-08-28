@@ -32,7 +32,7 @@ Standard MLIR/LLVM lowering (bufferization, loop/control-flow/arith/memref
 LLVM IR -> native object (via llvm::TargetMachine) -> linked executable
 ```
 
-The team has built and run this pipeline end to end. 183 passing tests
+This pipeline has been built and run end to end. 183 passing tests
 cover every phase. Two tests build real ahead-of-time native
 executables: the object file comes from `llvm::TargetMachine`, the
 system linker links it, and `ldd` confirms it has zero MLIR/LLVM
@@ -46,7 +46,7 @@ Compiler phases talk to each other through stable data, not through
 each other's internal code. The two main IRs are the **AST** (pure
 syntax) and the **Typed Computation Graph** (verified semantics,
 ARCH-001). At the TCG/lowering boundary and the AST/sema boundary, mock
-fixtures let the team build and test each phase on its own
+fixtures make it possible to build and test each phase on its own
 (`GraphBuilder`/`GraphVerifier`, ARCH-008). Every MLIR-lowering test in
 this project builds its `TypedGraph` by hand this way. These tests do
 not need the lexer, parser, or semantic analyzer at all.
@@ -55,7 +55,7 @@ not need the lexer, parser, or semantic analyzer at all.
 
 One ANTLR4 grammar (`grammar/Tensora.g4`, ARCH-011) creates the lexer
 and parser. The grammar has no embedded
-actions. So team-owned code (`src/parser/AstBuilder.cpp`) builds the
+actions. So project-owned code (`src/parser/AstBuilder.cpp`) builds the
 AST by walking the parse tree. Shared diagnostics convert ANTLR errors
 at one clear point (`ParserErrorListener`, `TokenAdapter`). The lexer,
 parser, and semantic analyzer never include an MLIR/LLVM header. Only
@@ -143,7 +143,7 @@ changes it in place, and reports whether it changed anything. The
 project implements and tests all six frozen v1 passes (RM 3.21): shape
 folding, dead-op elimination, reshape cancellation, transpose
 cancellation, elementwise fusion, and linear-bias-activation fusion.
-(The team built a constant-folding pass, then retired it — see
+(A constant-folding pass was built, then retired — see
 DECISIONS.md. Its scalar-chain reassociation cannot guarantee that
 `return`'s output stays the same under IEEE-754 f32 non-associativity,
 and RM 3.21 requires that guarantee.)
@@ -189,7 +189,7 @@ Lowering **erases axis names**. Each axis size maps to a tensor
 dimension: a concrete size becomes a static dimension, and a symbolic
 size becomes a dynamic `?` dimension (ARCH-005). The table below lists
 each node's lowering. Real JIT execution or native execution checks
-every one of these numerically — the team does not rely only on
+every one of these numerically — correctness does not rely only on
 structural golden-IR comparison:
 
 | OpKind | MLIR | Notes |
@@ -265,10 +265,10 @@ check for `scf.for` after the pass runs, compare tiled and untiled JIT
 results numerically, and report — but do not assert — wall-clock
 timing.
 
-### 6.12.3 Two ordering bugs this phase found, both in the standard pipeline (not in team-authored code)
+### 6.12.3 Two ordering bugs this phase found, both in the standard pipeline (not in project-authored code)
 
-To make the tiled path bufferize and lower to LLVM, the team had to
-find two real MLIR pipeline bugs. Neither is obvious from the
+Making the tiled path bufferize and lower to LLVM required finding
+two real MLIR pipeline bugs. Neither is obvious from the
 documentation:
 
 - MLIR does not register `scf`'s bufferizable-op-interface by default.

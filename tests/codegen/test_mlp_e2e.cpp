@@ -84,7 +84,7 @@ int run_mlp_e2e() {
     return 1;
   }
 
-  // --- Level-1 optimization (real team-authored passes run before lowering). ---
+  // --- Level-1 optimization (real project-authored passes run before lowering). ---
   tns::DiagnosticEngine diags;
   tns::PassContext passCtx{types, diags};
   tns::PassManager pm;

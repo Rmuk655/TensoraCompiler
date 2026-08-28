@@ -17,12 +17,12 @@ Tensora source (.tns)
    -> Semantic Analyzer (attribute grammar) -> Typed SSA Computation Graph (TCG)
    -> Level-1 opt: graph passes + tensor-liveness/peak-memory analysis -> Optimized TCG
    -> MLIR Lowering                         -> mlir::ModuleOp (func/linalg/tensor/arith/scf)
-   -> Level-2 opt: structured-loop tiling on matmul (team decision, MLIR rewrite)
+   -> Level-2 opt: structured-loop tiling on matmul (project decision, MLIR rewrite)
    -> MLIR + LLVM standard pipeline         -> LLVM IR -> native CPU object
    -> Runtime link                          -> executable
 ```
 
-The project's main compiler-engineering work is two team-authored
+The project's main compiler-engineering work is two project-authored
 optimization levels (Level-1 over the SSA graph, Level-2 over
 structured loops) plus one data-flow analysis. MLIR and LLVM do the
 mechanical lowering and the standard scalar optimization.
@@ -71,7 +71,8 @@ touches MLIR/LLVM headers.
 | M5 | Optimization + Testing | `optimization/`, `tests/`, corpus, benchmarks |
 
 `shared/` (support types, diagnostics, AST, IR) is a shared foundation.
-The team agreed on it first, and owns it jointly (M2 curates it).
+It is agreed on first, and owned jointly across phases (curated under
+the M2 role).
 
 ## 4. Cross-Phase Interfaces (summary; full signatures in INTERFACES.md)
 
@@ -141,7 +142,7 @@ argval    ::= intLit | ident | "[" intLit ("," intLit)* "]"
   resynchronizes at the enclosing rule's follow set. So one file can
   still report several independent syntax errors in one pass.
 
-## 6. Semantic Analyzer Design (owns 30% of the grade)
+## 6. Semantic Analyzer Design (the compiler's heaviest-weighted phase)
 
 `SemanticAnalyzer::analyze(const AstProgram&, TypedProgram& out)` does
 this:
@@ -219,7 +220,7 @@ inferred type and the contract that produced it (whitepaper Section
 
 ## 6a. Optimization and Analysis (two levels)
 
-- **Level-1 (SSA graph):** the six team-authored graph passes
+- **Level-1 (SSA graph):** the six project-authored graph passes
   (`optimization/`, RM 3.21), plus one real data-flow analysis — **tensor
   liveness** (`optimization/`, INTERFACES §4a). Liveness computes each
   value's live interval, and, using verified shapes for byte sizes, a
@@ -229,7 +230,7 @@ inferred type and the contract that produced it (whitepaper Section
 - **Level-2 (structured loops):** after matmul is lowered to `linalg`
   and `scf` loops, `TilingDecision` (INTERFACES §4a) picks tile sizes
   from the verified `M/N/K` and asks for tiling. MLIR performs the
-  rewrite. The team's contribution is the decision; MLIR provides the
+  rewrite. This project's contribution is the decision; MLIR provides the
   mechanics (ARCH-009).
 
 Matmul is the reference computation carried through both levels
@@ -237,11 +238,11 @@ Matmul is the reference computation carried through both levels
 
 ## 7. Code Generation Design
 
-Team-authored optimization happens **before** and **during** lowering:
+Project-authored optimization happens **before** and **during** lowering:
 Level-1 over the TCG (`optimization/`), and the Level-2 tiling
 decision at the loop level. Code generation itself is lowering plus a
 call into standard infrastructure. The two stay distinct, so the
-report can separate the team's own work from reused infrastructure.
+report can separate project-authored work from reused infrastructure.
 
 ### 7.1 TCG -> MLIR (`MlirLowerer`)
 
@@ -295,10 +296,10 @@ report can separate the team's own work from reused infrastructure.
   (`codegen/LoopTiling.h`, INTERFACES §4a), and applies them through
   MLIR's own `TilingInterface`/`scf::tileUsingSCF`. Only then does
   `convert-linalg-to-loops` turn the (now possibly tiled)
-  `linalg.matmul` into `scf` loops. The team's contribution is the
+  `linalg.matmul` into `scf` loops. This project's contribution is the
   decision (`TilingDecision`) and the pass that applies it
   (`MatmulTilingPass`); `TilingInterface`'s mechanical rewrite is
-  infrastructure (ARCH-009). The team verified this end to end against
+  infrastructure (ARCH-009). This was verified end to end against
   a 256x256x256 matmul (`examples/matmul_large.tns`, above the pass's
   default tiling threshold); `--emit-mlir` shows the resulting nested
   `scf.for` loops.
@@ -353,7 +354,7 @@ each show only their own phase's work, instead of one flag hiding both.
 throughout (LOW-005). There is no custom MLIR dialect in v1 (ADR
 ARCH-004).
 
-## 8. Team Parallelism via Mocks
+## 8. Phase Parallelism via Mocks
 
 - **Sema (M3)** builds test `AstProgram`s by hand. It does not need the
   parser to be finished first.
@@ -388,5 +389,5 @@ downstream owner can build valid IR without the upstream phase.
 - [x] TCG is the semantic/codegen boundary.
 - [x] Passes have an explicit interface.
 - [x] Backend replaceable behind `Backend`.
-- [x] Five developers can work in parallel via mocks.
+- [x] Every phase/role can work in parallel via mocks.
 - [x] Architecture explainable in 5–10 minutes (this document).
