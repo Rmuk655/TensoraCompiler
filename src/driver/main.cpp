@@ -32,6 +32,7 @@
 #include "mlir/IR/Verifier.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Target/LLVMIR/Export.h"
+#include "mlir/Transforms/Passes.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/Error.h"
@@ -776,6 +777,21 @@ int main(int argc, char** argv) {
   bufOpts.allowReturnAllocsFromLoops = true;
   bufOpts.functionBoundaryTypeConversion = mlir::bufferization::LayoutMapOption::FullyDynamicLayoutMap;
   pm.addPass(mlir::bufferization::createOneShotBufferizePass(bufOpts));
+  // Free every intermediate allocation bufferization introduced (see
+  // tests/support/JitHarness.h's runStandardLoweringPipeline for the
+  // full rationale): without this, an ahead-of-time executable or a
+  // JIT function called repeatedly leaks one buffer per intermediate
+  // tensor value on every call.
+  pm.addPass(mlir::bufferization::createOwnershipBasedBufferDeallocationPass());
+  pm.addPass(mlir::createCanonicalizerPass());
+  pm.addPass(mlir::bufferization::createBufferDeallocationSimplificationPass());
+  pm.addPass(mlir::bufferization::createLowerDeallocationsPass());
+  // Needed once any returned value (e.g. the tiled-matmul result) gets a
+  // runtime alias check -- that check is expressed as bufferization.clone,
+  // which has no LLVM equivalent (see JitHarness.h's matching comment).
+  pm.addPass(mlir::createConvertBufferizationToMemRefPass());
+  pm.addPass(mlir::createCSEPass());
+  pm.addPass(mlir::createCanonicalizerPass());
   if (polyhedral) {
     // ARCH-018: lower linalg into the MLIR affine dialect, then run one
     // polyhedral pass, instead of the default convert-linalg-to-loops.
