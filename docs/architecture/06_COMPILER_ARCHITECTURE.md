@@ -298,6 +298,17 @@ unmodified MLIR/LLVM paths take it from there:
   executable. `ldd` confirms it depends only on `libc` — zero
   MLIR/LLVM runtime dependency.
 
+One-shot bufferization only allocates; it does not free. The pipeline
+therefore runs MLIR's ownership-based buffer deallocation
+(`createOwnershipBasedBufferDeallocationPass` +
+`createBufferDeallocationSimplificationPass` +
+`createLowerDeallocationsPass`, plus `createConvertBufferizationToMemRefPass`
+for the runtime alias check a returned buffer needs) right after
+bufferization, so every intermediate tensor's buffer is freed and only
+the one actually returned survives — checked by `malloc`/`free` call
+counts in the emitted LLVM IR (`free` count = `malloc` count - 1, for
+every example workload).
+
 Tensora does not invent a new way to reach CPU machine code; the
 novelty is that its own frontend, semantics, typed IR, and
 optimization passes are wired all the way through this standard

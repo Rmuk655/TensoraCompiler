@@ -39,6 +39,7 @@
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Verifier.h"
 #include "mlir/Pass/PassManager.h"
+#include "mlir/Transforms/Passes.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/TargetSelect.h"
 
@@ -160,6 +161,27 @@ inline bool runStandardLoweringPipeline(mlir::MLIRContext& ctx, mlir::ModuleOp m
 
   mlir::PassManager pm(&ctx);
   pm.addPass(mlir::bufferization::createOneShotBufferizePass(bufOpts));
+  // One-shot bufferization only inserts the allocations; it does not free
+  // them (MLIR's own documented split of responsibility). Without this
+  // ownership-based deallocation pipeline, every intermediate memref
+  // this program allocates (one per non-returned tensor value) leaks on
+  // every call -- harmless for a single one-shot JIT invocation, but
+  // real once a JIT-compiled function is called in a loop or an AOT
+  // executable runs its computation repeatedly. `createCanonicalizerPass`
+  // between the ownership analysis and its simplification pass mirrors
+  // the upstream `buffer-deallocation-pipeline` pass ordering.
+  pm.addPass(mlir::bufferization::createOwnershipBasedBufferDeallocationPass());
+  pm.addPass(mlir::createCanonicalizerPass());
+  pm.addPass(mlir::bufferization::createBufferDeallocationSimplificationPass());
+  pm.addPass(mlir::bufferization::createLowerDeallocationsPass());
+  // Deallocation on a value returned to the caller (e.g. the tiled-matmul
+  // result) needs a runtime "does this alias the input?" check, which
+  // createLowerDeallocationsPass expresses via bufferization.clone; that
+  // op has no LLVM equivalent, so it must be converted to memref.alloc +
+  // memref.copy before reaching FinalizeMemRefToLLVM.
+  pm.addPass(mlir::createConvertBufferizationToMemRefPass());
+  pm.addPass(mlir::createCSEPass());
+  pm.addPass(mlir::createCanonicalizerPass());
   pm.addPass(mlir::createConvertLinalgToLoopsPass());
   pm.addPass(mlir::createSCFToControlFlowPass());
   pm.addPass(mlir::createConvertControlFlowToLLVMPass());
