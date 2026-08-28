@@ -38,7 +38,7 @@ You own:
 - end-to-end validation;
 - test reporting.
 
-Every team member is required to run the relevant suites while developing their component.
+The relevant suites must be run while developing each component.
 
 ## Test Categories
 
@@ -71,7 +71,7 @@ Cover:
 
 ### 3. Semantic Tests
 
-This is the largest suite because semantic analysis receives 30% of this academic compiler's grading weight.
+This is the largest suite because semantic analysis is this academic compiler's heaviest-weighted phase.
 
 Cover:
 

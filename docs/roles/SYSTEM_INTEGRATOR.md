@@ -110,9 +110,9 @@ MLIR_DIR
 ANTLR installation
 ```
 
-or use a consistent package/build mechanism chosen by the team.
+or use a consistent, chosen package/build mechanism.
 
-Never rely on one developer's local path.
+Never rely on one machine's local path.
 
 ## MLIR Smoke Test
 
@@ -143,7 +143,7 @@ If ANTLR/Flex/Bison is used:
 
 ## CLI Integration
 
-The compiler driver should support the phase flags agreed by the architecture team.
+The compiler driver should support the phase flags agreed by the architecture role.
 
 Recommended:
 
@@ -221,7 +221,7 @@ docs/development/SETUP.md
 docs/development/TROUBLESHOOTING.md
 ```
 
-A new team member should be able to build the compiler without private instructions.
+A new contributor should be able to build the compiler without private instructions.
 
 ## Makefile / Convenience Commands
 

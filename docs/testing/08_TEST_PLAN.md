@@ -59,7 +59,7 @@ separate types.
 | Smoke | Is the system alive and the toolchain wired? | shallow path through a subsystem | real | first in CI; MLIR ones in **week 1** |
 | Integration | Do real phases compose across their interface? | phase-pair or sub-pipeline | real components | every build |
 | Boundary | What happens at the edges of each rule? | targeted limit inputs | as needed | every build |
-| User (acceptance) | Does the tool serve the user and pass the viva? | whole CLI, UX-judged | real, via CLI | pre-milestone + CI subset |
+| User (acceptance) | Does the tool serve the user end to end? | whole CLI, UX-judged | real, via CLI | pre-milestone + CI subset |
 
 **Unit** (realized by the phase suites, Sections 3–8). *Exhaustive
 when:* every public function in INTERFACES.md has one or more unit
@@ -85,7 +85,7 @@ Smoke tests are shallow, broad, fail-fast checks that a subsystem or
 external dependency is reachable. They make no deep assertions. Two
 run in **week 1, before feature work**, because they de-risk the
 highest-risk dependency (MLIR/LLVM) and the whole Level-2 tiling story,
-before the team builds anything on top of it:
+before anything is built on top of it:
 
 | ID | Checks | Week 1? |
 |----|--------|---------|
@@ -98,8 +98,8 @@ before the team builds anything on top of it:
 *Exhaustive when:* one smoke exists per external dependency (ANTLR,
 MLIR construct+lower+run, MLIR tiling transform, LLVM object emit) and per
 "is it alive" subsystem (CLI, full run). If SMOKE-MLIR or SMOKE-TILING fail
-in week 1, the tiling scope (ARCH-009) is reassessed before the team builds
-on it.
+in week 1, the tiling scope (ARCH-009) is reassessed before building
+anything further on it.
 
 ## 3. Lexer Tests (RM 3.1)
 
@@ -128,7 +128,7 @@ graph bodies, assignments, matmul/binary/call expressions, keyword args
   diagnostic and resynchronization so a second error in the same file is
   also reported.
 
-## 5. Semantic Tests (RM 3.5–3.19) — largest suite, 30% of grade
+## 5. Semantic Tests (RM 3.5–3.19) — largest suite, heaviest engineering weight
 
 Required academic-compiler checks, each with valid/near-miss/invalid:
 
@@ -317,14 +317,14 @@ quality, not internals; driven through the CLI.
 - **USER-DIAG:** for every error class, the rendered diagnostic carries
   category + location + expected/actual and is human-readable (the
   `DiagCode` UX contract).
-- **USER-VIVA:** the two required non-trivial **working** programs run
+- **USER-DEMO:** the two required non-trivial **working** programs run
   correctly and the two required **failing** programs are rejected with the
   right diagnostics (academic compiler requirement).
 - **USER-EXPLAIN:** `explain` output for the reference programs matches the
   tutorial.
 
 *Exhaustive when:* every CLI flag is covered; every error class has a
-diagnostic-quality check; the four viva programs are scripted and pass.
+diagnostic-quality check; the four reference demo programs are scripted and pass.
 
 ## 10. The 100-Case Semantic Corpus
 
@@ -387,7 +387,7 @@ Additionally track **test-type coverage**: each of the five types
 external dependency + subsystem), integration (every adjacent interface +
 every workload full-pipeline), boundary (min/max/just-inside/just-outside
 for every limited rule), and user (every CLI flag + every error class +
-the four viva programs).
+the four reference demo programs).
 
 ## 15. CI
 
@@ -396,9 +396,9 @@ Ordered so the cheapest, most diagnostic failures surface first: (1)
 construct+lower+run, MLIR tiling reachable, CLI alive; (2) **unit**
 (Sections 3–8); (3) **integration** (9a); (4) **boundary** (9b); (5) the
 phase suites and the semantic corpus; (6) a **user/acceptance** subset (9c,
-including the viva programs). All via CTest; the main branch stays green.
+including the reference demo programs). All via CTest; the main branch stays green.
 
 The two week-1 smoke tests (SMOKE-MLIR, SMOKE-TILING) are a **gate**: until
 both pass on the pinned MLIR/LLVM, the Level-2 tiling deliverable
-(ARCH-009) is treated as unproven and the integrator escalates before the
-team builds the loop-optimization phase on it.
+(ARCH-009) is treated as unproven and building the loop-optimization
+phase on it is deferred until it is resolved.

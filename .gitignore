@@ -20,3 +20,4 @@ __pycache__/
 demos/artifacts/
 CLAUDE.md
 docs/role/*
+.github/copilot-instructions.md

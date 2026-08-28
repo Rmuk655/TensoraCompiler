@@ -3,7 +3,7 @@
 // func.func + linalg.matmul module, lower it through the standard
 // MLIR/LLVM pipeline, JIT it, and check the number it returns. This is
 // the highest-risk external dependency in the whole project. It must
-// pass before the team builds anything in lowering/ on top of it.
+// pass before anything is built in lowering/ on top of it.
 #include <cstdio>
 #include <cstdlib>
 

@@ -479,7 +479,7 @@ Comments must describe the current implementation.
 
 Do not edit generated ANTLR, MLIR, LLVM, or other third-party generated files only to add project comments.
 
-These guidelines apply to project-owned source and generated/scaffolded code that the team maintains.
+These guidelines apply to project-owned source and generated/scaffolded code maintained as part of this project.
 
 ## 22. Review checklist
 

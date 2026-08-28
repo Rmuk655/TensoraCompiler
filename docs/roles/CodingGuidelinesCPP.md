@@ -4,7 +4,7 @@
 
 These are permanent coding guidelines for Tensora.
 
-Apply them whenever project code is created, modified, generated, or refactored. The main goal is correct compiler code that a CS3423 student with basic C++ knowledge can read, maintain, test, and explain.
+Apply them whenever project code is created, modified, generated, or refactored. The main goal is correct compiler code that a developer with basic C++ knowledge can read, maintain, test, and explain.
 
 These guidelines do not define one-time migrations such as changing parser generators. One-time architecture changes belong in separate task documents.
 
@@ -354,7 +354,7 @@ Before adding an abstraction, ask:
 - Does it protect an important invariant?
 - Does it make the code easier to understand?
 - Does it remove meaningful repetition?
-- Can a student explain why it exists?
+- Can someone else explain why it exists?
 
 If not, prefer direct code.
 
@@ -395,6 +395,6 @@ Before finishing a code change, ask:
 - Is ownership clear?
 - Is the control flow clear?
 - Is repeated boilerplate reduced without hiding behavior?
-- Can another student explain this code in a viva?
+- Can someone else explain this code without you?
 
 Follow the mandatory build and test rules in `CLAUDE.md`.

@@ -32,7 +32,7 @@ class Parser {
 // For debugging and demos only (--emit-parse-tree): a parenthesized
 // (LISP-style) dump of the raw ANTLR parse tree, before AstBuilder
 // turns it into the AST above. No other compiler phase reads this
-// dump. It exists so a student can see what ANTLR itself produced,
+// dump. It exists so a reader can see what ANTLR itself produced,
 // separate from the project's own AST.
 std::string dumpParseTree(const SourceBuffer& src);
 

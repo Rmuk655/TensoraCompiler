@@ -328,12 +328,12 @@ frozen v1 pass set is exactly the six passes of whitepaper Section 6.2
 (shape folding, dead-operation elimination, reshape cancellation,
 transpose cancellation, elementwise fusion, linear-bias-activation
 fusion). A pass beyond this set is a future extension. It is not part
-of the graded v1 language.
+of the frozen v1 language.
 
-The team considered a constant-folding pass for v1. This pass would
+A constant-folding pass was considered for v1. This pass would
 combine a chain of same-kind scalar-attribute elementwise ops (for
-example, `(x * 2.0) * 3.0` -> `x * 6.0`) into one node. The team
-rejected this pass for v1. Combining the two scalars at compile time,
+example, `(x * 2.0) * 3.0` -> `x * 6.0`) into one node. v1
+rejects this pass. Combining the two scalars at compile time,
 then applying the result in one run-time multiply, is not guaranteed
 to equal the unfolded two-step computation. IEEE-754 f32 multiplication
 is not associative: the unfolded path rounds the intermediate tensor

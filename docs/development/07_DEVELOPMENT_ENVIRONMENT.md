@@ -17,17 +17,17 @@ against that list.
 
 ## 7.1 Language
 
-C++20, frozen team-wide. The team bumped this from C++17 in INTEG-002,
+C++20, frozen project-wide. This was bumped from C++17 in INTEG-002,
 so the Parser boundary in `INTERFACES.md` §2 can use `std::span`.
 
 ## 7.2 Frontend
 
 Frozen choice: **ANTLR4** generates both the lexer and parser from one
 grammar (see architecture ADR ARCH-011 in
-[`docs/architecture/DECISIONS.md`](../architecture/DECISIONS.md)). This academic compiler teaches lexer/parser
+[`docs/architecture/DECISIONS.md`](../architecture/DECISIONS.md)). This academic compiler is meant to demonstrate lexer/parser
 generators and grammar-driven code generation, so an ANTLR frontend
-shows graded frontend-generator theory directly, with a small amount of
-hand-integrated generator glue for a new student to trace through
+shows frontend-generator theory directly, with a small amount of
+hand-integrated generator glue to trace through
 before reaching the AST.
 
 The single `grammar/Tensora.g4` specification lives in `grammar/`, and
@@ -38,7 +38,7 @@ The AST interface (`docs/architecture/INTERFACES.md` §2) stays the
 same and does not depend on the generator, so a future switch would
 not disturb downstream phases.
 
-The team freezes the ANTLR4 version (`ANTLR4_VERSION` in
+The ANTLR4 version is frozen (`ANTLR4_VERSION` in
 `CMakeLists.txt`) along with the compiler and CMake versions (Section
 7.3), so generated code stays reproducible across machines. CMake
 `FetchContent` fetches both the ANTLR jar and its C++ runtime, instead
@@ -84,8 +84,8 @@ commands, including how to build or test one phase at a time.
 every phase: lexer, parser, semantic analysis, boundary and negative
 cases, the six Level-1 optimization passes, tensor liveness, the
 Level-2 matmul tiling pass, MLIR lowering for every implemented
-operator, and two ahead-of-time-compiled native executables. The team
-ran the suite repeatedly during development, not just once, to catch
+operator, and two ahead-of-time-compiled native executables. The suite
+was run repeatedly during development, not just once, to catch
 JIT and bufferization flakiness — see
 `docs/ProjectMgmt/09_CONCLUSIONS_LESSONS_LEARNED.md` for the
 intermittent-failure lesson that motivated this.
@@ -235,7 +235,7 @@ personal branch -> main          = only through an integration-ready PR
 ## 7.8 Formatting and Static Analysis
 
 There is no enforced formatting/lint gate (no pre-commit hook, no CI):
-for a team this size, that machinery costs more setup and maintenance
+for a project this size, that machinery costs more setup and maintenance
 than it saves. Match the existing style by eye (`src/` and
 `include/tensora/` already use a consistent Google-style, 2-space,
 ~120-column layout) and rely on code review to catch drift, the same

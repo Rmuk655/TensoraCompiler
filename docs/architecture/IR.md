@@ -259,7 +259,8 @@ Attributes render inline, e.g.:
 
 - **Value/Node SSA with integer ids** keeps the IR easy to serialize,
   arena-owned, and stable across passes (ids do not move like pointers
-  can). This matters for five-person parallel work and golden testing.
+  can). This matters for keeping phases decoupled during parallel
+  development and for golden testing.
 - **Named axes live on the type, not the node.** So every pass and the
   `explain` printer see axis meaning for free, and lowering can erase
   them at one clear point (ARCH-005).

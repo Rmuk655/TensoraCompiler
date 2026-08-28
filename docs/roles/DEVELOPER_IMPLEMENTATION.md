@@ -192,7 +192,7 @@ A semantic failure should contain enough information for the tester to assert th
 
 ## Memory and Ownership
 
-Follow the architecture team's ownership decisions.
+Follow the architecture role's ownership decisions.
 
 Prefer:
 
@@ -262,7 +262,7 @@ Do not merge changes that break downstream interfaces without an accepted archit
 
 ## Working With AI Coding Tools
 
-AI-generated code is allowed only as an implementation aid subject to the academic compiler's team policy.
+AI-generated code is allowed only as an implementation aid, subject to this academic compiler's policy on AI-assisted development (CLAUDE.md §14).
 
 You remain responsible for:
 
@@ -270,9 +270,9 @@ You remain responsible for:
 - checking correctness;
 - adapting it to the architecture;
 - adding tests;
-- explaining it in the viva.
+- being able to explain it afterward.
 
-Do not paste large generated components that the team cannot explain.
+Do not paste large generated components that cannot be explained.
 
 Use AI tools especially for boilerplate, test generation, documentation scaffolding, and mechanical transformations, while keeping language semantics and architectural decisions human-reviewed.
 

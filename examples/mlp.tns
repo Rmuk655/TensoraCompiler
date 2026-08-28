@@ -5,7 +5,7 @@ weight b1: Tensor[out=256]
 weight W2: Tensor[in=256, out=10]
 weight b2: Tensor[out=10]
 
-graph mlp {
+graph mlp1 {
     h = linear(x, W1, b1)
     h = relu(h)
     y = linear(h, W2, b2)

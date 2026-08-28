@@ -655,7 +655,7 @@ class Parser {
 // For debugging and demos only (--emit-parse-tree): a parenthesized
 // (LISP-style) dump of the raw ANTLR parse tree, before AstBuilder
 // turns it into the AST above. No other compiler phase reads this
-// dump. It exists so a student can see what ANTLR itself produced,
+// dump. It exists so a reader can see what ANTLR itself produced,
 // separate from the project's own AST.
 std::string dumpParseTree(const SourceBuffer& src);
 
@@ -4776,7 +4776,7 @@ ModuleOp MlirLowerer::lower(const TypedProgram& program) {
 #include "tensora/shared/Ir.h"
 
 // Level-2 loop optimization (ARCH-009; INTERFACES.md §4a). This file
-// holds the team's tiling *decision*. It runs on verified shapes, plus
+// holds the tiling *decision*. It runs on verified shapes, plus
 // optional tensor liveness data, at the Typed Computation Graph level,
 // before any MLIR exists. MlirLowerer calls this decision and stamps
 // the result onto the lowered `linalg.matmul` op as an attribute.
@@ -5938,7 +5938,7 @@ std::string shapeStr(const std::vector<int64_t>& shape) {
   return s + "]";
 }
 
-// Runs the Level-1, team-authored graph optimization passes on every
+// Runs the Level-1, project-authored graph optimization passes on every
 // graph in the program, in place. This is a separate function from
 // lowerToModule below, so the CLI can show the optimization phase's
 // own output (--emit-optimized-graph) before lowering ever runs.
@@ -9505,12 +9505,12 @@ diverge from what was actually built and tested.
 This repository is under git version control, hosted at
 [github.com/Rmuk655/TensoraCompiler](https://github.com/Rmuk655/TensoraCompiler)
 (`origin`, branch `main`). Base commit at generation time:
-`51b58f54aa7bd6fb4543497d438bd23a9723e11f`. The concatenation itself
+`0d2d582d0b80f086370e633754b4aae93f470bc3`. The concatenation itself
 reflects the working tree at generation time, which may include
 changes made after that commit and not yet committed -- the manifest
 and file contents above are the authoritative record either way, since
 they are read directly from disk, not from git history. Generation
-date: 2026-08-26. The 183 CTest cases passing at generation time are
+date: 2026-08-28. The 183 CTest cases passing at generation time are
 the authoritative record of what this listing implements; see
 [docs/testing/TEST_MATRIX.md](../testing/TEST_MATRIX.md) and
 [docs/development/CHANGELOG.md](CHANGELOG.md).

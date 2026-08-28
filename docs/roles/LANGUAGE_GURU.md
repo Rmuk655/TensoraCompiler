@@ -36,7 +36,7 @@ Native execution
 
 The academic compiler's implementation primarily targets forward computation suitable for inference.
 
-The project is graded approximately:
+Engineering effort is weighted approximately:
 
 - Language Design: 20%
 - Lexer: 15%
@@ -44,7 +44,7 @@ The project is graded approximately:
 - Semantic Analysis: 30%
 - Code Generation + Optimization: 25%
 
-The instructor requires a sufficiently sophisticated and distinctive project, especially through language design, strong semantic analysis, real optimization, and/or LLVM/MLIR integration.
+A sufficiently sophisticated and distinctive project stands on strong language design, strong semantic analysis, real optimization, and LLVM/MLIR integration.
 
 ## Primary Responsibilities
 
@@ -111,7 +111,7 @@ For example:
 Tensora Language Baseline 0.1
 ```
 
-A baseline is immutable once frozen for an academic compiler milestone unless the team formally approves a language change.
+A baseline is immutable once frozen for an academic compiler milestone unless a formal language-change record approves a change.
 
 ### 4. Language Change Process
 
@@ -347,4 +347,4 @@ Before freezing a milestone, verify:
 - [ ] No core feature is described as optional.
 - [ ] The whitepaper and reference manual agree.
 - [ ] Changes since the previous baseline are recorded.
-- [ ] The language remains small enough to implement and defend in a viva.
+- [ ] The language remains small enough to implement and defend end to end.

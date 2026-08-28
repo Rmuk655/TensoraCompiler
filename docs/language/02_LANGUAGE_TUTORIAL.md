@@ -102,7 +102,7 @@ Tensor[batch=B, out=10]
 ## 2.5 Explain Mode
 
 ``` text
-tensora explain mlp.tns
+tensora --explain mlp.tns
 ```
 
 This command shows the inferred type of every value. It also shows the
@@ -241,7 +241,7 @@ tiled      for ii: for jj: for kk: for i,j,k in tiles: C[i,j] += ...
 LLVM       LLVM IR  ->  native CPU
 ```
 
-The tiling step (see whitepaper Section 8.4) is a team-authored
+The tiling step (see whitepaper Section 8.4) is a project-authored
 design choice: the compiler picks tile sizes from the verified shapes
 `M`, `N`, and `K`. This one example touches semantic analysis, SSA,
 lowering, and loop optimization. These are core topics in compiler
@@ -378,12 +378,12 @@ Here are three concrete, honest benefits for someone learning ML:
    2.8).
 
 3. **You can see the model's shapes and the reasoning behind them.**
-   `explain` prints the inferred type of every value, and the
+   `--explain` prints the inferred type of every value, and the
    contract that produced it. A learner can watch shapes flow through
    the network:
 
    ``` text
-   tensora explain classifier.tns
+   tensora --explain classifier.tns
    ```
 
 4. **The compiler applies optimizations you would otherwise hand-tune.**
