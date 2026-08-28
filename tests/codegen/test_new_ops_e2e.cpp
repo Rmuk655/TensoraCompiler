@@ -28,6 +28,7 @@
 
 #include "tensora/codegen/DialectSetup.h"
 #include "tensora/codegen/MlirLowerer.h"
+#include "support/JitHarness.h"
 
 namespace tns = tensora;
 using namespace mlir;
@@ -40,62 +41,27 @@ MlirValue constTensor(OpBuilder& b, Location loc, RankedTensorType type, ArrayRe
   return arith::ConstantOp::create(b, loc, type, attr);
 }
 
-// Runs the standard MLIR/LLVM lowering pipeline (bufferize -> loops ->
-// control-flow -> LLVM dialects), JIT-executes "test_main" (zero args,
-// scalar f32 return), and returns the result or NAN on failure. Includes
-// ExpandStridedMetadata/LowerAffine (needed once collapse_shape/subview-
-// like ops appear) and ConvertMathToLLVM (needed for softmax's
-// math.exp) unconditionally -- harmless no-ops for graphs that don't
-// use them.
+// Runs the standard MLIR/LLVM lowering pipeline (tests/support/JitHarness.h),
+// JIT-executes "test_main" (zero args, scalar f32 return), and returns
+// the result or NAN on failure. Uses the full JitPipelineOptions profile
+// (ExpandStridedMetadata/LowerAffine for collapse_shape/subview-like
+// ops, ConvertMathToLLVM for softmax's math.exp, and the C-runner-utils
+// shared lib for flatten/collapse_shape/conv2d's memrefCopy calls)
+// unconditionally -- harmless no-ops for graphs that don't use them.
 float runAndGetScalar(ModuleOp module, MLIRContext& ctx, const char* label) {
-  if (failed(verify(module))) {
-    fprintf(stderr, "%s FAIL: module does not verify\n", label);
-    module.dump();
-    return NAN;
-  }
+  tensora::testing::JitPipelineOptions jitOpts;
+  jitOpts.allowReturnAllocsFromLoops = true;
+  jitOpts.fullyDynamicFunctionBoundaryLayout = true;
+  jitOpts.expandStridedMetadataAndLowerAffine = true;
+  jitOpts.convertMathToLLVM = true;
+  jitOpts.useCRunnerUtilsSharedLib = true;
+  if (!tensora::testing::runStandardLoweringPipeline(ctx, module, jitOpts, label)) return NAN;
 
-  mlir::PassManager pm(&ctx);
-  bufferization::OneShotBufferizePassOptions bufOpts;
-  bufOpts.bufferizeFunctionBoundaries = true;
-  bufOpts.allowReturnAllocsFromLoops = true;
-  bufOpts.functionBoundaryTypeConversion = bufferization::LayoutMapOption::FullyDynamicLayoutMap;
-  pm.addPass(bufferization::createOneShotBufferizePass(bufOpts));
-  pm.addPass(createConvertLinalgToLoopsPass());
-  pm.addPass(createSCFToControlFlowPass());
-  pm.addPass(createConvertControlFlowToLLVMPass());
-  pm.addPass(memref::createExpandStridedMetadataPass());
-  pm.addPass(createLowerAffinePass());
-  pm.addPass(createConvertMathToLLVMPass());
-  pm.addPass(createArithToLLVMConversionPass());
-  pm.addPass(createFinalizeMemRefToLLVMConversionPass());
-  pm.addPass(createConvertFuncToLLVMPass());
-  pm.addPass(createReconcileUnrealizedCastsPass());
-  if (failed(pm.run(module))) {
-    fprintf(stderr, "%s FAIL: standard lowering pipeline failed\n", label);
-    module.dump();
-    return NAN;
-  }
-
-  // flatten/collapse_shape (and, later, conv2d's padding) can lower to a
-  // call into MLIR's own `memrefCopy` runtime helper, same as tiling's
-  // per-tile memref.copy in test_tiling_e2e.cpp.
-  ExecutionEngineOptions engineOpts;
-  static const std::string kRunnerUtils = MLIR_C_RUNNER_UTILS_PATH;
-  static const llvm::SmallVector<llvm::StringRef, 1> kSharedLibs = {kRunnerUtils};
-  engineOpts.sharedLibPaths = kSharedLibs;
-  auto maybeEngine = ExecutionEngine::create(module, engineOpts);
-  if (!maybeEngine) {
-    fprintf(stderr, "%s FAIL: ExecutionEngine::create failed\n", label);
-    return NAN;
-  }
-  auto engine = std::move(*maybeEngine);
-  auto maybeFn = engine->lookup("test_main");
-  if (!maybeFn) {
-    fprintf(stderr, "%s FAIL: could not look up 'test_main'\n", label);
-    return NAN;
-  }
-  auto fn = reinterpret_cast<float (*)()>(*maybeFn);
-  return fn();
+  auto maybeEngine = tensora::testing::createJitEngine(module, jitOpts, label);
+  if (!maybeEngine) return NAN;
+  auto maybeFn = tensora::testing::lookupJitEntry<float (*)()>(**maybeEngine, "test_main", label);
+  if (!maybeFn) return NAN;
+  return (*maybeFn)();
 }
 
 // --- LOW-013: elementwise add with real tensor-tensor broadcasting ---

@@ -4,12 +4,20 @@
 // BND-PAR-*), matching the stable IDs in docs/testing/TEST_MATRIX.md.
 // See tests/support/TestHarness.h for the harness (shared with
 // test_lexer.cpp).
+//
+// Cases that only check ok/reject-plus-DiagCode (no AST structure
+// inspection) live in tests/fixtures/parser.tns instead, one real .tns
+// program per case -- tools/gen_fixture_cases.py expands that file into
+// a generated TEST_CASE(...) per entry (see cmake/Tests.cmake). Cases
+// that need a real C++ assertion on the parsed AST's shape stay here,
+// hand-written.
 #include <cstdint>
 #include <deque>
 #include <string>
 #include <vector>
 
 #include "tensora/parser/Parser.h"
+#include "support/FixtureLoader.h"
 #include "support/TestHarness.h"
 
 using namespace tensora;
@@ -441,66 +449,6 @@ CASE(PAR_013, "PAR-013", "conv2d-shaped call: multiple positional + multiple key
   }
 }
 
-// --- PAR-014: negative -- missing '=' in a statement. ---
-CASE(PAR_014, "PAR-014", "negative: missing '=' in a statement") {
-  const std::string src = "graph g {\n  a b\n  return a\n}\n";
-  DiagnosticEngine d;
-  auto result = parse(src, d);
-  R.check(!result.ok(), "malformed statement is rejected");
-  R.check(d.all().size() >= 1 && d.all()[0].code == DiagCode::ParseExpected,
-          "reports ParseExpected for the missing '='");
-}
-
-// --- PAR-015: negative -- missing ']' closing a tensorType. ---
-CASE(PAR_015, "PAR-015", "negative: missing ']' closing a tensorType") {
-  const std::string src = "input x: Tensor[a=1\ngraph g { return x }\n";
-  DiagnosticEngine d;
-  auto result = parse(src, d);
-  R.check(!result.ok(), "unterminated tensorType is rejected");
-  R.check(!d.all().empty() && d.all()[0].code == DiagCode::ParseExpected,
-          "reports ParseExpected for the missing ']'");
-}
-
-// --- PAR-016: negative -- missing '[' opening a tensorType. ---
-CASE(PAR_016, "PAR-016", "negative: missing '[' opening a tensorType") {
-  const std::string src = "input x: Tensor a=1]\ngraph g { return x }\n";
-  DiagnosticEngine d;
-  auto result = parse(src, d);
-  R.check(!result.ok(), "tensorType missing '[' is rejected");
-  R.check(!d.all().empty() && d.all()[0].code == DiagCode::ParseExpected,
-          "reports ParseExpected for the missing '['");
-}
-
-// --- PAR-017: negative -- empty tensorType (axis list requires >= 1). ---
-CASE(PAR_017, "PAR-017", "negative: empty tensorType Tensor[] (axis list requires >= 1)") {
-  const std::string src = "input x: Tensor[]\ngraph g { return x }\n";
-  DiagnosticEngine d;
-  auto result = parse(src, d);
-  R.check(!result.ok(), "Tensor[] is rejected");
-  R.check(!d.all().empty() && d.all()[0].code == DiagCode::ParseExpected,
-          "reports ParseExpected for the missing first axis");
-}
-
-// --- PAR-018: negative -- missing '=' in an axis. ---
-CASE(PAR_018, "PAR-018", "negative: missing '=' in an axis") {
-  const std::string src = "input x: Tensor[a 1]\ngraph g { return x }\n";
-  DiagnosticEngine d;
-  auto result = parse(src, d);
-  R.check(!result.ok(), "axis missing '=' is rejected");
-  R.check(!d.all().empty() && d.all()[0].code == DiagCode::ParseExpected,
-          "reports ParseExpected for the missing '='");
-}
-
-// --- PAR-019: negative -- graphDecl missing returnStmt before '}'. ---
-CASE(PAR_019, "PAR-019", "negative: graphDecl missing returnStmt before '}'") {
-  const std::string src = "graph g {\n  a = b\n}\n";
-  DiagnosticEngine d;
-  auto result = parse(src, d);
-  R.check(!result.ok(), "graph without return is rejected");
-  R.check(!d.all().empty() && d.all()[0].code == DiagCode::ParseExpected,
-          "reports ParseExpected for the missing return");
-}
-
 // --- PAR-020: negative -- graphDecl missing closing '}'. ---
 CASE(PAR_020, "PAR-020", "negative: graphDecl missing closing '}'") {
   const std::string src = "graph g {\n  return a\n";
@@ -509,76 +457,6 @@ CASE(PAR_020, "PAR-020", "negative: graphDecl missing closing '}'") {
   R.check(!result.ok(), "graph missing '}' is rejected");
   R.check(!d.all().empty() && d.all()[0].code == DiagCode::ParseExpected,
           "reports ParseExpected for the missing '}'");
-}
-
-// --- PAR-021: negative -- returnStmt missing its identifier. ---
-CASE(PAR_021, "PAR-021", "negative: returnStmt missing its identifier") {
-  const std::string src = "graph g {\n  return\n}\n";
-  DiagnosticEngine d;
-  auto result = parse(src, d);
-  R.check(!result.ok(), "return without a name is rejected");
-  R.check(!d.all().empty() && d.all()[0].code == DiagCode::ParseExpected,
-          "reports ParseExpected for the missing return identifier");
-}
-
-// --- PAR-022: negative -- zero-arg call (arg list requires >= 1). ---
-CASE(PAR_022, "PAR-022", "negative: zero-arg call relu() (arg list requires >= 1)") {
-  const std::string src = "graph g {\n  a = relu()\n  return a\n}\n";
-  DiagnosticEngine d;
-  auto result = parse(src, d);
-  R.check(!result.ok(), "relu() is rejected");
-  R.check(!d.all().empty() && d.all()[0].code == DiagCode::ParseExpected,
-          "reports ParseExpected for the missing first arg");
-}
-
-// --- PAR-023: negative -- missing closing ')' on a call. ---
-CASE(PAR_023, "PAR-023", "negative: missing closing ')' on a call") {
-  const std::string src = "graph g {\n  a = relu(x\n  return a\n}\n";
-  DiagnosticEngine d;
-  auto result = parse(src, d);
-  R.check(!result.ok(), "unterminated call is rejected");
-  R.check(!d.all().empty() && d.all()[0].code == DiagCode::ParseExpected,
-          "reports ParseExpected for the missing ')'");
-}
-
-// --- PAR-024: negative -- trailing comma in an arg list. ---
-CASE(PAR_024, "PAR-024", "negative: trailing comma in an arg list relu(h,)") {
-  const std::string src = "graph g {\n  a = relu(x,)\n  return a\n}\n";
-  DiagnosticEngine d;
-  auto result = parse(src, d);
-  R.check(!result.ok(), "trailing comma is rejected");
-  R.check(!d.all().empty() && d.all()[0].code == DiagCode::ParseExpected,
-          "reports ParseExpected after the trailing comma");
-}
-
-// --- PAR-025: negative -- keyword arg with no value. ---
-CASE(PAR_025, "PAR-025", "negative: keyword arg with no value (stride=))") {
-  const std::string src = "graph g {\n  a = f(stride=)\n  return a\n}\n";
-  DiagnosticEngine d;
-  auto result = parse(src, d);
-  R.check(!result.ok(), "stride= with no value is rejected");
-  R.check(!d.all().empty() && d.all()[0].code == DiagCode::ParseExpected,
-          "reports ParseExpected for the missing arg value");
-}
-
-// --- PAR-026: negative -- a decl after a graphDecl (violates decl* graphDecl+ ordering). ---
-CASE(PAR_026, "PAR-026", "negative: a decl after a graphDecl violates decl* graphDecl+ ordering") {
-  const std::string src = "graph g { return a }\ninput x: Tensor[b=1]\n";
-  DiagnosticEngine d;
-  auto result = parse(src, d);
-  R.check(!result.ok(), "a decl following a graph is rejected");
-  R.check(!d.all().empty() && d.all()[0].code == DiagCode::ParseExpected,
-          "reports ParseExpected (\"expecting end of file or KW_GRAPH\")");
-}
-
-// --- PAR-027: negative -- a program with zero graphDecls (graphDecl+ requires >= 1). ---
-CASE(PAR_027, "PAR-027", "negative: a program with zero graphDecls (graphDecl+ requires >= 1)") {
-  const std::string src = "input x: Tensor[a=1]\n";
-  DiagnosticEngine d;
-  auto result = parse(src, d);
-  R.check(!result.ok(), "a program with no graph at all is rejected");
-  R.check(!d.all().empty() && d.all()[0].code == DiagCode::ParseExpected,
-          "reports ParseExpected (\"expecting KW_INPUT or KW_WEIGHT or KW_GRAPH\")");
 }
 
 // --- PAR-028: recovery -- two independent errors in different sections. ---
@@ -731,4 +609,12 @@ CASE(BND_PAR_004, "BND-PAR-004", "call arg-count extreme: conv2d's 5-arg call (3
 
 }  // namespace
 
-int main(int argc, char** argv) { return tensora::testing::runRegisteredCases(argc, argv); }
+int main(int argc, char** argv) {
+  tensora::testing::registerFixtureCases(FIXTURE_PARSER_PATH, [](const std::string& src) {
+    DiagnosticEngine d;
+    auto r = parse(src, d);
+    std::string diag = d.all().empty() ? std::string() : tensora::testing::diagCodeName(d.all()[0].code);
+    return std::make_pair(r.ok(), diag);
+  });
+  return tensora::testing::runRegisteredCases(argc, argv);
+}

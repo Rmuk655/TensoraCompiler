@@ -48,6 +48,26 @@ function(tensora_discover_cases bin srcfile)
   endforeach()
 endfunction()
 
+# Same as tensora_discover_cases, but for a fixture file's
+# '### <ID> | <description>' lines (tests/support/FixtureLoader.h reads
+# the same file at runtime, so this and the runtime registry never see a
+# different case list -- there is no generated intermediate file to keep
+# in sync). See tests/fixtures/*.tns for the file format.
+function(tensora_discover_fixture_cases bin fixturefile)
+  execute_process(
+    COMMAND bash -c "grep -oE '^### [A-Za-z0-9_-]+ \\|' '${fixturefile}' | sed -E 's/^### ([A-Za-z0-9_-]+) .*/\\1/'"
+    OUTPUT_VARIABLE ids OUTPUT_STRIP_TRAILING_WHITESPACE RESULT_VARIABLE rc)
+  if(NOT rc EQUAL 0)
+    message(FATAL_ERROR "tensora_discover_fixture_cases: failed to read cases from ${fixturefile}")
+  endif()
+  string(REPLACE "\n" ";" ids "${ids}")
+  foreach(id IN LISTS ids)
+    if(id)
+      add_test(NAME ${id} COMMAND ${bin} ${id})
+    endif()
+  endforeach()
+endfunction()
+
 # Harness-based unit tests: build each, then discover its CASE(...) IDs from
 # the source so every case still gets its own CTest (ctest reports which
 # rule failed), with the ID list living only in the .cpp.
@@ -55,10 +75,14 @@ tensora_unit_test(test_lexer    tests/lexer/test_lexer.cpp         tensora_lexer
 tensora_discover_cases(test_lexer    ${CMAKE_SOURCE_DIR}/tests/lexer/test_lexer.cpp)
 
 tensora_unit_test(test_parser   tests/parser/test_parser.cpp       tensora_parser)
+target_compile_definitions(test_parser PRIVATE FIXTURE_PARSER_PATH="${CMAKE_SOURCE_DIR}/tests/fixtures/parser.tns")
 tensora_discover_cases(test_parser   ${CMAKE_SOURCE_DIR}/tests/parser/test_parser.cpp)
+tensora_discover_fixture_cases(test_parser ${CMAKE_SOURCE_DIR}/tests/fixtures/parser.tns)
 
 tensora_unit_test(test_semantic tests/semantic/test_semantic.cpp   tensora_semantic)
+target_compile_definitions(test_semantic PRIVATE FIXTURE_SEMANTIC_PATH="${CMAKE_SOURCE_DIR}/tests/fixtures/semantic.tns")
 tensora_discover_cases(test_semantic ${CMAKE_SOURCE_DIR}/tests/semantic/test_semantic.cpp)
+tensora_discover_fixture_cases(test_semantic ${CMAKE_SOURCE_DIR}/tests/fixtures/semantic.tns)
 
 tensora_unit_test(test_graph    tests/semantic/test_graph.cpp      tensora_semantic)
 tensora_discover_cases(test_graph    ${CMAKE_SOURCE_DIR}/tests/semantic/test_graph.cpp)
@@ -169,7 +193,8 @@ endif()
 # sources must be documented in docs/testing/TEST_MATRIX.md, so the matrix
 # cannot silently fall out of step with the actual suite. The case IDs live
 # only in the .cpp (CMake discovers them; the matrix documents them).
-add_test(NAME INT-TESTMATRIX-SYNC COMMAND bash ${CMAKE_SOURCE_DIR}/tools/check_test_matrix.sh)
+add_test(NAME INT-TESTMATRIX-SYNC COMMAND bash ${CMAKE_SOURCE_DIR}/tools/check_test_matrix.sh
+         $<TARGET_FILE_DIR:test_lexer>)
 
 # INT-DISCOVERY-SYNC: assert CMake's grep-based case discovery
 # (tensora_discover_cases) exactly matches each test binary's own
