@@ -166,7 +166,7 @@ this:
 4. **Finalize.** It runs `GraphVerifier` (IR.md Section 6) on each graph
    and attaches the program to `out`.
 
-### 6.1 Required course checks (all covered)
+### 6.1 Required academic-compiler checks (all covered)
 
 - redeclaration (global names; RM 3.6);
 - undefined identifier (RM 3.6);
@@ -199,7 +199,7 @@ returns a `Result<TensorType>`:
 These checks form an **attribute grammar**. Each node builds its tensor
 type from its operands' types (for `A @ B`, the checker confirms
 `A.shape[-1] == B.shape[-2]`, then builds the result shape). This is
-the course's semantic-analysis method, applied to tensors.
+the standard attribute-grammar semantic-analysis method, applied to tensors.
 
 ### 6.3 Dimension reasoning
 

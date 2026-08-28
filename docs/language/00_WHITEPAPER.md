@@ -31,8 +31,8 @@ execution, and production model serving are explicitly out of scope.
 This boundary keeps the language small. It still exposes real compiler
 problems: symbolic shape reasoning, semantic-axis contracts, dataflow
 graph construction, optimization legality, lowering, and native code
-generation. The project bounds this scope to what one semester can
-build, test, and defend end to end. The scope is not wider than this
+generation. The project bounds this scope to what one academic compiler
+effort can build, test, and defend end to end. The scope is not wider than this
 just to make the project look more original.
 
 Tensora does not claim that tensors, shape types, symbolic dimensions,
@@ -43,7 +43,7 @@ and in research languages such as Dex. Symbolic and dynamic shapes
 appear in TensorFlow, ONNX, and PyTorch's dynamic-shape tracing.
 SSA-form IRs and loop tiling are standard compiler techniques. MLIR
 and LLVM are existing infrastructure; this project builds on them, and
-does not reinvent them. Tensora's course-level contribution is this: a
+does not reinvent them. As an academic compiler, Tensora's contribution is this: a
 coherent, complete, end-to-end compiler, in which an original
 declarative source language is checked by a from-scratch semantic
 analyzer. The compiler explains the semantic information it
@@ -96,7 +96,7 @@ erases the information only at the point where a lower representation
 
 Tensora does not aim to replace production ML frameworks. It is a
 small language, built on purpose, where a student team can see and
-build these compiler ideas end to end in one semester.
+build these compiler ideas end to end in one academic compiler project.
 
 ## 1.2 The Problem: Programming ML Computation Graphs
 
@@ -185,7 +185,7 @@ Version 1 describes forward ML computation only. It does **not**
 provide automatic differentiation, backpropagation, optimizer updates,
 training loops, dataset loaders, checkpointing, distributed execution,
 production serving, or mandatory GPU support. The team excludes these
-on purpose. They keep the semester compiler *complete*, instead of
+on purpose. They keep the academic compiler *complete*, instead of
 turning it into an incomplete ML framework. Section 12 lists what is
 core and what is a future extension.
 
@@ -457,15 +457,12 @@ decidable grammar:
 -   a symbolic dimension variable;
 -   a product of a dimension expression with an integer constant.
 
-So v1 reasons about sizes that are **affine in a single symbolic
-variable with integer coefficients**, together with fully concrete
-integer arithmetic. The compiler solves equalities between sizes by
-unification (a union-find over dimension variables), plus constant
-arithmetic. Tensora v1 does **not** attempt general nonlinear
-constraint solving or SMT solving. The compiler rejects any program
-that would need this, with an explicit "cannot statically resolve
-shape" diagnostic. This bound is what keeps the checker honest and
-implementable.
+So v1 only reasons about sizes that are a symbolic variable times an
+integer constant, plus plain integer arithmetic. It does **not**
+attempt general nonlinear constraint solving or SMT solving. If a
+program needs more than this, the compiler rejects it with an explicit
+"cannot statically resolve shape" diagnostic, rather than guessing.
+This bound is what keeps the checker decidable.
 
 Shape inference assigns a full type (names and sizes) to every
 intermediate value. It does this by applying the operator contracts of
@@ -675,7 +672,7 @@ validate each one (Section 8).
 ## 6.3 Tensor-Liveness Analysis
 
 Beyond pattern rewrites, v1 implements one genuine **data-flow
-analysis**, the way the compilers course teaches it. Over the SSA
+analysis**, the way a compilers class teaches it. Over the SSA
 graph, tensor **liveness** computes the live interval of every value
 (from its definition to its last use). Every value's byte size is
 known from its verified shape (`bytes = product(dims) * 4` for f32).
@@ -829,8 +826,8 @@ tile sizes from the verified shapes** (the concrete or symbolic `M`,
 `N`, `K`), then requests the transformation. MLIR's transform
 infrastructure performs the mechanical rewrite. The project benchmarks
 the tiled and untiled versions, to report the effect. This connects
-Tensora directly to the course's loop-transformation and polyhedral
-material, without claiming to reimplement MLIR's tiling mechanics.
+Tensora, as an academic compiler, directly to the loop-transformation and polyhedral
+material it is meant to teach, without claiming to reimplement MLIR's tiling mechanics.
 
 ## 8.5 Performance Evaluation
 
@@ -880,7 +877,7 @@ Tensors; shape types; symbolic dimensions; named axes; computation
 graphs; static shape inference; operator fusion; MLIR or LLVM
 lowering. The project does not claim any of these as novel.
 
-## 9.5 The Course-Level Contribution
+## 9.5 The Academic Compiler's Contribution
 
 Tensora's contribution is the **coherent path from verified ML
 semantics to downstream compiler analysis and optimization**. The team
@@ -1069,8 +1066,8 @@ tensora --emit-llvm   file.tns     # generated LLVM IR
 tensora file.tns -o program        # native executable
 ```
 
-These commands support both course demonstrations and compiler
-debugging.
+These commands support both classroom demonstrations of the academic compiler and
+day-to-day compiler debugging.
 
 --------------------------------------------------------------------------
 
@@ -1115,7 +1112,7 @@ the graded v1 language. See the roadmap for details.
 Tensora is a small declarative language for forward ML computation.
 Its static semantics, named axes, and explicit graph structure feed
 directly into team-authored optimization, and into MLIR/LLVM lowering.
-The required semester result is a complete compiler: from source,
+As an academic compiler, the required result is a complete pipeline: from source,
 through a symbolic shape-and-contract checker, an explain facility,
 graph-level optimizations, and MLIR/LLVM, to native CPU execution — all
 exercised by a corpus of valid and invalid ML programs. Tensora claims

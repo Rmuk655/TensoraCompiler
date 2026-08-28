@@ -135,7 +135,7 @@ cost: the team must keep the builder and verifier authoritative.
 ## ARCH-009 — Two optimization levels + one data-flow analysis
 
 **Problem.** What optimization/analysis does V0.1 need to be a strong
-*compilers-course* project, given the syllabus (SSA, data-flow analysis,
+academic compiler, given the syllabus (SSA, data-flow analysis,
 loop transformations, polyhedral)?
 
 **Decision.** V0.1 implements: (1) Level-1 pattern/graph passes over the
@@ -145,7 +145,7 @@ which yields a peak-memory estimate that a decision or report uses; and
 Tensora picks tile sizes from verified shapes and MLIR applies the
 rewrite.
 
-**Rationale.** The course grades SSA, data-flow analysis, and loop
+**Rationale.** As an academic compiler, this project is graded on SSA, data-flow analysis, and loop
 transformation. Pattern rewrites alone do not cover this well. An
 analysis that feeds a decision, plus a shape-driven loop
 transformation, connects the project directly to the graded material.
@@ -175,7 +175,7 @@ loops, tiled loops, LLVM, CPU — as the project's flagship example
 
 **Rationale.** One computation, traced end to end, teaches and shows
 more than many shallow operators. It anchors the viva and lines up with
-the course's SSA, data-flow, and loop-transformation units.
+the SSA, data-flow, and loop-transformation units of the curriculum.
 
 **Affected.** Tutorial, whitepaper §8, tests (the matmul E2E and tiling
 cases), demos.

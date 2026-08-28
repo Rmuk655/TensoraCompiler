@@ -222,7 +222,7 @@ reads whatever memory happened to be there) — every accumulating op in
 this codebase explicitly zero-fills (or -inf-fills, for max) its
 accumulator via `linalg.fill` first.
 
-### 6.12.2 Level-2: project-authored shape-guided matmul tiling (the course's USP requirement)
+### 6.12.2 Level-2: project-authored shape-guided matmul tiling (the academic compiler's USP requirement)
 
 This has two distinct pieces. Code, tests, and docs keep them separate
 from each other and from standard MLIR/LLVM infrastructure:

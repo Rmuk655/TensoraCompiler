@@ -244,8 +244,8 @@ LLVM       LLVM IR  ->  native CPU
 The tiling step (see whitepaper Section 8.4) is a team-authored
 design choice: the compiler picks tile sizes from the verified shapes
 `M`, `N`, and `K`. This one example touches semantic analysis, SSA,
-lowering, and loop optimization. These are the core topics of the
-course.
+lowering, and loop optimization. These are core topics in compiler
+design.
 
 ## 2.12 Compilation
 

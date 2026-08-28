@@ -262,7 +262,7 @@ Do not merge changes that break downstream interfaces without an accepted archit
 
 ## Working With AI Coding Tools
 
-AI-generated code is allowed only as an implementation aid subject to course/team policy.
+AI-generated code is allowed only as an implementation aid subject to the academic compiler's team policy.
 
 You remain responsible for:
 

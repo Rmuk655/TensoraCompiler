@@ -130,7 +130,7 @@ graph bodies, assignments, matmul/binary/call expressions, keyword args
 
 ## 5. Semantic Tests (RM 3.5–3.19) — largest suite, 30% of grade
 
-Required course checks, each with valid/near-miss/invalid:
+Required academic-compiler checks, each with valid/near-miss/invalid:
 
 - **Redeclaration** (RM 3.6): duplicate global name; duplicate graph name.
 - **Undefined identifier** (RM 3.6): use before declaration/binding;
@@ -319,7 +319,7 @@ quality, not internals; driven through the CLI.
   `DiagCode` UX contract).
 - **USER-VIVA:** the two required non-trivial **working** programs run
   correctly and the two required **failing** programs are rejected with the
-  right diagnostics (course requirement).
+  right diagnostics (academic compiler requirement).
 - **USER-EXPLAIN:** `explain` output for the reference programs matches the
   tutorial.
 

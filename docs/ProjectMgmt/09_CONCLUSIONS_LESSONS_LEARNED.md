@@ -77,7 +77,7 @@ untiled, consistently across the 16x16x16, 32x32x32, and 64x64x64 tile
 sizes tried (`docs/testing/TEST_MATRIX.md`'s "Measured tile-size
 evidence" has the exact numbers). The lesson is not "tiling is always
 worth it" or "tiling is never worth it" — it is that a correctly-applied
-optimization's payoff depends on problem size, so a course project
+optimization's payoff depends on problem size, so an academic compiler
 should measure at the size that matters instead of asserting a speedup
 from structure alone, and should report a measured loss just as
 plainly as a measured win.

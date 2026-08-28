@@ -29,7 +29,7 @@ toward MLOps and workflow orchestration, away from compiler work.
 The team split model training from forward execution. Training needs
 autograd, backward graphs, optimizers, and parameter updates.
 
-The team narrowed the semester's scope to forward ML computation for
+The team narrowed the academic compiler's scope to forward ML computation for
 inference only.
 
 ## 5.5 Computation Graph as the Core Abstraction
@@ -42,7 +42,7 @@ This gives a direct path from source to native code:
 source semantics -> typed graph -> graph optimization -> MLIR
 ```
 
-This path also fits the course's semantic-analysis and code-generation
+This path also fits the academic compiler's semantic-analysis and code-generation
 requirements better.
 
 ## 5.6 Final Core Philosophy
