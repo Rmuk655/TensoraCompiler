@@ -388,82 +388,48 @@ struct MemRefBuffer {
   void* ptr() { return bytes.data(); }
 };
 
-// One function per rank (1-4), instead of a template. StridedMemRefType
-// itself needs a compile-time rank, since its `sizes` and `strides`
-// arrays are fixed-size C arrays. So the rank must be a literal
-// number somewhere. Writing it out four times here keeps this
-// CLI-only helper readable, with no template code.
-MemRefBuffer makeMemRefBuffer1(float* data, const std::vector<int64_t>& sizes) {
-  StridedMemRefType<float, 1> m;
+// This CLI-only helper needs a compile-time rank N to build
+// StridedMemRefType<float, N> -- its `sizes`/`strides` are fixed-size
+// C arrays, so N must be a literal somewhere. A single template body
+// does the shared work (fill the row-major sizes/strides, copy the
+// bytes); only the small dispatch switch below repeats one line per
+// supported rank, so raising MAX_SUPPORTED_RANK just needs a new
+// `case` line here, not a whole new function.
+template <int N>
+MemRefBuffer makeMemRefBufferN(float* data, const std::vector<int64_t>& sizes) {
+  StridedMemRefType<float, N> m;
   m.basePtr = data;
   m.data = data;
   m.offset = 0;
-  m.sizes[0] = sizes[0];
-  m.strides[0] = 1;
+  int64_t stride = 1;
+  for (int i = N - 1; i >= 0; --i) {
+    m.sizes[i] = sizes[static_cast<size_t>(i)];
+    m.strides[i] = stride;
+    stride *= sizes[static_cast<size_t>(i)];
+  }
   MemRefBuffer buf;
   buf.bytes.resize(sizeof(m));
   std::memcpy(buf.bytes.data(), &m, sizeof(m));
   return buf;
 }
 
-MemRefBuffer makeMemRefBuffer2(float* data, const std::vector<int64_t>& sizes) {
-  StridedMemRefType<float, 2> m;
-  m.basePtr = data;
-  m.data = data;
-  m.offset = 0;
-  m.sizes[0] = sizes[0];
-  m.sizes[1] = sizes[1];
-  m.strides[1] = 1;
-  m.strides[0] = sizes[1];
-  MemRefBuffer buf;
-  buf.bytes.resize(sizeof(m));
-  std::memcpy(buf.bytes.data(), &m, sizeof(m));
-  return buf;
-}
-
-MemRefBuffer makeMemRefBuffer3(float* data, const std::vector<int64_t>& sizes) {
-  StridedMemRefType<float, 3> m;
-  m.basePtr = data;
-  m.data = data;
-  m.offset = 0;
-  m.sizes[0] = sizes[0];
-  m.sizes[1] = sizes[1];
-  m.sizes[2] = sizes[2];
-  m.strides[2] = 1;
-  m.strides[1] = sizes[2];
-  m.strides[0] = sizes[1] * sizes[2];
-  MemRefBuffer buf;
-  buf.bytes.resize(sizeof(m));
-  std::memcpy(buf.bytes.data(), &m, sizeof(m));
-  return buf;
-}
-
-MemRefBuffer makeMemRefBuffer4(float* data, const std::vector<int64_t>& sizes) {
-  StridedMemRefType<float, 4> m;
-  m.basePtr = data;
-  m.data = data;
-  m.offset = 0;
-  m.sizes[0] = sizes[0];
-  m.sizes[1] = sizes[1];
-  m.sizes[2] = sizes[2];
-  m.sizes[3] = sizes[3];
-  m.strides[3] = 1;
-  m.strides[2] = sizes[3];
-  m.strides[1] = sizes[2] * sizes[3];
-  m.strides[0] = sizes[1] * sizes[2] * sizes[3];
-  MemRefBuffer buf;
-  buf.bytes.resize(sizeof(m));
-  std::memcpy(buf.bytes.data(), &m, sizeof(m));
-  return buf;
-}
+// `--run`/`-o` support tensors up to this rank (the highest rank any
+// current example/demo needs -- rank-4, 4-head batched attention).
+// Nothing in the language or the MLIR/LLVM lowering caps rank; this is
+// only a limit of this JIT-execution helper. Raising it needs a new
+// `case` line in the three dispatch switches below (makeMemRefBuffer,
+// readMemRefElement0, readMemRefData) plus the matching error-message
+// text near the call sites -- no new struct-building code, since
+// makeMemRefBufferN above already handles any N.
+constexpr int MAX_SUPPORTED_RANK = 4;
 
 MemRefBuffer makeMemRefBuffer(float* data, const std::vector<int64_t>& sizes, bool& ok) {
   ok = true;
   switch (sizes.size()) {
-    case 1: return makeMemRefBuffer1(data, sizes);
-    case 2: return makeMemRefBuffer2(data, sizes);
-    case 3: return makeMemRefBuffer3(data, sizes);
-    case 4: return makeMemRefBuffer4(data, sizes);
+    case 1: return makeMemRefBufferN<1>(data, sizes);
+    case 2: return makeMemRefBufferN<2>(data, sizes);
+    case 3: return makeMemRefBufferN<3>(data, sizes);
+    case 4: return makeMemRefBufferN<4>(data, sizes);
     default:
       ok = false;
       return {};
@@ -477,12 +443,17 @@ MemRefBuffer makeMemRefBuffer(float* data, const std::vector<int64_t>& sizes, bo
 // stores the callee's new pointer into the descriptor the caller
 // passed in. So the descriptor's *fields*, not the original buffer,
 // hold the real answer.
+template <int N>
+float readMemRefElement0N(const MemRefBuffer& buf) {
+  return reinterpret_cast<const StridedMemRefType<float, N>*>(buf.bytes.data())->data[0];
+}
+
 float readMemRefElement0(const MemRefBuffer& buf, int rank) {
   switch (rank) {
-    case 1: return reinterpret_cast<const StridedMemRefType<float, 1>*>(buf.bytes.data())->data[0];
-    case 2: return reinterpret_cast<const StridedMemRefType<float, 2>*>(buf.bytes.data())->data[0];
-    case 3: return reinterpret_cast<const StridedMemRefType<float, 3>*>(buf.bytes.data())->data[0];
-    case 4: return reinterpret_cast<const StridedMemRefType<float, 4>*>(buf.bytes.data())->data[0];
+    case 1: return readMemRefElement0N<1>(buf);
+    case 2: return readMemRefElement0N<2>(buf);
+    case 3: return readMemRefElement0N<3>(buf);
+    case 4: return readMemRefElement0N<4>(buf);
     default: return NAN;
   }
 }
@@ -492,13 +463,18 @@ float readMemRefElement0(const MemRefBuffer& buf, int rank) {
 // pointer (not the caller's original buffer). The result of these
 // graphs is a fresh C-contiguous allocation, so reading data[0..total)
 // gives the values in row-major order.
+template <int N>
+const float* memRefDataPtrN(const MemRefBuffer& buf) {
+  return reinterpret_cast<const StridedMemRefType<float, N>*>(buf.bytes.data())->data;
+}
+
 void readMemRefData(const MemRefBuffer& buf, int rank, int64_t total, float* out) {
   const float* data = nullptr;
   switch (rank) {
-    case 1: data = reinterpret_cast<const StridedMemRefType<float, 1>*>(buf.bytes.data())->data; break;
-    case 2: data = reinterpret_cast<const StridedMemRefType<float, 2>*>(buf.bytes.data())->data; break;
-    case 3: data = reinterpret_cast<const StridedMemRefType<float, 3>*>(buf.bytes.data())->data; break;
-    case 4: data = reinterpret_cast<const StridedMemRefType<float, 4>*>(buf.bytes.data())->data; break;
+    case 1: data = memRefDataPtrN<1>(buf); break;
+    case 2: data = memRefDataPtrN<2>(buf); break;
+    case 3: data = memRefDataPtrN<3>(buf); break;
+    case 4: data = memRefDataPtrN<4>(buf); break;
     default: return;
   }
   for (int64_t i = 0; i < total; ++i) out[static_cast<size_t>(i)] = data[i];
@@ -914,7 +890,8 @@ int main(int argc, char** argv) {
     bool rankOk = false;
     MemRefBuffer resultBuf = makeMemRefBuffer(outStorage.data(), outShape, rankOk);
     if (!rankOk) {
-      std::cerr << "error: --run only supports rank 1-4 tensors; output has rank " << outShape.size() << "\n";
+      std::cerr << "error: --run only supports rank 1-" << MAX_SUPPORTED_RANK
+                 << " tensors; output has rank " << outShape.size() << "\n";
       return 1;
     }
     packedArgs.push_back(resultBuf.ptr());
@@ -944,8 +921,8 @@ int main(int argc, char** argv) {
       }
       MemRefBuffer buf = makeMemRefBuffer(storage.back().data(), pShape, rankOk);
       if (!rankOk) {
-        std::cerr << "error: --run only supports rank 1-4 tensors; '" << pName << "' has rank " << pShape.size()
-                   << "\n";
+        std::cerr << "error: --run only supports rank 1-" << MAX_SUPPORTED_RANK << " tensors; '" << pName
+                   << "' has rank " << pShape.size() << "\n";
         return 1;
       }
       argBufs.push_back(std::move(buf));
