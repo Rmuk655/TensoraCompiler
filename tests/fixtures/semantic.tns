@@ -299,6 +299,14 @@ graph g {
   return y
 }
 
+### SEM-PL-003 | maxpool: size=0 (a zero-sized pooling window) is rejected
+### expect: reject SemaConvArithmetic
+input x: Tensor[batch=B,channel=1,height=4,width=4]
+graph g {
+  y = maxpool(x, size=0, stride=1)
+  return y
+}
+
 ### SEM-DIM-001 | equality/unification of symbolic B across two operands
 ### expect: ok
 input a: Tensor[batch=B,feat=4]

@@ -1,0 +1,45 @@
+# Fixed-grid CNN object localization -- REAL photographs (not shapes
+# this script drew itself). Same architecture family, same operators,
+# and the same single-graph/single-`return` design as
+# examples/cnn_grid_detector.tns (its header comment explains the
+# design constraints in full -- read that first); this file just runs
+# the identical idea at a finer 16x16 grid over a 128x128 real photo
+# (128 -> 64 -> 32 -> 16, still exactly 3 pooling stages).
+#
+# Ground truth for training (tools/models/prepare_grid_detector_real_demo.py)
+# comes from real, human-drawn Pascal VOC 2012 segmentation masks, not
+# synthetic shapes: for five common classes (person, car, dog, bicycle,
+# bus), every grid cell that a real object's mask actually overlaps is
+# labeled with that class -- a genuine, if modest (28-49% per-class
+# recall on held-out photos; this is a small from-scratch CNN on ~900
+# real, diverse photographs, not a state-of-the-art detector), test of
+# whether the exact same fixed-grid idea holds up past hand-drawn
+# shapes. Tensora computes 100% of the neural-network inference below;
+# Python only supplies the real photograph pixels (already resized
+# offline by the preparation script) and, in the demo runner, draws the
+# predicted boxes after Tensora has already produced the per-cell class
+# predictions.
+input  image: Tensor[batch=24, channel=3, height=128, width=128]
+weight Wc1: Tensor[out_channel=16, in_channel=3,  kh=3, kw=3]
+weight bc1: Tensor[out_channel=16]
+weight Wc2: Tensor[out_channel=32, in_channel=16, kh=3, kw=3]
+weight bc2: Tensor[out_channel=32]
+weight Wc3: Tensor[out_channel=32, in_channel=32, kh=3, kw=3]
+weight bc3: Tensor[out_channel=32]
+weight Whead: Tensor[out_channel=6, in_channel=32, kh=1, kw=1]
+weight bhead: Tensor[out_channel=6]
+
+graph grid_detector_real {
+    x = conv2d(image, Wc1, bc1, stride=1, padding=1)   # [24,16,128,128]
+    x = relu(x)
+    x = maxpool(x, size=2)                              # [24,16,64,64]
+    x = conv2d(x, Wc2, bc2, stride=1, padding=1)        # [24,32,64,64]
+    x = relu(x)
+    x = maxpool(x, size=2)                              # [24,32,32,32]
+    x = conv2d(x, Wc3, bc3, stride=1, padding=1)        # [24,32,32,32]
+    x = relu(x)
+    x = maxpool(x, size=2)                              # [24,32,16,16] -- one vector per grid cell
+    cell_logits = conv2d(x, Whead, bhead, stride=1, padding=0)  # [24,channel=6,16,16] (6 classes)
+    cell_probs  = softmax(cell_logits, axis=channel)
+    return cell_probs
+}

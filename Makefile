@@ -11,7 +11,9 @@ JOBS ?= $(shell nproc 2>/dev/null || echo 4)
         lexer parser semantic optimization codegen full \
         test-lexer test-parser test-semantic test-optimization test-codegen \
         lexer-example parser-example semantic-example optimization-example codegen-example \
-        final-example demo-mlp-placement demo-cnn-image-classifier demo-attn-text-classifier
+        final-example demo-mlp-placement demo-cnn-image-classifier demo-attn-text-classifier \
+        demo-attn-retrieval demo-cnn-grid-detector demo-cnn-grid-detector-real demo-vit-attention-one-layer demo-vit-attention-all-layers demo-vit-attention-viz \
+        demo-vit-attention-substitution setup-demos prep-vit-attention
 
 # Configure only when there is no build tree yet. CMake's generated
 # build system re-runs configure by itself when CMakeLists.txt changes
@@ -82,8 +84,9 @@ final-example: build
 	./demos/06_final_compiler_demo.sh
 
 # `make demo` (alias `demos`) runs ALL showcase demos: the benchmark,
-# the independent-pipeline demo, the visualization demo, and the three
-# real-world inference demos. The real-world demos need a one-time
+# the independent-pipeline demo, the visualization demo, and every
+# real-world inference demo (README.md's Real-World Inference Demos
+# section lists them in order). The real-world demos need a one-time
 # PyTorch artifact-prep step (see demo-* targets below); this aggregate
 # SKIPS each one whose demos/artifacts/<name>/ is absent, with a clear
 # message, so `make demo` still succeeds on a fresh clone. The
@@ -96,7 +99,7 @@ demo demos:
 	@if command -v dot >/dev/null 2>&1; then \
 	  echo "==> visualization"; ./demos/08_viz_demo.sh $${FILE:-examples/optimizations/dead_code.tns} $(BUILD); \
 	else echo "SKIP viz: Graphviz not found (sudo apt install graphviz)"; fi
-	@for pair in mlp:mlp_placement cnn:cnn_image_classifier attn:attn_text_classifier; do \
+	@for pair in mlp:mlp_placement cnn:cnn_image_classifier grid_detector:cnn_grid_detector grid_detector_real:cnn_grid_detector_real attn:attn_text_classifier attn_mh:attn_retrieval vit_attn:vit_attention_one_layer; do \
 	  name=$${pair%%:*}; script=$${pair##*:}; \
 	  if [ -d "demos/artifacts/$$name" ]; then \
 	    echo "==> demo ($$script)"; ./demos/$${script}_demo.sh $(BUILD); \
@@ -104,26 +107,84 @@ demo demos:
 	    echo "SKIP $$script: no artifacts in demos/artifacts/$$name/ (run the matching tools/models/prepare_*.py first)"; \
 	  fi; \
 	done
+	@if [ -d "demos/artifacts/vit_attn/eval_all_layers" ]; then \
+	  echo "==> demo (vit_attention_all_layers)"; ./demos/vit_attention_all_layers_demo.sh $(BUILD); \
+	else \
+	  echo "SKIP vit_attention_all_layers: no artifacts in demos/artifacts/vit_attn/eval_all_layers/ (run tools/models/prepare_vit_attention_demo.py first)"; \
+	fi
+	@if python3 -c "import transformers" >/dev/null 2>&1; then \
+	  echo "==> demo (vit_attention_substitution)"; ./demos/vit_attention_substitution_demo.sh $(BUILD); \
+	else \
+	  echo "SKIP vit_attention_substitution: transformers not installed (pip install transformers safetensors pillow)"; \
+	fi
 
 clean:
 	rm -rf $(BUILD)
 
-# Real-world inference demos (docs/development/BUILD.md). Each runs a
-# model trained/prepared once in PyTorch on real data through the full
-# Tensora pipeline and checks the result against the PyTorch reference.
-# Prepare the artifacts first (needs PyTorch, one time):
-#   python3 tools/models/prepare_mlp_demo.py
-#   python3 tools/models/prepare_stl10_demo.py
-#   python3 tools/models/prepare_text_attn_demo.py
-# The demo runners themselves need only numpy (no torch).
+# Real-world inference demos: full descriptions, order, and what each
+# one demonstrates are in README.md's "Real-World Inference Demos"
+# section (the single canonical listing -- not repeated here). Prepare
+# the artifacts first (needs PyTorch, one time); `make setup-demos`
+# below runs every preparation script in one command. The demo runners
+# themselves need only numpy (no torch).
+setup-demos:
+	pip install -q -r tools/models/requirements.txt
+	python3 tools/models/prepare_mlp_demo.py
+	python3 tools/models/prepare_stl10_demo.py
+	python3 tools/models/prepare_grid_detector_demo.py
+	python3 tools/models/prepare_grid_detector_real_demo.py
+	python3 tools/models/prepare_text_attn_demo.py
+	python3 tools/models/prepare_multihead_attn_demo.py
+	python3 tools/models/prepare_vit_attention_demo.py
+	@echo "==> setup-demos done. Try: make demo-vit-attention-viz"
+
+# Re-run just the ViT preparation step with a different photo and/or
+# encoder layer, e.g.:
+#   make prep-vit-attention IMAGE=my-cat.jpg LAYER=8
+# IMAGE may be a local file path or an http(s) URL; LAYER is 0..11.
+# Defaults to the original dog photo and layer 11 if not given.
+prep-vit-attention:
+	@if [ -n "$(IMAGE)" ]; then export TENSORA_VIT_IMAGE="$(IMAGE)"; fi; \
+	 if [ -n "$(LAYER)" ]; then export TENSORA_VIT_LAYER="$(LAYER)"; fi; \
+	 python3 tools/models/prepare_vit_attention_demo.py
+
+# Demos below run in order of difficulty (README.md's Real-World
+# Inference Demos section explains what each one demonstrates; not
+# repeated here).
 demo-mlp-placement: build
 	./demos/mlp_placement_demo.sh $(BUILD)
 
 demo-cnn-image-classifier: build
 	./demos/cnn_image_classifier_demo.sh $(BUILD)
 
+demo-cnn-grid-detector: build
+	./demos/cnn_grid_detector_demo.sh $(BUILD)
+
+demo-cnn-grid-detector-real: build
+	./demos/cnn_grid_detector_real_demo.sh $(BUILD)
+
 demo-attn-text-classifier: build
 	./demos/attn_text_classifier_demo.sh $(BUILD)
+
+demo-attn-retrieval: build
+	./demos/attn_retrieval_demo.sh $(BUILD)
+
+demo-vit-attention-one-layer: build
+	./demos/vit_attention_one_layer_demo.sh $(BUILD)
+
+demo-vit-attention-all-layers: build
+	./demos/vit_attention_all_layers_demo.sh $(BUILD)
+
+# Optional: renders PNGs from Tensora's own compiled output for
+# examples/vit_attention_weights.tns. Needs matplotlib in addition to
+# demo-vit-attention-one-layer's prerequisites; not part of `make demo`
+# (produces image files for inspection, not a pass/fail check, though
+# it does assert Tensora's weights match the real model).
+demo-vit-attention-viz: build
+	python3 tools/models/visualize_vit_attention.py $(BUILD)
+
+demo-vit-attention-substitution: build
+	./demos/vit_attention_substitution_demo.sh $(BUILD)
 
 # tools/benchmark_matmul_tiling.cpp measures matmul tiling speedup; it
 # is a plain CMake executable, not a CTest case (see docs/development/

@@ -210,42 +210,34 @@ finding.
 
 ## Run the real-world inference demos
 
-Three demos take recognizable real inputs through the full pipeline and
-check the result against a PyTorch reference (see README.md and
-`tools/models/`). **Each needs its artifacts prepared once first, using
-PyTorch** -- running `make demo-*` before this step fails with "demo
-artifacts not found," telling you to do this. Modern Debian/Ubuntu
-block `pip install` against the system Python (PEP 668), so the demo
-dependencies go in a project-local virtual environment, not the system
-Python and never `pip --break-system-packages`. `./tools/setup-dev.sh
---demos` creates `.venv/` and installs `tools/models/requirements.txt`
-into it:
+Ten demos take recognizable real inputs through the full pipeline and
+check the result against a PyTorch reference; **README.md's
+[Real-World Inference Demos](../../README.md#real-world-inference-demos)
+section is the single canonical listing** of all ten (in order of
+difficulty, with what each one demonstrates) -- not repeated here.
+**Each needs its artifacts prepared once first, using PyTorch** --
+running `make demo-*` before this step fails with "demo artifacts not
+found," telling you to do this. Modern Debian/Ubuntu block `pip
+install` against the system Python (PEP 668), so the demo dependencies
+go in a project-local virtual environment, not the system Python and
+never `pip --break-system-packages`. `./tools/setup-dev.sh --demos`
+creates `.venv/` and installs `tools/models/requirements.txt` into it:
 
 ```bash
 ./tools/setup-dev.sh --demos     # one time: creates .venv, installs torch etc.
 source .venv/bin/activate        # 'which python' -> .venv/bin/python
-python tools/models/prepare_mlp_demo.py
-python tools/models/prepare_stl10_demo.py
-python tools/models/prepare_text_attn_demo.py
+make setup-demos                 # runs every tools/models/prepare_*.py script once
 deactivate                       # when finished
-```
-
-Only once that has produced `demos/artifacts/{mlp,cnn,attn}/`:
-
-```bash
-make demo-mlp-placement        # student placement-eligibility (tabular MLP)
-make demo-cnn-image-classifier # STL-10 image classification, 10 classes (CNN, native 96x96)
-make demo-attn-text-classifier # topic classification (self-attention)
 ```
 
 Artifacts land in `demos/artifacts/`
 (git-ignored, reproduced on demand). The demo runners themselves need
 only numpy, so `make demo-*` works without the venv active once the
 artifacts exist. Each demo classifies a whole held-out batch in one run
-(100 students / 40 images / 30 sentences) and reports Tensora-vs-PyTorch
-agreement over the whole batch, showing a few examples in detail. The
-CNN prep caches its trained model at `demos/artifacts/cnn-model.pt` (the
-slow step); delete that file to retrain from scratch.
+and reports Tensora-vs-PyTorch agreement over the whole batch, showing
+a few examples in detail. The CNN prep caches its trained model at
+`demos/artifacts/cnn-model.pt` (the slow step); delete that file to
+retrain from scratch.
 
 ## Visualization, independent pipeline, and benchmark
 
@@ -335,7 +327,8 @@ authoritative equivalents.
 | `example` (`examples`) | run all per-phase demos (01…06) in order |
 | `lexer-example` … `codegen-example`, `final-example` | one phase demo (01…06) |
 | `demo` (`demos`) | run all showcase demos (skips unprepared/absent-tool ones) |
-| `demo-mlp-placement` / `demo-cnn-image-classifier` / `demo-attn-text-classifier` | one real-world inference demo |
+| `demo-mlp-placement`, `demo-cnn-image-classifier`, ... `demo-vit-attention-substitution` | one real-world inference demo (10 total; README.md's Real-World Inference Demos section lists all of them in order) |
+| `setup-demos` | prepare every real-world demo's weights/inputs in one command |
 | `viz` | render AST/TCG/MLIR graphs to PNGs (needs Graphviz) |
 | `demo-independent` | run emitted IR through upstream mlir-opt/llc/lli |
 | `benchmark` | measure matmul-tiling speedup |
