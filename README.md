@@ -1,6 +1,4 @@
-# Tensora Project Instructions
-
-This repository contains the Tensora compiler project.
+# Tensora
 
 Tensora is a small, standalone declarative language — a teaching
 compiler's DSL, not a production framework — for describing
