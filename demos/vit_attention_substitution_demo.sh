@@ -2,8 +2,8 @@
 # ViT attention-SUBSTITUTION demo: does the real-world answer survive
 # swapping one real attention block's computation for Tensora's own?
 #
-# Every other ViT demo (demo-vit-attention-one-layer,
-# demo-vit-attention-all-layers, demo-vit-attention-viz) proves a
+# Every other ViT demo (`make demo-vit-attention`, three checks in
+# one: one layer, all 12 layers, optional viz) proves a
 # numerical claim in isolation: Tensora's output tensor for one
 # attention block matches PyTorch's own output tensor for that block.
 # This demo goes one step further and asks the practical question:

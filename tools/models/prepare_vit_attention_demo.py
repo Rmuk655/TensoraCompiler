@@ -58,7 +58,7 @@ exports:
       one of the 12 encoder layers, not only LAYER. Each layer gets
       its own real input hidden state and its own real, pretrained
       Q/K/V/output-projection weights -- used by
-      demos/vit_attention_all_layers_demo.sh to run
+      demos/vit_attention_demo.sh (make demo-vit-attention) to run
       examples/vit_attention_block.tns through Tensora once per layer
       and report a per-layer PASS/FAIL table, so the claim is "Tensora
       independently reproduces the self-attention computation of every
@@ -80,9 +80,9 @@ this one block from the real input and real weights, and the demo
 checks its output against the real model's own output for the exact
 same block. This tests a full-size (768-dim, 12-head, 197-position)
 production Transformer's real attention block, not a toy-sized one --
-the same math this project already validates at 4-head/32-dim scale
-in examples/attn_multihead_retrieval.tns, now checked at
-production scale against genuine pretrained parameters.
+the same math this project already validates at smaller scale in
+examples/attention.tns and examples/attn_text_classifier.tns, now
+checked at production scale against genuine pretrained parameters.
 
 Only the attention block is compiled; the rest of ViT (patch-embedding
 convolution, layernorm, GELU) is future scope for Tensora (to be

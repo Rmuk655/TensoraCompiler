@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """Prepare the "course eligibility" relational-reasoning demo.
 
-A genuinely different task from Associative Recall
-(prepare_multihead_attn_demo.py): AR is a single-hop lookup -- the
-answer is a fact directly present in the sequence (student:key ->
-value). This task has NO such fact. The sequence states (a) which
+A genuinely different task from a single-hop lookup: a single-hop
+lookup's answer is a fact directly present in the sequence
+(student:key -> value). This task has NO such fact. The sequence states (a) which
 courses the student has already completed, and (b) which course
 requires which single prerequisite course -- but never states the
 answer "which course can the student take next" directly. Solving it

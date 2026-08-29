@@ -3,8 +3,8 @@
 # shapes. This is a rank-2 (no batch/head axes) demonstration. Batched
 # matmul is supported (RANK-003/004 in docs/testing/TEST_MATRIX.md), so a
 # rank-4 multi-head version type-checks and lowers too -- see
-# examples/attn_multihead_retrieval.tns for that version, real
-# trained weights included. For a runnable single-head attention model
+# examples/vit_attention_block.tns for that version, real pretrained
+# weights included. For a runnable single-head attention model
 # with real trained weights, see examples/attn_text_classifier.tns and
 # tools/models/prepare_text_attn_demo.py.
 input q: Tensor[seq_q=2, d_k=2]

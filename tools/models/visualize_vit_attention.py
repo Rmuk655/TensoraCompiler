@@ -66,7 +66,7 @@ PyTorch via a forward hook, see that script), then renders three views:
                               the "these match" claim is a picture, not
                               only the printed max-error number.
 
-This turns the numerical-fidelity demo (demo-vit-attention-one-layer) into a
+This turns the numerical-fidelity demo (demo-vit-attention) into a
 visual one: it shows, using Tensora's own compiled computation, which
 regions of a real photograph a real pretrained Transformer attends to.
 

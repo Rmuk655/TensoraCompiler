@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Two-hop relational-reasoning real-inference demo: course eligibility.
 #
-# A harder, genuinely different task from attn_retrieval_demo.sh's
-# Associative Recall (AR): AR's answer is a fact stated directly in
-# the input; this demo's answer never is (see
-# examples/attn_relational_eligibility.tns's header for the full task
-# and why it needs two chained attention/lookup steps instead of one).
+# A two-hop relational-reasoning task, not a single lookup: the
+# answer (which course is now eligible) is never a fact stated
+# directly in the input (see examples/attn_relational_eligibility.tns's
+# header for the full task and why it needs two chained
+# attention/lookup steps instead of one).
 # Reports the model's own accuracy against ground truth *and*
 # Tensora-vs-PyTorch agreement separately -- the two are different
 # questions. This task's PyTorch model is honestly imperfect
