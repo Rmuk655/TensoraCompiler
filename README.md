@@ -24,7 +24,7 @@ claim: ten demos under `demos/` are genuine, end-to-end, PyTorch-trained
 programs running through Tensora this way — a tabular MLP, a CNN image
 classifier, a fixed-grid CNN object detector (on synthetic shapes, then
 on real annotated photographs), a single-head self-attention text
-classifier, a 4-head self-attention associative-retrieval model, and
+classifier, a 4-head self-attention Associative Recall model, and
 several demos built on one real self-attention block extracted from a
 genuine, third-party pretrained Transformer
 (`google/vit-base-patch16-224[-in21k]`) — checked against that model's
@@ -222,7 +222,7 @@ python3 tools/models/prepare_stl10_demo.py          # STL-10 CNN
 python3 tools/models/prepare_grid_detector_demo.py  # fixed-grid CNN detector, synthetic shapes (no download)
 python3 tools/models/prepare_grid_detector_real_demo.py # same detector family, real VOC photographs (needs internet)
 python3 tools/models/prepare_text_attn_demo.py      # single-head attention text classifier
-python3 tools/models/prepare_multihead_attn_demo.py # 4-head attention associative-retrieval model
+python3 tools/models/prepare_multihead_attn_demo.py # 4-head attention, Associative Recall (AR) benchmark
 python3 tools/models/prepare_vit_attention_demo.py  # downloads real pretrained ViT-Base (google/vit-base-patch16-224-in21k),
                                                      # extracts one real attention block's weights + hidden state
                                                      # (needs internet access once; transformers/safetensors/pillow
@@ -253,7 +253,7 @@ photo or encoder layer doesn't need editing the script.
 | 3 | `demo-cnn-grid-detector` | synthetic shapes, trained from scratch | fixed-grid object *localization* — "**what and where**" — over a toy 32x32 image; the minimal example this task family needs |
 | 4 | `demo-cnn-grid-detector-real` | real photos (Pascal VOC 2012), trained from scratch | the same fixed-grid localization task, but on real, human-annotated photographs at finer (16x16) resolution — harder data, and honestly weaker precision (see below) |
 | 5 | `demo-attn-text-classifier` | synthetic sentences, trained from scratch | single-head self-attention, topic classification |
-| 6 | `demo-attn-retrieval` | synthetic sequences, trained from scratch | 4-head self-attention, rank-4 batched attention, associative key-value retrieval — a harder attention task than classification |
+| 6 | `demo-attn-retrieval` | synthetic sequences, trained from scratch | 4-head self-attention, rank-4 batched attention, Associative Recall (AR) — a harder attention task than classification |
 | 7 | `demo-vit-attention-one-layer` | real photo, real pretrained weights | one self-attention block (12-head, 768-dim) from a genuine pretrained ViT-Base checkpoint, checked against that model's own output |
 | 8 | `demo-vit-attention-all-layers` | same as #7 | the same check, independently repeated at all 12 encoder layers (`PASS 12/12`) |
 | 9 | `demo-vit-attention-viz` (optional) | same as #7 | renders the same block's attention weights as PNGs (needs `matplotlib`) |
@@ -265,7 +265,7 @@ make demo-cnn-image-classifier        # whole-image "what is it" classification 
 make demo-cnn-grid-detector           # toy "what AND where": fixed-grid localization on synthetic shapes
 make demo-cnn-grid-detector-real      # same grid localization, on real annotated VOC photographs
 make demo-attn-text-classifier        # single-head self-attention topic classifier
-make demo-attn-retrieval              # 4-head self-attention associative key-value retrieval
+make demo-attn-retrieval              # 4-head self-attention, Associative Recall (AR) benchmark task
 make demo-vit-attention-one-layer     # one real ViT-Base attention block vs. the real model's own output
 make demo-vit-attention-all-layers    # the same check at all 12 encoder layers (PASS 12/12)
 make demo-vit-attention-viz           # renders that block's attention weights as PNGs (needs matplotlib)
@@ -377,7 +377,7 @@ depth"](docs/development/BUILD.md#reading-the-real-world-demo-output-in-depth).
   constant, since the dispatch code tries every rank up to it
   automatically (no per-rank code to add by hand).
 - The Transformer demos are a self-attention **classifier** and a
-  self-attention **associative-retrieval** model, both built from
+  self-attention **Associative Recall** model, both built from
   Tensora's existing operators — a full pretrained BERT/DistilBERT QA
   model needs operators Tensora does not yet have (embedding/gather,
   layernorm, GELU, integer tensors); to be considered in future.

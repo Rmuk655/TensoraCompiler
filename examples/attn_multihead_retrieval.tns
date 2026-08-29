@@ -1,12 +1,19 @@
-# Multi-head self-attention associative retrieval (real-inference demo).
+# Multi-head self-attention associative recall (real-inference demo).
 #
 # A different task from examples/attn_text_classifier.tns (single-head
 # topic classification), chosen specifically to give multi-head
-# attention something distinctive to show: this is the classic toy
-# task used to explain *why* self-attention works at all --
-# "associative recall" / key-value lookup, a one-hop version of the
-# retrieval step behind next-token prediction in a real language model
-# (a transformer's next-token head reads the hidden state at the
+# attention something distinctive to show: this is Associative Recall
+# (AR) -- a synthetic benchmark task from the mechanistic-interpretability
+# and long-context-modeling literature (Ba et al. 2016, "Using Fast
+# Weights to Attend to the Recent Past"; studied via "induction heads"
+# in Olsson et al. 2022; generalized to multiple queries per sequence
+# as MQAR, and tied directly to language-model quality, by Arora et al.
+# 2023/2024, "Zoology: Measuring and Improving Recall in Efficient
+# Language Models", arXiv:2312.04927). This demo is the single-query
+# form of AR (one query per sequence, at the end), not the
+# multi-query MQAR variant -- a one-hop version of the retrieval step
+# behind next-token prediction in a real language model (a
+# transformer's next-token head reads the hidden state at the
 # *current* position, which self-attention has filled with information
 # copied from whichever earlier position is relevant -- exactly what
 # this program does, just for a 6-slot toy vocabulary instead of the

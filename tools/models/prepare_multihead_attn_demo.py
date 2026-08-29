@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
-"""Prepare the multi-head self-attention associative-retrieval demo.
+"""Prepare the multi-head self-attention Associative Recall demo.
 
 The rank-4, multi-head sibling of prepare_text_attn_demo.py (single-head
 topic classification), but a different task chosen to give multi-head
-attention something distinctive to demonstrate: "associative recall" --
-the classic toy task used to explain why self-attention works at all, and
-a one-hop version of the retrieval step behind real next-token
+attention something distinctive to demonstrate: Associative Recall
+(AR) -- a standard synthetic benchmark in the mechanistic-
+interpretability and long-context literature (Ba et al. 2016; Arora et
+al.'s "Zoology", arXiv:2312.04927, which generalizes it to the
+multi-query MQAR variant this demo does not implement -- see
+examples/attn_multihead_retrieval.tns's header for the full citation),
+and a one-hop version of the retrieval step behind real next-token
 prediction.
 
 Each example is a sequence of 6 (key, value) slots in random order
