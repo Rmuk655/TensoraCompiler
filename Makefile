@@ -12,7 +12,7 @@ JOBS ?= $(shell nproc 2>/dev/null || echo 4)
         test-lexer test-parser test-semantic test-optimization test-codegen \
         lexer-example parser-example semantic-example optimization-example codegen-example \
         final-example demo-mlp-placement demo-cnn-image-classifier demo-attn-text-classifier \
-        demo-attn-retrieval demo-cnn-grid-detector demo-cnn-grid-detector-real demo-vit-attention-one-layer demo-vit-attention-all-layers demo-vit-attention-viz \
+        demo-attn-retrieval demo-attn-relational demo-cnn-grid-detector demo-cnn-grid-detector-real demo-vit-attention-one-layer demo-vit-attention-all-layers demo-vit-attention-viz \
         demo-vit-attention-substitution setup-demos setup-tensora-demos prep-vit-attention
 
 # Configure only when there is no build tree yet. CMake's generated
@@ -109,7 +109,7 @@ compiler-demos: example
 # still succeeds on a fresh clone.
 tensora-demos:
 	$(QUIET_BUILD)
-	@for pair in mlp:mlp_placement cnn:cnn_image_classifier grid_detector:cnn_grid_detector grid_detector_real:cnn_grid_detector_real attn:attn_text_classifier attn_mh:attn_retrieval vit_attn:vit_attention_one_layer; do \
+	@for pair in mlp:mlp_placement cnn:cnn_image_classifier grid_detector:cnn_grid_detector grid_detector_real:cnn_grid_detector_real attn:attn_text_classifier attn_mh:attn_retrieval attn_rel:attn_relational vit_attn:vit_attention_one_layer; do \
 	  name=$${pair%%:*}; script=$${pair##*:}; \
 	  if [ -d "demos/artifacts/$$name" ]; then \
 	    echo "==> demo ($$script)"; ./demos/$${script}_demo.sh $(BUILD); \
@@ -153,7 +153,7 @@ setup-demos setup-tensora-demos:
 	pip install -q -r tools/models/requirements.txt
 	@for pair in mlp:prepare_mlp_demo cnn:prepare_stl10_demo grid_detector:prepare_grid_detector_demo \
 	             grid_detector_real:prepare_grid_detector_real_demo attn:prepare_text_attn_demo \
-	             attn_mh:prepare_multihead_attn_demo vit_attn:prepare_vit_attention_demo; do \
+	             attn_mh:prepare_multihead_attn_demo attn_rel:prepare_relational_demo vit_attn:prepare_vit_attention_demo; do \
 	  name=$${pair%%:*}; script=$${pair##*:}; \
 	  if [ -f "demos/artifacts/$$name/eval/meta.json" ]; then \
 	    echo "==> $$script: already prepared (demos/artifacts/$$name/eval/ exists, skipping)"; \
@@ -193,6 +193,9 @@ demo-attn-text-classifier: build
 
 demo-attn-retrieval: build
 	./demos/attn_retrieval_demo.sh $(BUILD)
+
+demo-attn-relational: build
+	./demos/attn_relational_demo.sh $(BUILD)
 
 demo-vit-attention-one-layer: build
 	./demos/vit_attention_one_layer_demo.sh $(BUILD)

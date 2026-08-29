@@ -1,0 +1,95 @@
+# Course-eligibility relational reasoning (real-inference demo).
+#
+# A genuinely different task from examples/attn_multihead_retrieval.tns's
+# Associative Recall (AR): AR's answer is a fact stated directly in the
+# sequence (key -> value, verbatim). This task's answer is never
+# stated. The input describes (a) up to 3 courses the student has
+# already completed, and (b) each of 6 candidate courses' single
+# prerequisite -- but nowhere does it say "the student is eligible for
+# X". Example, written in plain words (the model sees only
+# embeddings):
+#
+#     Completed: CS101, MA101
+#     Prerequisites: CS201 needs CS101 | MA201 needs MA101
+#                    | PHY101 needs (none) | BIO101 needs (none)
+#     Eligible (not completed, prerequisite satisfied): PHY101
+#
+# Solving it needs two chained lookups, not one: attend over the
+# completed-course facts to build a "profile" of what the student
+# knows (hop 1), then, separately for each candidate course, check
+# whether *that* course's prerequisite is covered by the profile, and
+# whether the course itself is already done (hop 2) -- exactly the
+# "attend to completed courses, attend separately to requirements,
+# combine, ignore what doesn't apply" reasoning a lookup table cannot
+# do. tools/models/prepare_relational_demo.py trains this once in
+# PyTorch; a feasibility spike found this reliably reaches ~75-80%
+# held-out accuracy (see that script's module docstring) -- clearly
+# above the 1/6 ~ 17% chance rate, confirming genuine two-hop
+# fact-chaining, but, honestly, well short of AR's ~100%, since this
+# is a strictly harder task. The comparison below is still exact
+# (Tensora vs. this same imperfect PyTorch model), same as every other
+# real-inference demo; only the *task* is harder, not the tolerance.
+#
+# Hop 1 is single-head softmax attention, same Q@Kt / softmax / A@V
+# shape as attn_multihead_retrieval.tns, but the query is a fixed
+# *learned* "profile query" (Wq1) rather than a per-example token --
+# there is nothing to look up yet, just a fixed question ("what has
+# this student completed?") asked of the completion facts. The
+# null-padding completion slots (fewer than 3 courses completed) are
+# never masked by hand -- v1 Tensora has no masking op either -- the
+# attention weights simply learn to give them low score.
+#
+# Hop 2 has no attention op at all: `profile` is projected two ways
+# (Wcov = "does this cover a course's prerequisite?", Walr = "is this
+# course itself already done?") and matmul'd against every candidate
+# course's prerequisite embedding (Xpp) and its own embedding (Xpc),
+# giving one `coverage` and one `already` score per course. The two
+# per-course score tensors are combined with two learned scalars
+# (Wa, Wb) and a bias -- plain elementwise `*`/`+`, since v1 Tensora
+# has no stack/concat op to feed a combining MLP instead.
+#
+# The trailing `sq=1` axis (hop 1's attention query has exactly one
+# row -- there is only one "profile" per example) is dropped with
+# `sum(..., axis=sq)`, the same no-indexing "squeeze a singleton axis"
+# trick attn_multihead_retrieval.tns uses for `axis=seq_q`.
+#
+# Scale = 1/sqrt(dk) = 1/sqrt(32); the prep script uses the same
+# constant so the reference matches.
+#
+# The batch axis b is 200 (larger than AR's 30): this task's accuracy
+# is well under 100%, so a bigger held-out batch is needed for the
+# printed accuracy number to be statistically meaningful rather than
+# noise from a handful of examples.
+input  Xcomp: Tensor[b=200, ncomp=3, d=32]
+input  Xpp:   Tensor[b=200, courses=6, d=32]
+input  Xpc:   Tensor[b=200, courses=6, d=32]
+weight Wk1:  Tensor[b=1, d=32, dk=32]
+weight Wv1:  Tensor[b=1, d=32, dv=32]
+weight Wq1:  Tensor[b=1, sq=1, dk=32]
+weight Wcov: Tensor[b=1, dv=32, dc=32]
+weight Walr: Tensor[b=1, dv=32, dc=32]
+weight Wa:   Tensor[b=1, sq=1, courses=1]
+weight Wb:   Tensor[b=1, sq=1, courses=1]
+weight Bias: Tensor[b=1, sq=1, courses=1]
+
+graph attn_relational {
+    K1       = Xcomp @ Wk1
+    V1       = Xcomp @ Wv1
+    K1t      = transpose(K1, perm=[0, 2, 1])
+    scores1  = Wq1 @ K1t
+    scaled1  = scores1 * 0.17677670
+    A1       = softmax(scaled1, axis=ncomp)
+    profile  = A1 @ V1
+    coverQ   = profile @ Wcov
+    alreadyQ = profile @ Walr
+    XppT     = transpose(Xpp, perm=[0, 2, 1])
+    XpcT     = transpose(Xpc, perm=[0, 2, 1])
+    coverage = coverQ @ XppT
+    already  = alreadyQ @ XpcT
+    covered  = coverage * Wa
+    covdone  = already * Wb
+    summed   = covered + covdone
+    combined = summed + Bias
+    logits   = sum(combined, axis=sq)
+    return logits
+}

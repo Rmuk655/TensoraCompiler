@@ -215,10 +215,10 @@ finding.
 
 ## Run the real-world inference demos
 
-Ten demos take recognizable real inputs through the full pipeline and
+Eleven demos take recognizable real inputs through the full pipeline and
 check the result against a PyTorch reference; **README.md's
 [Real-World Inference Demos](../../README.md#real-world-inference-demos)
-section is the single canonical listing** of all ten (in order of
+section is the single canonical listing** of all eleven (in order of
 difficulty, with what each one demonstrates) -- not repeated here.
 **Each needs its artifacts prepared once first, using PyTorch** --
 running `make demo-*` before this step fails with "demo artifacts not
@@ -287,6 +287,35 @@ memorized. It exercises batched matmul/transpose/sum at rank 4 and a
 one-hot-selector read-out pattern in place of indexing, a materially
 different code path from the single-head, rank-2/3 attention in
 `demo-attn-text-classifier`.
+
+**`demo-attn-relational`.** A genuinely different, harder task on the
+same self-attention building block, not just a bigger one:
+`demo-attn-retrieval`'s answer is a fact stated directly in its input;
+this one's is not. Given up to 3 completed courses and, for each of 6
+candidate courses, its single prerequisite, the model must find the
+one course the student is now eligible for -- a course that is never
+named as "eligible" anywhere in the input. That takes two chained
+steps: hop 1 is ordinary single-head softmax attention (Q@Kt/softmax/
+A@V, same shape as `demo-attn-retrieval`'s, but with a fixed *learned*
+query rather than a per-example one) reading the completed-course
+facts into one "profile" vector; hop 2 has no attention op at all --
+it projects that profile two ways and matmuls each projection against
+every candidate course's prerequisite embedding and its own embedding,
+producing one "is the prerequisite covered?" and one "is this course
+already done?" score per course, combined with two learned scalars
+(plain elementwise `*`/`+`, since v1 Tensora has no stack/concat op to
+feed a combining MLP instead). The printed output reports two
+different numbers, and they mean different things: "Tensora vs
+PyTorch" is the usual exact-agreement check (this demo's whole point,
+same as every other demo here); "Eligibility accuracy" is a *separate*
+number -- how often the trained PyTorch model itself gets the right
+answer, honestly around 75% (well above the 1/6 chance rate, so real
+two-hop reasoning is happening, but clearly short of a clean answer,
+since this is a strictly harder task than retrieval). A less-than-
+perfect eligibility accuracy is not a bug in Tensora, or in this demo
+-- it is what running an imperfect model correctly looks like; see
+`tools/models/prepare_relational_demo.py`'s module docstring for the
+feasibility numbers behind that 75% figure.
 
 **`demo-vit-attention-one-layer` / `demo-vit-attention-all-layers`.**
 The one-layer demo checks Tensora's compiled output for one
