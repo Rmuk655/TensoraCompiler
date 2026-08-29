@@ -25,13 +25,13 @@ programs running through Tensora this way — a tabular MLP, a CNN image
 classifier, a fixed-grid CNN object detector (on synthetic shapes, then
 on real annotated photographs), a single-head self-attention text
 classifier, a 4-head self-attention associative-retrieval model, and
-(going one step further) several demos built on one real self-attention
-block extracted from a genuine, third-party pretrained Transformer
+several demos built on one real self-attention block extracted from a
+genuine, third-party pretrained Transformer
 (`google/vit-base-patch16-224[-in21k]`) — checked against that model's
 own output on a real photograph, verified independently at all 12
-encoder layers, and, strongest of all, spliced into a **live** copy of
-that model mid-inference to confirm its real-world prediction survives
-unchanged. See
+encoder layers, and spliced into a **live** copy of that model
+mid-inference to confirm its real-world prediction survives unchanged.
+See
 [Real-World Inference Demos](#real-world-inference-demos) below for the
 full list, in order of difficulty. A
 deeper, compile-time integration (for example registering Tensora as a
@@ -249,7 +249,7 @@ photo or encoder layer doesn't need editing the script.
 | 7 | `demo-vit-attention-one-layer` | real photo, real pretrained weights | one self-attention block (12-head, 768-dim) from a genuine pretrained ViT-Base checkpoint, checked against that model's own output |
 | 8 | `demo-vit-attention-all-layers` | same as #7 | the same check, independently repeated at all 12 encoder layers (`PASS 12/12`) |
 | 9 | `demo-vit-attention-viz` (optional) | same as #7 | renders the same block's attention weights as PNGs (needs `matplotlib`) |
-| 10 | `demo-vit-attention-substitution` | 5 real photos, real pretrained weights | the strongest claim: splices Tensora's own recomputation of one block into a **live** real ImageNet-1k classifier mid-inference and shows the real-world prediction survives, on 5 visibly different photographs |
+| 10 | `demo-vit-attention-substitution` | 5 real photos, real pretrained weights | splices Tensora's own recomputation of one block into a **live** real ImageNet-1k classifier mid-inference and shows the real-world prediction survives, on 5 visibly different photographs |
 
 ``` bash
 make demo-mlp-placement
@@ -354,17 +354,15 @@ Tensora did not compute.
   as the heatmap, but as exact boxes around the top-5 most-attended
   patches instead of a blurred color overlay.
 
-`make demo-vit-attention-substitution` is the strongest demo of the
-set. Every ViT demo above proves a numerical claim in isolation
-("Tensora's output matches PyTorch's, for this one block"). This one
-goes further: it takes a full, live, pretrained ImageNet classifier,
-**swaps one of its internal attention blocks for Tensora's own
-computation of that block mid-inference**, and runs 5 real photographs
-(dog, car, elephant, airplane, cat) through it. On all 5, the
-prediction is unchanged (final-logit error ~1e-6) — proof that
-Tensora's output isn't just numerically close, it's a working drop-in
-replacement inside a real model. Also renders a visual dashboard
-(baseline vs. substituted prediction, per photo) under
+`make demo-vit-attention-substitution` puts the ViT demos together: it
+takes a full, live, pretrained ImageNet classifier, swaps one of its
+internal attention blocks for Tensora's own computation of that block
+mid-inference, and runs 5 real photographs (dog, car, elephant,
+airplane, cat) through it. On all 5, the prediction is unchanged
+(final-logit error ~1e-6) — Tensora's output works as a drop-in
+replacement for that block inside a real model, not only a numerical
+match in isolation. Also renders a visual dashboard (baseline vs.
+substituted prediction, per photo) under
 `demos/artifacts/vit_substitution/*.png` if `matplotlib` is installed.
 This demo prepares its own checkpoint on first run (separate from
 `setup-tensora-demos`, since it also needs a *built* `tensora` binary
