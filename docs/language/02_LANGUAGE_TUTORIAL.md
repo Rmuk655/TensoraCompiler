@@ -318,6 +318,15 @@ lowered (Section 1.7 of
 and how it reads out "the hidden state at the query position" (no
 slicing op either) via a one-hot selector weight and `sum`.
 
+A fourth runnable example,
+[`examples/attn_relational_eligibility.tns`](../../examples/attn_relational_eligibility.tns),
+is a genuinely harder task on the same self-attention building block:
+course eligibility, a two-hop relational-reasoning problem where the
+answer is never a fact stated directly in the input (unlike AR's
+lookup) — run it with `make demo-attn-relational`; see the example's
+own header for the two-hop attention design and its honestly imperfect
+(~75%) accuracy against ground truth.
+
 ## 2.11c Tracing Matmul Through the Whole Compiler
 
 `C = A @ B` is the one computation worth understanding in full depth:
@@ -377,6 +386,7 @@ number).
 | [`attention.tns`](../../examples/attention.tns) | single-head scaled dot-product attention, rank-2 (Section 2.11) | `tensora --run examples/attention.tns` |
 | [`attn_text_classifier.tns`](../../examples/attn_text_classifier.tns) | single-head attention, real PyTorch-trained weights | `make demo-attn-text-classifier` |
 | [`attn_multihead_retrieval.tns`](../../examples/attn_multihead_retrieval.tns) | 4-head attention, rank-4, real PyTorch-trained weights, Associative Recall (Section 2.11) | `make demo-attn-retrieval` |
+| [`attn_relational_eligibility.tns`](../../examples/attn_relational_eligibility.tns) | single-head attention (hop 1) + elementwise combine (hop 2), real PyTorch-trained weights, two-hop relational reasoning (course eligibility) — harder than Associative Recall, honestly ~75% accurate | `make demo-attn-relational` |
 | [`vit_attention_block.tns`](../../examples/vit_attention_block.tns) | one self-attention block, 12-head/768-dim, real weights from a genuine pretrained ViT-Base checkpoint (not just a small model trained for the demo); reused, at every encoder layer and inside a live model, by the two demos to its right | `make demo-vit-attention-one-layer` / `make demo-vit-attention-all-layers` / `make demo-vit-attention-substitution` |
 | [`vit_attention_weights.tns`](../../examples/vit_attention_weights.tns) | the same block, stopped right after `softmax` — returns the attention matrix itself, for a per-head attention-heatmap visualization over a real photograph | `make demo-vit-attention-viz` |
 | [`optimizations/*.tns`](../../examples/optimizations/) | one file per Level-1 pass (positive case) — `dead_code.tns`, `shape_fold.tns`, `reshape_cancel.tns`, `transpose_cancel.tns`, `elementwise_fusion.tns`, `linear_bias_activation.tns` | `tensora --emit-graph examples/optimizations/dead_code.tns` vs `--emit-optimized-graph` |
