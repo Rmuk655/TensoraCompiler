@@ -225,8 +225,8 @@ python3 tools/models/prepare_text_attn_demo.py      # single-head attention text
 python3 tools/models/prepare_multihead_attn_demo.py # 4-head attention associative-retrieval model
 python3 tools/models/prepare_vit_attention_demo.py  # downloads real pretrained ViT-Base (google/vit-base-patch16-224-in21k),
                                                      # extracts one real attention block's weights + hidden state
-                                                     # (needs `pip install transformers safetensors pillow` in addition
-                                                     # to tools/models/requirements.txt, and internet access once)
+                                                     # (needs internet access once; transformers/safetensors/pillow
+                                                     # are already in tools/models/requirements.txt)
 ```
 
 `demo-vit-attention-substitution` prepares (and downloads) its own
