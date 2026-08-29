@@ -25,7 +25,7 @@ demos/artifacts/
 tools/models/*.pt
 weights/
 CLAUDE.md
-docs/role/*
+docs/roles/
 .github/copilot-instructions.md
 
 # Mechanical concatenation of the source tree, regenerated on demand by
