@@ -59,16 +59,21 @@ below) is parallel automatically. `make`'s targets already pass
 Or use the convenience wrapper (same thing, less typing):
 
 ```bash
-make build     # configure + build everything
-make test      # build + run the full ctest suite
-make example   # build + run every per-phase demo in order (demos/01..06)
-make demo      # build + run every showcase demo (viz, independent, benchmark, real-world)
+make build          # configure + build everything
+make test           # build + run the full ctest suite
+make example        # build + run every per-phase demo in order (demos/01..06)
+make compiler-demos # example, plus viz/independent/benchmark -- every demo about the compiler itself
+make tensora-demos  # every real-world inference demo (genuine PyTorch-trained models through Tensora)
+make demo           # compiler-demos + tensora-demos together, one command
 make clean
 ```
 
-`make example` is the per-phase walkthrough; `make demo` is the
-showcase/real-world set. Both, and every individual target, are listed
-in "Make target reference" at the end of this file.
+`make example` is the per-phase walkthrough; `make compiler-demos`
+widens that to every demo exercising the compiler itself (adding
+visualization/independent-pipeline/benchmark); `make tensora-demos` is
+the real-world set; `make demo` (alias `make demos`) runs both groups.
+Every individual target is listed in "Make target reference" at the
+end of this file.
 
 ## Build one phase at a time
 
@@ -326,7 +331,9 @@ authoritative equivalents.
 | `test-lexer` … `test-codegen` | build a phase, then `ctest -L <phase>` |
 | `example` (`examples`) | run all per-phase demos (01…06) in order |
 | `lexer-example` … `codegen-example`, `final-example` | one phase demo (01…06) |
-| `demo` (`demos`) | run all showcase demos (skips unprepared/absent-tool ones) |
+| `compiler-demos` | `example`, plus `viz`/`demo-independent`/`benchmark` -- every demo about the compiler itself |
+| `tensora-demos` | run all 10 real-world inference demos (skips unprepared/absent-tool ones) |
+| `demo` (`demos`) | `compiler-demos` + `tensora-demos` together -- every demo, one command |
 | `demo-mlp-placement`, `demo-cnn-image-classifier`, ... `demo-vit-attention-substitution` | one real-world inference demo (10 total; README.md's Real-World Inference Demos section lists all of them in order) |
 | `setup-demos` | prepare every real-world demo's weights/inputs in one command |
 | `viz` | render AST/TCG/MLIR graphs to PNGs (needs Graphviz) |

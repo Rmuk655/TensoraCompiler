@@ -7,7 +7,7 @@ BUILD ?= build
 # multi-core machine. Override with `make build JOBS=1` if needed.
 JOBS ?= $(shell nproc 2>/dev/null || echo 4)
 
-.PHONY: build test example examples demo demos clean appendix benchmark viz demo-independent \
+.PHONY: build test example examples demo demos compiler-demos tensora-demos clean appendix benchmark viz demo-independent \
         lexer parser semantic optimization codegen full \
         test-lexer test-parser test-semantic test-optimization test-codegen \
         lexer-example parser-example semantic-example optimization-example codegen-example \
@@ -53,8 +53,10 @@ test: build
 # order -- source text walked through every phase on the bundled
 # examples/*.tns, ending at the full-pipeline capstone (demo 06). Each
 # phase's demo can still be run on its own via the `*-example` targets
-# below. (`make demo` is the other axis: the real-world / showcase
-# demos, not the phase walkthrough -- see further down.)
+# below. This is one piece of the broader `make compiler-demos` group
+# (every demo about the COMPILER ITSELF); `make tensora-demos` is the
+# other axis, real-world models run THROUGH the compiler -- see
+# further down.
 example examples:
 	$(QUIET_BUILD)
 	./demos/01_lexer_demo.sh
@@ -83,22 +85,30 @@ codegen-example: build
 final-example: build
 	./demos/06_final_compiler_demo.sh
 
-# `make demo` (alias `demos`) runs ALL showcase demos: the benchmark,
-# the independent-pipeline demo, the visualization demo, and every
-# real-world inference demo (README.md's Real-World Inference Demos
-# section lists them in order). The real-world demos need a one-time
-# PyTorch artifact-prep step (see demo-* targets below); this aggregate
-# SKIPS each one whose demos/artifacts/<name>/ is absent, with a clear
-# message, so `make demo` still succeeds on a fresh clone. The
+# `make compiler-demos` runs every demo about the COMPILER ITSELF: the
+# six per-phase walkthroughs above (`make example`), then the
+# benchmark, the independent-pipeline demo, and the visualization demo
+# -- none of these run a real-world trained model, they exercise the
+# compiler's own phases/tooling. `make tensora-demos` (below) is the
+# other group: real-world models run THROUGH Tensora. The
 # visualization demo is skipped if Graphviz (`dot`) is not installed.
-# (`make example` is the other axis: the per-phase walkthrough.)
-demo demos:
-	$(QUIET_BUILD)
+compiler-demos: example
 	@echo "==> benchmark";            ./$(BUILD)/benchmark_matmul_tiling
 	@echo "==> independent pipeline"; ./demos/07_independent_run_demo.sh $(BUILD)
 	@if command -v dot >/dev/null 2>&1; then \
 	  echo "==> visualization"; ./demos/08_viz_demo.sh $${FILE:-examples/optimizations/dead_code.tns} $(BUILD); \
 	else echo "SKIP viz: Graphviz not found (sudo apt install graphviz)"; fi
+
+# `make tensora-demos` runs every real-world inference demo (README.md's
+# Real-World Inference Demos section lists them in order, with what
+# each one demonstrates) -- genuine PyTorch-trained models run through
+# Tensora, as opposed to `make compiler-demos`'s tests of the compiler
+# itself. Each needs a one-time PyTorch artifact-prep step (see demo-*
+# targets below, or `make setup-demos`); this aggregate SKIPS each one
+# whose demos/artifacts/<name>/ is absent, with a clear message, so it
+# still succeeds on a fresh clone.
+tensora-demos:
+	$(QUIET_BUILD)
 	@for pair in mlp:mlp_placement cnn:cnn_image_classifier grid_detector:cnn_grid_detector grid_detector_real:cnn_grid_detector_real attn:attn_text_classifier attn_mh:attn_retrieval vit_attn:vit_attention_one_layer; do \
 	  name=$${pair%%:*}; script=$${pair##*:}; \
 	  if [ -d "demos/artifacts/$$name" ]; then \
@@ -117,6 +127,11 @@ demo demos:
 	else \
 	  echo "SKIP vit_attention_substitution: transformers not installed (pip install transformers safetensors pillow)"; \
 	fi
+
+# `make demo` (alias `demos`) is the historical full aggregate: both
+# groups above, one command. Prefer `make compiler-demos` or
+# `make tensora-demos` directly for a more focused run.
+demo demos: compiler-demos tensora-demos
 
 clean:
 	rm -rf $(BUILD)
@@ -177,9 +192,10 @@ demo-vit-attention-all-layers: build
 
 # Optional: renders PNGs from Tensora's own compiled output for
 # examples/vit_attention_weights.tns. Needs matplotlib in addition to
-# demo-vit-attention-one-layer's prerequisites; not part of `make demo`
-# (produces image files for inspection, not a pass/fail check, though
-# it does assert Tensora's weights match the real model).
+# demo-vit-attention-one-layer's prerequisites; not part of
+# `make tensora-demos` (produces image files for inspection, not a
+# pass/fail check, though it does assert Tensora's weights match the
+# real model).
 demo-vit-attention-viz: build
 	python3 tools/models/visualize_vit_attention.py $(BUILD)
 
