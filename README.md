@@ -256,16 +256,16 @@ photo or encoder layer doesn't need editing the script.
 | 10 | `demo-vit-attention-substitution` | 5 real photos, real pretrained weights | splices Tensora's own recomputation of one block into a **live** real ImageNet-1k classifier mid-inference and shows the real-world prediction survives, on 5 visibly different photographs |
 
 ``` bash
-make demo-mlp-placement
-make demo-cnn-image-classifier
-make demo-cnn-grid-detector
-make demo-cnn-grid-detector-real
-make demo-attn-text-classifier
-make demo-attn-retrieval
-make demo-vit-attention-one-layer
-make demo-vit-attention-all-layers
-make demo-vit-attention-viz
-make demo-vit-attention-substitution
+make demo-mlp-placement               # tabular MLP: linear->relu->linear binary classifier
+make demo-cnn-image-classifier        # whole-image "what is it" classification (STL-10 photos)
+make demo-cnn-grid-detector           # toy "what AND where": fixed-grid localization on synthetic shapes
+make demo-cnn-grid-detector-real      # same grid localization, on real annotated VOC photographs
+make demo-attn-text-classifier        # single-head self-attention topic classifier
+make demo-attn-retrieval              # 4-head self-attention associative key-value retrieval
+make demo-vit-attention-one-layer     # one real ViT-Base attention block vs. the real model's own output
+make demo-vit-attention-all-layers    # the same check at all 12 encoder layers (PASS 12/12)
+make demo-vit-attention-viz           # renders that block's attention weights as PNGs (needs matplotlib)
+make demo-vit-attention-substitution  # splices Tensora's block into a live pretrained classifier and checks the prediction survives
 ```
 
 `make tensora-demos` runs all ten in this order; it skips (with a
@@ -334,29 +334,8 @@ just one cherry-picked layer.
 
 `make demo-vit-attention-viz` (optional, needs `matplotlib`) renders
 six pictures of what that attention block is actually looking at in
-the photo. Every panel is bordered to show where its data came from: a
-solid green "TENSORA-VERIFIED" frame means Tensora computed it; a
-dashed gray "reference only" frame means it's real-model PyTorch data
-Tensora did not compute.
-
-- `attention_heatmap.png` — which parts of the photo each attention
-  head focuses on (different heads notice different things).
-- `attention_rollout.png` — how attention builds up across all 12
-  layers into one clear summary of what the whole model is looking at.
-- `attention_microscope.png` — three specific patches (face / body /
-  background), compared across individual heads — showing heads don't
-  all attend the same way, something an averaged view would hide. Pass
-  a `"row,col"` argument (each `0`-`13`) to inspect a different patch,
-  e.g. `python3 tools/models/visualize_vit_attention.py build 6,7`.
-- `attention_asymmetry.png` — attention is one-directional: patch A
-  attending to patch B isn't the same as B attending to A. Draws the
-  three most lopsided examples as labeled arrows.
-- `attention_diagnostics.png` — how focused vs. spread-out each head
-  is, plus a picture of how small the Tensora-vs-PyTorch error is
-  (near-black = indistinguishable).
-- `attention_topk_boxes.png` — the same "what does it focus on" idea
-  as the heatmap, but as exact boxes around the top-5 most-attended
-  patches instead of a blurred color overlay.
+the photo, each labeled to show whether Tensora computed it or it's
+reference-only PyTorch data.
 
 `make demo-vit-attention-substitution` puts the ViT demos together: it
 takes a full, live, pretrained ImageNet classifier, swaps one of its
@@ -365,19 +344,16 @@ mid-inference, and runs 5 real photographs (dog, car, elephant,
 airplane, cat) through it. On all 5, the prediction is unchanged
 (final-logit error ~1e-6) — Tensora's output works as a drop-in
 replacement for that block inside a real model, not only a numerical
-match in isolation. Also renders a visual dashboard (baseline vs.
-substituted prediction, per photo) under
-`demos/artifacts/vit_substitution/*.png` if `matplotlib` is installed.
-This demo prepares its own checkpoint on first run (separate from
-`setup-tensora-demos`, since it also needs a *built* `tensora` binary
-at prep time, not only numpy) — see the script's header for the
-one-time setup.
+match in isolation. This demo prepares its own checkpoint on first run
+(separate from `setup-tensora-demos`, since it also needs a *built*
+`tensora` binary at prep time, not only numpy) — see the script's
+header for the one-time setup.
 
 For a deeper explanation of each demo's output and design choices
 (e.g. why the grid detectors don't do box regression or
 non-max-suppression, or the exact provenance and meaning of each
-`vit_attn/*.png` figure), see [Reading the real-world demo output in
-depth](docs/development/BUILD.md#reading-the-real-world-demo-output-in-depth)
+`vit_attn/*.png` figure), see ["Reading the real-world demo output in
+depth"](docs/development/BUILD.md#reading-the-real-world-demo-output-in-depth)
 in `docs/development/BUILD.md`.
 
 ## Known limitations

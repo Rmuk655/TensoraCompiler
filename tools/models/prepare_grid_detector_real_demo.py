@@ -32,9 +32,13 @@ Run once (needs PyTorch + scipy + Pillow, and internet access to fetch
 ~1500 small preview images from HuggingFace, one time, no dataset
 download):
     python3 tools/models/prepare_grid_detector_real_demo.py
+Safe to re-run: skips everything if
+demos/artifacts/grid_detector_real/eval/ already exists (pass --force
+to redo).
 """
 import json
 import os
+import sys
 import urllib.request
 
 import numpy as np
@@ -208,6 +212,11 @@ class GridDetector(nn.Module):
 
 
 def main():
+    marker = os.path.join(OUT_DIR, "eval", "meta.json")
+    if os.path.exists(marker) and "--force" not in sys.argv:
+        print(f"Already prepared: {os.path.normpath(marker)} exists "
+              "(delete demos/artifacts/grid_detector_real/, or pass --force, to redo)")
+        return
     torch.manual_seed(SEED)
     os.makedirs(CACHE_DIR, exist_ok=True)
 
