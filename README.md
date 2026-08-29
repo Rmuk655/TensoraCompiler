@@ -146,7 +146,12 @@ demos/06_final_compiler_demo.sh # --run and -o across MLP / tiled matmul / CNN /
 Run from the repository root after building (`cmake --build build`).
 `make example` (alias `make examples`) runs all six in order; each is
 also its own target (`make lexer-example` … `make codegen-example`,
-`make final-example`).
+`make final-example`). These six, plus the visualization/independent-
+pipeline/benchmark demos just below, together make up
+`make compiler-demos` — every demo that exercises the **compiler
+itself** rather than a real-world trained model (that's
+`make tensora-demos`, see [Real-World Inference
+Demos](#real-world-inference-demos) below).
 
 Each script accepts an optional `.tns` file as its first argument
 (defaults to a sensible example under `examples/`) and an optional
@@ -182,10 +187,10 @@ not to change what any program computes.
 
 # Visualization, Independent Pipeline, and Benchmarks
 
-Three more demos sit alongside the per-phase ones. Each is its own
-`make` target, and `make demo` (alias `make demos`) runs them together
-with the real-world demos below (skipping any whose artifacts or tools
-are absent):
+Three more demos sit alongside the per-phase ones, still part of
+`make compiler-demos` (none of them run a real-world trained model).
+Each is its own `make` target too, and skips itself if its tools are
+absent:
 
 ``` bash
 make viz              # demos/08 -- render AST / TCG (before+after opt) / MLIR DAG to PNGs (needs Graphviz `dot`)
@@ -279,11 +284,12 @@ make demo-vit-attention-viz
 make demo-vit-attention-substitution
 ```
 
-`make demo` runs all ten in this order (plus visualization,
-independent-pipeline, and benchmark demos above); it skips (with a
-message) any real-world demo whose artifacts have not been prepared
-(or, for the substitution demo, whose `transformers` dependency is not
-installed), so it still succeeds on a fresh clone.
+`make tensora-demos` runs all ten in this order; it skips (with a
+message) any demo whose artifacts have not been prepared (or, for the
+substitution demo, whose `transformers` dependency is not installed),
+so it still succeeds on a fresh clone. `make demo` (alias `make demos`)
+runs `compiler-demos` and `tensora-demos` together — every demo in the
+repository, one command.
 
 Real values reach the compiled graph through `tensora --run --data-dir`
 (one float32 `.npy` per input/weight); see
@@ -317,10 +323,15 @@ reference exactly (max prob error ~4e-7 over 6144 cells) — the
 compiler is not in question — but the small, from-scratch CNN itself,
 trained on only ~1000-1300 real photographs, has honestly weak
 precision (recall ~49%, many false-positive cells on real, cluttered
-backgrounds). It is included as-is, not polished away, because a demo
-suite that only ever shows clean results would be less useful than one
-that also shows what a small model trained on little real data
-actually looks like.
+backgrounds — often dozens of same-class regions per photograph). It
+is included as-is, not polished away: the printed per-photo region
+count and the recall figure below reflect every raw cell prediction,
+unfiltered. The annotated PNG itself draws only the single
+highest-confidence region per photograph (dozens of overlapping boxes
+would be illegible), so a demo suite that only ever shows clean
+results would be less useful than one that also shows what a small
+model trained on little real data actually looks like — the honest
+numbers are in the printed stats, not hidden by the picture.
 
 ### 5-6: self-attention
 

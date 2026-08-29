@@ -86,36 +86,61 @@ def boxes_from_cells(cell_ids):
     return boxes
 
 
-def annotate(idx, pred_cells, probs):
+def region_confidence(cls_idx, r0, r1, c0, c1, probs):
+    return float(probs[cls_idx, r0:r1 + 1, c0:c1 + 1].max())
+
+
+def top_region(regions, probs):
+    """The small from-scratch CNN's raw per-cell output on real,
+    cluttered photos is noisy -- often dozens of same-class regions
+    across a single photo (see the recall/precision note below) --
+    which makes drawing every region illegible. Picking only the
+    single highest-confidence region per photo keeps the figure
+    readable; the full-region count and object-cell recall further
+    down still report the raw, unfiltered behavior honestly."""
+    if not regions:
+        return None
+    return max(regions, key=lambda reg: region_confidence(*reg, probs))
+
+
+def annotate(idx, region, probs):
     src = os.path.join(d, f"image_{idx}.png")
-    if not os.path.exists(src):
+    if not os.path.exists(src) or region is None:
         return None
     img = Image.open(src).convert("RGB")
     scale = 4
     img = img.resize((IMG * scale, IMG * scale), Image.NEAREST)
     draw = ImageDraw.Draw(img)
-    for cls_idx, r0, r1, c0, c1 in boxes_from_cells(pred_cells):
-        cls = CLASSES[cls_idx]
-        x0, y0 = c0 * CELL * scale, r0 * CELL * scale
-        x1, y1 = (c1 + 1) * CELL * scale, (r1 + 1) * CELL * scale
-        conf = float(probs[cls_idx, r0:r1 + 1, c0:c1 + 1].max())
-        draw.rectangle([x0, y0, x1 - 1, y1 - 1], outline=BOX_COLOR[cls], width=3)
-        draw.text((x0 + 3, y0 + 3), f"{cls.upper()} {conf:.2f}", fill=BOX_COLOR[cls])
+    cls_idx, r0, r1, c0, c1 = region
+    cls = CLASSES[cls_idx]
+    x0, y0 = c0 * CELL * scale, r0 * CELL * scale
+    x1, y1 = (c1 + 1) * CELL * scale, (r1 + 1) * CELL * scale
+    conf = region_confidence(cls_idx, r0, r1, c0, c1, probs)
+    draw.rectangle([x0, y0, x1 - 1, y1 - 1], outline=BOX_COLOR[cls], width=3)
+    draw.text((x0 + 3, y0 + 3), f"{cls.upper()} {conf:.2f}", fill=BOX_COLOR[cls])
     out = os.path.join(d, f"image_{idx}_detected.png")
     img.save(out)
     return out
 
 
-print(f"Showing {len(meta['display'])} of {N} localized photographs:\n")
+print(f"Showing {len(meta['display'])} of {N} localized photographs "
+      f"(each annotated with only its single highest-confidence region "
+      f"-- see below for the full, unfiltered per-cell statistics):\n")
 for b in meta["display"]:
     pred_cells = got[b].argmax(0)
     regions = boxes_from_cells(pred_cells)
+    best = top_region(regions, got[b])
     n_true = len({(int(truth[b, r, c])) for r in range(GRID) for c in range(GRID) if truth[b, r, c] != 0})
     print(f"  Photo (row {b} of {N}):")
     print(f"    Ground-truth classes present: {n_true}")
-    print(f"    Tensora regions detected:     {len(regions)} -> " +
-          ", ".join(f"{CLASSES[c]}" for c, *_ in regions) if regions else "    Tensora regions detected:     0")
-    out = annotate(b, pred_cells, got[b])
+    print(f"    Raw regions (unfiltered):     {len(regions)}")
+    if best is not None:
+        cls_idx = best[0]
+        conf = region_confidence(*best, got[b])
+        print(f"    Top-confidence detection:     {CLASSES[cls_idx]} ({conf:.2f})")
+    else:
+        print(f"    Top-confidence detection:     none")
+    out = annotate(b, best, got[b])
     if out:
         print(f"    Annotated image: {out}")
 PY
