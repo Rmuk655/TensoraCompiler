@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Multi-head attention real-inference demo: associative key-value
-# retrieval (4 heads).
+# Multi-head attention real-inference demo: Associative Recall (AR),
+# single-query form (4 heads).
 #
 # A different task from attn_text_classifier_demo.sh's single-head
 # topic classification -- chosen to give multi-head attention
@@ -9,7 +9,9 @@
 # model must retrieve the value bound to that key *in this specific
 # sequence* (the binding is reshuffled every time, so it cannot be
 # memorized -- see examples/attn_multihead_retrieval.tns's header for
-# why this demonstrates the same "read the right earlier position"
+# why this is the standard "Associative Recall" benchmark task
+# (Ba et al. 2016; Arora et al.'s "Zoology", arXiv:2312.04927) and how
+# it demonstrates the same "read the right earlier position"
 # mechanism a real language model uses for next-token prediction).
 # Runs the full Tensora pipeline (--run, JIT) in one go and checks
 # every row against the PyTorch reference saved at prep time. Only
@@ -29,7 +31,7 @@ if [ ! -d "$EVAL" ]; then
   exit 1
 fi
 
-echo "=== Tensora Multi-Head Attention Real-World Demo: associative key-value retrieval ==="
+echo "=== Tensora Multi-Head Attention Real-World Demo: Associative Recall (single-query) ==="
 echo "Model: examples/attn_multihead_retrieval.tns (4-head self-attention -> select query position -> linear -> relu -> linear)"
 echo
 
