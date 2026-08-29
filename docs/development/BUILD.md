@@ -162,7 +162,7 @@ on stderr and sets a non-zero exit code.
 
 `make example` runs every per-phase demo (01…06) in order. For a single
 phase's demo (source in, phase output out — the same `demos/*.sh`
-scripts README.md's Phase Demos section describes), use the matching
+scripts README.md's Compiler Demos section describes), use the matching
 `-example` target instead:
 
 ```bash
@@ -231,7 +231,7 @@ creates `.venv/` and installs `tools/models/requirements.txt` into it:
 ```bash
 ./tools/setup-dev.sh --demos     # one time: creates .venv, installs torch etc.
 source .venv/bin/activate        # 'which python' -> .venv/bin/python
-make setup-demos                 # runs every tools/models/prepare_*.py script once
+make setup-tensora-demos          # runs every tools/models/prepare_*.py script once (alias: setup-demos)
 deactivate                       # when finished
 ```
 
@@ -335,7 +335,7 @@ authoritative equivalents.
 | `tensora-demos` | run all 10 real-world inference demos (skips unprepared/absent-tool ones) |
 | `demo` (`demos`) | `compiler-demos` + `tensora-demos` together -- every demo, one command |
 | `demo-mlp-placement`, `demo-cnn-image-classifier`, ... `demo-vit-attention-substitution` | one real-world inference demo (10 total; README.md's Real-World Inference Demos section lists all of them in order) |
-| `setup-demos` | prepare every real-world demo's weights/inputs in one command |
+| `setup-tensora-demos` (`setup-demos`) | prepare every real-world demo's weights/inputs in one command |
 | `viz` | render AST/TCG/MLIR graphs to PNGs (needs Graphviz) |
 | `demo-independent` | run emitted IR through upstream mlir-opt/llc/lli |
 | `benchmark` | measure matmul-tiling speedup |

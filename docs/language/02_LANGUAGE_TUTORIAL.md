@@ -43,7 +43,7 @@ real self-attention block taken from a genuine pretrained ViT-Base
 Transformer and verify Tensora's output against PyTorch's to
 `1.86e-07`. See the [README's real-world
 demos](../../README.md#real-world-inference-demos) for that payoff
-(one-time setup: `make setup-demos` — nothing below needs it yet), and
+(one-time setup: `make setup-tensora-demos` — nothing below needs it yet), and
 Section 2.14 for the full, honest case for why Tensora exists
 alongside PyTorch rather than instead of it.
 
@@ -397,7 +397,7 @@ PyTorch reference. See
 [`docs/development/BUILD.md`](../development/BUILD.md) for the full
 `--data-dir`/`--output` reference, and the [README's real-world
 demos](../../README.md#real-world-inference-demos) section for how to
-prepare each one. `make setup-demos` prepares every one of them in one
+prepare each one. `make setup-tensora-demos` prepares every one of them in one
 command (Section 2.0).
 
 **Give it knobs.** A static demo is interesting once; one you can

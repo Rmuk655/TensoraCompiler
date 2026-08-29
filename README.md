@@ -122,60 +122,41 @@ at a time (`make test-lexer`, `make test-parser`, etc.), and
 for the toolchain policy (platform, compiler, LLVM/MLIR version,
 warnings, debugging, git workflow).
 
-# Tensora Phase Demos
+# Compiler Demos
 
-There are six scripts: one per compiler phase, plus one that runs the
-whole pipeline together. Each is a thin wrapper around the real,
+These demos exercise the **compiler itself** — no real-world trained
+model involved (for that, see [Real-World Inference
+Demos](#real-world-inference-demos) below). Together they make up
+`make compiler-demos`. Each script is a thin wrapper around the real,
 tested artifacts — the `tensora` CLI driver
 ([`src/driver/main.cpp`](src/driver/main.cpp)) and the `test_passes`
 CTest binary
 ([`tests/optimization/test_passes.cpp`](tests/optimization/test_passes.cpp))
-— not a separate copy of any compiler logic.
+— not a separate copy of any compiler logic. Run from the repository
+root after building (`cmake --build build`); each script accepts an
+optional `.tns` file as its first argument (defaults to a sensible
+example under `examples/`) and an optional build-directory path as its
+second argument (defaults to `build`).
 
-**Demo commands** (one per phase; the table below has the full map):
+## One demo per phase
 
-``` bash
-demos/01_lexer_demo.sh          # --emit-tokens
-demos/02_parser_demo.sh         # --emit-parse-tree, --emit-ast, --emit-ast-dot
-demos/03_semantic_demo.sh       # --check, --emit-symbols, --emit-graph, --emit-graph-dot, --explain
-demos/04_optimization_demo.sh   # --emit-optimized-graph, the 6 Level-1 passes
-demos/05_codegen_demo.sh        # --emit-mlir, --emit-llvm
-demos/06_final_compiler_demo.sh # --run and -o across MLP / tiled matmul / CNN / attention
-```
-
-Run from the repository root after building (`cmake --build build`).
-`make example` (alias `make examples`) runs all six in order; each is
-also its own target (`make lexer-example` … `make codegen-example`,
-`make final-example`). These six, plus the visualization/independent-
-pipeline/benchmark demos just below, together make up
-`make compiler-demos` — every demo that exercises the **compiler
-itself** rather than a real-world trained model (that's
-`make tensora-demos`, see [Real-World Inference
-Demos](#real-world-inference-demos) below).
-
-Each script accepts an optional `.tns` file as its first argument
-(defaults to a sensible example under `examples/`) and an optional
-build-directory path as its second argument (defaults to `build`).
+`make example` (alias `make examples`) runs all six below in order;
+each is also its own target (`make lexer-example` … `make
+codegen-example`, `make final-example`).
 
 | Script | Phase | What it runs |
 |---|---|---|
-| `01_lexer_demo.sh` | Lexer | `tensora --emit-tokens` |
-| `02_parser_demo.sh` | Parser | `tensora --emit-parse-tree`, `--emit-ast`, `--emit-ast-dot` |
-| `03_semantic_demo.sh` | Semantic analysis | `tensora --check`, `--emit-symbols`, `--emit-graph`, `--emit-graph-dot`, `--explain` |
-| `04_optimization_demo.sh` | Level-1 graph optimization | `tensora --emit-optimized-graph`; `test_passes` on named pass cases (positive + near-miss) |
-| `05_codegen_demo.sh` | Lowering + Level-2 tiling | `tensora --emit-mlir`, `--emit-llvm` |
-| `06_final_compiler_demo.sh` | Full pipeline | `tensora --run` and `-o` across MLP / tiled matmul / CNN / attention |
+| `demos/01_lexer_demo.sh` | Lexer | `tensora --emit-tokens` |
+| `demos/02_parser_demo.sh` | Parser | `tensora --emit-parse-tree`, `--emit-ast`, `--emit-ast-dot` |
+| `demos/03_semantic_demo.sh` | Semantic analysis | `tensora --check`, `--emit-symbols`, `--emit-graph`, `--emit-graph-dot`, `--explain` |
+| `demos/04_optimization_demo.sh` | Level-1 graph optimization | `tensora --emit-optimized-graph`; `test_passes` on named pass cases (positive + near-miss) |
+| `demos/05_codegen_demo.sh` | Lowering + Level-2 tiling | `tensora --emit-mlir`, `--emit-llvm` |
+| `demos/06_final_compiler_demo.sh` | Full pipeline | `tensora --run` and `-o` across MLP / tiled matmul / CNN / attention |
 
-You can inspect every intermediate form the compiler produces
-directly, one flag per stage: tokens (`--emit-tokens`), the raw ANTLR
-parse tree (`--emit-parse-tree`), the AST (`--emit-ast`/`--emit-ast-dot`),
-the symbol table (`--emit-symbols`, RM 3.6 — global declarations, each
-graph's local scope, and its name-resolution log), the Typed
-Computation Graph before and after optimization
-(`--emit-graph`/`--emit-graph-dot`, `--emit-optimized-graph`), MLIR
-(`--emit-mlir`), and LLVM IR (`--emit-llvm`). This is useful for
-debugging one phase, or for a demo, without running the whole
-pipeline.
+Each `--emit-*` flag above dumps one stage on its own (tokens, parse
+tree, AST, symbol table, TCG before/after optimization, MLIR, LLVM IR)
+— useful for debugging or demoing a single phase without running the
+whole pipeline.
 
 The `--polyhedral` flag is an optional lowering path: it runs `linalg`
 through the MLIR affine dialect and one real polyhedral pass
@@ -185,12 +166,10 @@ same result on every runnable example (see
 it exists to prove Tensora's output can drive polyhedral optimization,
 not to change what any program computes.
 
-# Visualization, Independent Pipeline, and Benchmarks
+## Visualization, Independent Pipeline, and Benchmarks
 
-Three more demos sit alongside the per-phase ones, still part of
-`make compiler-demos` (none of them run a real-world trained model).
-Each is its own `make` target too, and skips itself if its tools are
-absent:
+Three more demos, still part of `make compiler-demos`. Each is its own
+`make` target too, and skips itself if its tools are absent:
 
 ``` bash
 make viz              # demos/08 -- render AST / TCG (before+after opt) / MLIR DAG to PNGs (needs Graphviz `dot`)
@@ -216,12 +195,13 @@ LLVM → native execution), and check the result against a PyTorch
 reference. **Each needs its weights and inputs prepared once first**,
 on a machine with PyTorch
 ([`tools/models/requirements.txt`](tools/models/requirements.txt)); the
-demo runners themselves need only numpy. `make setup-demos` runs every
-preparation script below in one command (needs internet access and
-~350MB of disk, one time, for the ViT checkpoint):
+demo runners themselves need only numpy. `make setup-tensora-demos`
+(alias `make setup-demos`) runs every preparation script below in one
+command (needs internet access and ~350MB of disk, one time, for the
+ViT checkpoint):
 
 ``` bash
-make setup-demos
+make setup-tensora-demos
 ```
 
 which is equivalent to running these one time, each of which trains
@@ -246,9 +226,9 @@ separate checkpoint on first run —
 `google/vit-base-patch16-224` (a real ImageNet-1k *classifier*, unlike
 the headless `-in21k` encoder above) — via
 `tools/models/prepare_vit_substitution_demo.py`; it is not part of
-`setup-demos` because, unlike every other demo here, it also needs a
-built `tensora` binary at prep time (it shells out to it directly to
-recompute one block), not only numpy.
+`setup-tensora-demos` because, unlike every other demo here, it also
+needs a built `tensora` binary at prep time (it shells out to it
+directly to recompute one block), not only numpy.
 
 `prepare_vit_attention_demo.py` also accepts two overrides, forwarded
 through `make prep-vit-attention IMAGE=... LAYER=...` or set directly
@@ -301,165 +281,95 @@ Straightforward feed-forward and convolutional classifiers, trained on
 real (STL-10) or realistic tabular data — the baseline "does Tensora
 run a real trained model correctly" case the harder demos build on.
 
-### 3-4: fixed-grid object localization ("what AND where")
+### 3-4: object detection — "what AND where"
 
-`demo-cnn-grid-detector` classifies every cell of a fixed 4x4 grid over
-a 32x32 image containing 1-3 colored shapes (circle/square/triangle),
-then draws a box + label at each non-background cell — the "what AND
-where" complement to `demo-cnn-image-classifier`'s "what" (a single
-whole-image label). It predicts a class per cell, not a continuous
-`[x, y, w, h]` box (v1's `return` names exactly one tensor, so a
-second, box-regression output would need a feature not yet in the
-language — see `examples/cnn_grid_detector.tns`'s header comment), so
-detected boxes sit at that cell's own fixed pixel boundary, not a
-tightly-fit box around the shape. Because training data guarantees at
-most one object per grid cell, no non-max suppression is needed either.
+Plain classification (demos 1-2) only answers "what is in this image."
+`demo-cnn-grid-detector` answers a harder question: "what, **and
+where**." It splits a small 32x32 image into a 4x4 grid, predicts one
+object class per cell (circle/square/triangle), and draws a labeled
+box around every cell that isn't empty — a simplified version of how
+early object-detector networks like YOLO work. Because each cell can
+only hold one object by construction, there's no need for the
+duplicate-box cleanup ("non-max suppression") real detectors need.
 
-`demo-cnn-grid-detector-real` is the same architecture family and the
-same design constraints, applied to real, human-annotated Pascal VOC
-2012 photographs (person/car/dog/bicycle/bus) at a finer 16x16 grid
-instead of drawn shapes at 4x4. Tensora still matches its own PyTorch
-reference exactly (max prob error ~4e-7 over 6144 cells) — the
-compiler is not in question — but the small, from-scratch CNN itself,
-trained on only ~1000-1300 real photographs, has honestly weak
-precision (recall ~49%, many false-positive cells on real, cluttered
-backgrounds — often dozens of same-class regions per photograph). It
-is included as-is, not polished away: the printed per-photo region
-count and the recall figure below reflect every raw cell prediction,
-unfiltered. The annotated PNG itself draws only the single
-highest-confidence region per photograph (dozens of overlapping boxes
-would be illegible), so a demo suite that only ever shows clean
-results would be less useful than one that also shows what a small
-model trained on little real data actually looks like — the honest
-numbers are in the printed stats, not hidden by the picture.
+`demo-cnn-grid-detector-real` is the same idea on real photographs
+instead of drawn shapes — real Pascal VOC 2012 street photos
+(person/car/dog/bicycle/bus), at a finer 16x16 grid. Tensora's output
+still matches PyTorch exactly, but the small model itself, trained on
+only ~1,000 real photos, is honestly not very accurate (it finds a
+real object only about half the time, with plenty of false alarms on
+cluttered backgrounds). That's shown, not hidden: the printed stats
+report the raw, unfiltered numbers, and the picture shows only the
+model's single best guess per photo so it stays readable.
 
-### 5-6: self-attention
+### 5-6: self-attention — the mechanism behind Transformers
 
-`demo-attn-text-classifier` is single-head self-attention over short
-synthetic sentences (topic classification: weather/food/sports).
-`demo-attn-retrieval` is a harder task on the same underlying
-mechanism: 4-head, rank-4 batched attention doing associative
-key-value retrieval across 6 shuffled slots — a deliberately different
-task from the single-head demo (a reshuffled binding every example, so
-it cannot be memorized), exercising batched matmul/transpose/sum at
-rank 4 and a one-hot-selector read-out pattern in place of indexing.
+`demo-attn-text-classifier` answers "what topic is this sentence
+about?" (weather / food / sports) using single-head self-attention —
+the same core building block inside every Transformer model (GPT,
+BERT, ViT), just at toy scale.
+
+`demo-attn-retrieval` is a harder task on that same mechanism: given a
+shuffled list of key-value pairs, find the value for one requested key
+— a lookup the model has to actually perform, not memorize, since the
+shuffle changes every example. It uses 4 attention heads instead of 1,
+closer to how real Transformers scale attention up.
 
 ### 7-10: a real pretrained Transformer (ViT-Base)
 
-Unlike the demos above (which train their own small PyTorch model from
-scratch to get realistic-but-synthetic parameters), demos 7-10 extract
-weights and hidden states from a genuine, third-party, open-source
-pretrained checkpoint rather than a small model trained for the demo.
+Demos 1-6 train their own small model from scratch. Demos 7-10 instead
+borrow real, pretrained weights from a genuine, publicly available
+Transformer — Google's ViT-Base image model — and check that Tensora
+computes exactly what that real model computes.
 
-`demo-vit-attention-one-layer` checks Tensora's compiled output for one
-self-attention block against that same real pretrained model's own
-output for the same block, on a real photograph.
-`demo-vit-attention-all-layers` (`demos/vit_attention_all_layers_demo.sh`)
-repeats that check independently at **all 12 encoder layers**: for
-each layer it feeds that layer's own real input hidden state and real
-pretrained weights through the real `tensora` CLI and compares against
-that layer's own real output, printing a per-layer max-error table and
-`PASS 12/12` — materially stronger than checking a single layer.
+`demo-vit-attention-one-layer` recomputes one real self-attention block
+from ViT-Base and checks it against that model's own output, on a real
+photograph. `demo-vit-attention-all-layers` repeats that check
+independently for **all 12 layers** of the model (`PASS 12/12`), not
+just one cherry-picked layer.
 
-`make demo-vit-attention-viz` (optional, needs `matplotlib` in addition
-to the packages above) goes one step further: it runs
-[`examples/vit_attention_weights.tns`](examples/vit_attention_weights.tns)
-— the same block, stopped right after `softmax` — through the real
-`tensora` CLI, checks Tensora's own attention weights against the real
-model's, and renders six PNGs under `demos/artifacts/vit_attn/`. Every
-panel is bordered to show its provenance: a solid green
-"TENSORA-VERIFIED" frame means the data came from Tensora's own
-compiled/checked output; a dashed gray "reference only" frame means it
-is real-model PyTorch data that Tensora did not compute.
+`make demo-vit-attention-viz` (optional, needs `matplotlib`) renders
+six pictures of what that attention block is actually looking at in
+the photo. Every panel is bordered to show where its data came from: a
+solid green "TENSORA-VERIFIED" frame means Tensora computed it; a
+dashed gray "reference only" frame means it's real-model PyTorch data
+Tensora did not compute.
 
-- `attention_heatmap.png` — one panel per head, showing which patches
-  of the real input photograph the [CLS] token attends to most **per
-  head** — the concrete, visual reason multi-head attention exists,
-  since different heads visibly attend to different parts of the same
-  image — using Tensora's own compiled computation rather than a hand
-  re-derivation.
-- `attention_rollout.png` — a head-averaged view of the
-  Tensora-verified layer next to a full **attention-rollout** trace
-  across all 12 encoder layers (Abnar & Zuidema, 2020; computed
-  directly from the real model's own per-layer attention, since Tensora
-  compiles one block, not the whole chain — hence its dashed
-  "reference only" frame). A single early layer's attention is
-  genuinely noisy (it captures local texture, not semantics); the
-  rollout is the standard technique for a legible summary of where the
-  model's attention concentrates, and cleanly highlights the
-  photographed subject.
-- `attention_microscope.png` — the [CLS] row is only one slice of the
-  full, Tensora-verified `[197, 197]` attention matrix. This figure
-  inspects three patches at once — one on the dog's face, one on its
-  body, one on the background, picked ahead of time from the image's
-  own patch-grid colors, not cherry-picked after seeing the results —
-  and for each patch shows the mean-over-heads "attends to" map next
-  to three **individual heads'** "attends to" maps (the head with the
-  lowest, middle, and highest [CLS]-attention entropy), plus the
-  mean "attended back" column. The per-head columns matter: the
-  mean-over-heads maps for all three patches look similar (a couple of
-  globally-salient background patches dominate every average), but at
-  least one individual head attends very differently depending on the
-  query patch — a structure the mean alone hides. Pass a `"row,col"`
-  argument (each `0`-`13`, since the image is a 14×14 grid of patches)
-  to inspect one specific patch instead, e.g.
-  `python3 tools/models/visualize_vit_attention.py build 6,7`.
-- `attention_asymmetry.png` — attention is directional:
-  `Attention(A → B) ≠ Attention(B → A)` in general. This figure finds
-  the top-3 most asymmetric patch pairs in the Tensora-verified layer
-  and draws each as a distinctly colored arrow with both directions'
-  weights labeled directly on the image (thick = the stronger
-  direction, thin = the weaker), rather than crowding the photo with
-  every candidate pair.
-- `attention_diagnostics.png` — two quantitative checks that don't
-  depend on a human judging a picture: (a) per-head attention entropy,
-  labeled `head 0`-`head 11` with each bar's numeric value (a focused
-  head has low entropy, a diffuse one has high entropy — both computed
-  straight from Tensora's own output), and (b) a
-  real-model-vs-Tensora attention error map at a dramatically enlarged
-  scale, so the "these match" claim is a picture (near-black, i.e. the
-  two are numerically indistinguishable) rather than only the printed
-  max-error number.
-- `attention_topk_boxes.png` — the same "attends to" row from Figures 1
-  and 3, but drawn without a heatmap: a colormap overlay with bilinear
-  interpolation between 14x14 cells adds visual information the model
-  didn't produce. This figure instead draws a box around exactly the
-  top-5 attended patches, each labeled with its printed attention
-  weight and nothing else — a literal picture of what the
-  Tensora-verified matrix contains, not an interpolated impression of
-  it. Pass a `"row,col"` argument for a different query patch, same as
-  Figure 3.
+- `attention_heatmap.png` — which parts of the photo each attention
+  head focuses on (different heads notice different things).
+- `attention_rollout.png` — how attention builds up across all 12
+  layers into one clear summary of what the whole model is looking at.
+- `attention_microscope.png` — three specific patches (face / body /
+  background), compared across individual heads — showing heads don't
+  all attend the same way, something an averaged view would hide. Pass
+  a `"row,col"` argument (each `0`-`13`) to inspect a different patch,
+  e.g. `python3 tools/models/visualize_vit_attention.py build 6,7`.
+- `attention_asymmetry.png` — attention is one-directional: patch A
+  attending to patch B isn't the same as B attending to A. Draws the
+  three most lopsided examples as labeled arrows.
+- `attention_diagnostics.png` — how focused vs. spread-out each head
+  is, plus a picture of how small the Tensora-vs-PyTorch error is
+  (near-black = indistinguishable).
+- `attention_topk_boxes.png` — the same "what does it focus on" idea
+  as the heatmap, but as exact boxes around the top-5 most-attended
+  patches instead of a blurred color overlay.
 
-`make demo-vit-attention-substitution`
-(`demos/vit_attention_substitution_demo.sh`,
-`tools/models/prepare_vit_substitution_demo.py`) is the strongest
-practical-usefulness demo of the set. Every ViT demo above proves a
-*numerical* claim in isolation ("Tensora's output tensor for this block
-matches PyTorch's own output tensor for this block"). This one goes
-further: it loads `google/vit-base-patch16-224` — a real, pretrained
-**1000-way ImageNet classifier**, not the headless `-in21k` encoder the
-other ViT demos use — runs each of **five visibly different real
-photographs** (dog, car, elephant, airplane, cat) through it once
-unmodified to get a baseline prediction, then **splices Tensora's own
-recomputation of the last encoder layer's attention block into the
-live model** (via a forward-hook monkey-patch) and runs the *same*
-photograph through the *same* model again. Everything except that one
-block — the patch-embedding convolution, the other 11 attention
-blocks, every MLP block and layernorm, and the classifier head — is
-the real, unmodified HuggingFace model. Result: on all 5 photographs,
-the predicted label and confidence are unchanged (final-logit max abs
-error ~1e-6, 11 encoder layers plus a classifier head downstream of
-the substitution point). That is the difference between "Tensora's
-numbers are numerically close" and "Tensora's compiled output is a
-functional drop-in replacement inside a real production inference
-pipeline." Also renders a visual dashboard (input photo, top-5
-probability bars baseline-vs-substituted, a layer-substitution
-schematic, and a numeric-error meter) per photograph plus a one-row
-summary gallery, under `demos/artifacts/vit_substitution/*.png`, if
-`matplotlib` is installed. This demo prepares its own checkpoint on
-first run (separate from `setup-demos`, since it also needs a *built*
-`tensora` binary at prep time, not only numpy) — see the script's
-header for the one-time setup.
+`make demo-vit-attention-substitution` is the strongest demo of the
+set. Every ViT demo above proves a numerical claim in isolation
+("Tensora's output matches PyTorch's, for this one block"). This one
+goes further: it takes a full, live, pretrained ImageNet classifier,
+**swaps one of its internal attention blocks for Tensora's own
+computation of that block mid-inference**, and runs 5 real photographs
+(dog, car, elephant, airplane, cat) through it. On all 5, the
+prediction is unchanged (final-logit error ~1e-6) — proof that
+Tensora's output isn't just numerically close, it's a working drop-in
+replacement inside a real model. Also renders a visual dashboard
+(baseline vs. substituted prediction, per photo) under
+`demos/artifacts/vit_substitution/*.png` if `matplotlib` is installed.
+This demo prepares its own checkpoint on first run (separate from
+`setup-tensora-demos`, since it also needs a *built* `tensora` binary
+at prep time, not only numpy) — see the script's header for the
+one-time setup.
 
 ## Known limitations
 
