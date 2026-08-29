@@ -368,6 +368,13 @@ depth"](docs/development/BUILD.md#reading-the-real-world-demo-output-in-depth).
   (non-symbolic) shapes (see `docs/testing/TEST_MATRIX.md` LOW-005).
   Use `examples/mlp_concrete.tns`, not `examples/mlp.tns`, for those
   stages.
+- `--run`/`-o` only execute tensors up to rank 4 (see
+  `MAX_SUPPORTED_RANK` in `src/driver/main.cpp`) — this is a limit of
+  that JIT-execution CLI helper, not of the language or the MLIR/LLVM
+  lowering (which have no rank cap). Nothing in the language or the
+  demos needs more than rank 4 today (rank-4, 4-head batched attention
+  is the highest rank in use); raising the ceiling only needs a new
+  `case` line in that file's dispatch switches, not new lowering work.
 - The Transformer demos are a self-attention **classifier** and a
   self-attention **associative-retrieval** model, both built from
   Tensora's existing operators — a full pretrained BERT/DistilBERT QA
