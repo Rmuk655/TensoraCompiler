@@ -38,8 +38,7 @@ ImageNet-1k, with a real 1000-way classification head):
 This is still an honest boundary: only the one attention block's
 Q@K/softmax/@V/output-projection math is computed by Tensora (as
 every other ViT demo states, Tensora does not yet have patch-embedding
-convolution/layernorm/GELU -- see
-docs/ProjectMgmt/11_OPEN_SOURCE_AND_RESEARCH_ROADMAP.md Section 9).
+convolution/layernorm/GELU -- to be considered in future).
 Steps 1, 2, 4 and 5 above are ordinary PyTorch/HuggingFace code; step 3
 is the only place Tensora's own compiled binary runs. What's new here,
 versus the other ViT demos, is stitching Tensora's block output back
