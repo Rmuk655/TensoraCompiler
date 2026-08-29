@@ -42,9 +42,12 @@ retrieves all 30 held-out queries and the demo compares every row
 against PyTorch. Run once, on a machine with PyTorch (see
 tools/models/requirements.txt):
     python3 tools/models/prepare_multihead_attn_demo.py
+Safe to re-run: skips everything if demos/artifacts/attn_mh/eval/
+already exists (pass --force to redo).
 """
 import json
 import os
+import sys
 
 import numpy as np
 
@@ -138,6 +141,11 @@ class Retrieval(nn.Module):
 
 
 def main():
+    marker = os.path.join(OUT_DIR, "eval", "meta.json")
+    if os.path.exists(marker) and "--force" not in sys.argv:
+        print(f"Already prepared: {os.path.normpath(marker)} exists "
+              "(delete demos/artifacts/attn_mh/, or pass --force, to redo)")
+        return
     torch.manual_seed(SEED)
     rng = np.random.default_rng(SEED)
     model = Retrieval()

@@ -237,9 +237,12 @@ deactivate                       # when finished
 
 Safe to re-run: each prepare script is skipped (no re-download,
 re-training, or other network/compute work) if its
-`demos/artifacts/<name>/eval/` already exists. Delete one demo's
-`demos/artifacts/<name>/` directory to force just that demo to redo
-its preparation from scratch.
+`demos/artifacts/<name>/eval/` already exists -- both when run via
+`make setup-tensora-demos` and when run directly (e.g.
+`python3 tools/models/prepare_stl10_demo.py`). Delete one demo's
+`demos/artifacts/<name>/` directory, or pass `--force` to that
+script directly, to redo just that one demo's preparation from
+scratch.
 
 Artifacts land in `demos/artifacts/`
 (git-ignored, reproduced on demand). The demo runners themselves need

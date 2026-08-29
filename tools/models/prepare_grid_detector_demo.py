@@ -22,6 +22,8 @@ examples/cnn_grid_detector.tns --data-dir demos/artifacts/grid_detector/eval`.
 Run once (see tools/models/requirements.txt, no download needed -- the
 "dataset" is synthesized on the fly, unlike the STL-10/ViT demos):
     python3 tools/models/prepare_grid_detector_demo.py
+Safe to re-run: skips everything if demos/artifacts/grid_detector/eval/
+already exists (pass --force to redo).
 
 The data is synthetic (not a real photo dataset) because v1's grid
 detector is meant to demonstrate WHAT the language/compiler can express
@@ -35,6 +37,7 @@ Tensora ever sees them) and later draws the output boxes on screen
 """
 import json
 import os
+import sys
 
 import numpy as np
 
@@ -115,6 +118,11 @@ class GridDetector(nn.Module):
 
 
 def main():
+    marker = os.path.join(OUT_DIR, "eval", "meta.json")
+    if os.path.exists(marker) and "--force" not in sys.argv:
+        print(f"Already prepared: {os.path.normpath(marker)} exists "
+              "(delete demos/artifacts/grid_detector/, or pass --force, to redo)")
+        return
     torch.manual_seed(SEED)
     rng = np.random.default_rng(SEED)
 
