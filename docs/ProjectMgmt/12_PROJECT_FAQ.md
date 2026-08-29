@@ -92,8 +92,11 @@ cat ../examples/attention.tns
 
 `transpose`, `matmul`, scalar `*`, `softmax`, `matmul` — rank-2,
 single-head (the tutorial's Section 2.11 shows the rank-4 multi-head
-version, which type-checks and now also lowers, since batched matmul
-is implemented; see Section 12.5). Expected output:
+version, which type-checks and now also lowers and runs, since batched
+matmul is implemented; see Section 12.5, and
+`examples/attn_multihead_retrieval.tns`/`make
+demo-attn-retrieval` for the real-trained-weights version). Expected
+output:
 
 ```text
 ran 'attention' with synthetic all-ones inputs

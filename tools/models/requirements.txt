@@ -13,8 +13,18 @@
 # an OS package, not pip (the PyPI `graphviz` package is only Python
 # bindings that still shell out to the system `dot`), so install it with:
 #   sudo apt install graphviz
+#
+# tools/models/prepare_vit_attention_demo.py additionally needs these
+# (it downloads a real pretrained checkpoint from HuggingFace Hub, so
+# also needs internet access once):
+#   pip install transformers safetensors pillow
+# `make setup-demos` installs all of the below in one step, including
+# these three, so a fresh clone needs only that one command.
 torch
 torchvision
 numpy
 pandas
 matplotlib
+transformers
+safetensors
+pillow

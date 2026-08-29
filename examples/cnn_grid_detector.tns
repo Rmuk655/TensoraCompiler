@@ -1,0 +1,63 @@
+# Fixed-grid CNN object detector (real-inference demo).
+#
+# "What can Tensora run?" progression: classification (examples/
+# cnn_stl10.tns: one label per whole image) -> DETECTION (this file:
+# one label PER GRID CELL, i.e. what *and* roughly where) -> attention
+# (examples/vit_attention_block.tns). Early-YOLO-style: the 32x32 input
+# image is divided into a fixed 4x4 grid (each cell is an 8x8 pixel
+# region); the network predicts, independently for every cell, which
+# of 3 shape classes (or "background", meaning no object) has its
+# center in that cell. Up to 3 objects, each in its own cell, so cells
+# are non-overlapping by construction -- no non-max suppression is
+# needed, unlike a full detector.
+#
+# Deliberately simpler than box-regression detection: this program
+# predicts only a per-cell CLASS, not a continuous [x, y, w, h] box, so
+# the displayed box is that cell's own fixed pixel region (README's
+# Real-World Inference Demos section explains why: box regression needs
+# a second graph output, and v1's `return` names exactly one tensor --
+# see Section 3.6 of the reference manual). That is an honest
+# simplification, not a hidden one: "found both objects and told me
+# roughly where" at grid resolution, not sub-cell precision.
+#
+# The 4x4 grid falls out of the backbone's downsampling arithmetic
+# (RM 3.16/3.17), not a separate design choice: three conv/pool stages
+# each halve height and width (32 -> 16 -> 8 -> 4), so the last
+# feature map is already exactly one activation vector per grid cell.
+# The detection head is then a 1x1 conv2d -- a per-cell linear
+# classifier applied identically at every spatial position, with no
+# reshape or flatten needed at all: `conv2d` with a 1x1 kernel and
+# `padding=0` on a [batch, channel, 4, 4] input produces a [batch,
+# channel=4, 4, 4] output directly (the channel axis now holds 4
+# classes: background + 3 shapes), and `softmax(..., axis=channel)`
+# then normalizes each cell's 4-way distribution independently, since
+# `axis=channel` names an existing axis of the tensor without touching
+# `height`/`width` at all (RM 3.11).
+#
+# Trained once in PyTorch by tools/models/prepare_grid_detector_demo.py
+# on synthetic 32x32 images (each with 0-3 colored circles/squares/
+# triangles placed one per grid cell).
+input  image: Tensor[batch=30, channel=3, height=32, width=32]
+weight Wc1: Tensor[out_channel=16, in_channel=3,  kh=3, kw=3]
+weight bc1: Tensor[out_channel=16]
+weight Wc2: Tensor[out_channel=32, in_channel=16, kh=3, kw=3]
+weight bc2: Tensor[out_channel=32]
+weight Wc3: Tensor[out_channel=32, in_channel=32, kh=3, kw=3]
+weight bc3: Tensor[out_channel=32]
+weight Whead: Tensor[out_channel=4, in_channel=32, kh=1, kw=1]
+weight bhead: Tensor[out_channel=4]
+
+graph grid_detector {
+    x = conv2d(image, Wc1, bc1, stride=1, padding=1)   # [B,16,32,32]
+    x = relu(x)
+    x = maxpool(x, size=2)                              # [B,16,16,16]
+    x = conv2d(x, Wc2, bc2, stride=1, padding=1)        # [B,32,16,16]
+    x = relu(x)
+    x = maxpool(x, size=2)                              # [B,32,8,8]
+    x = conv2d(x, Wc3, bc3, stride=1, padding=1)        # [B,32,8,8]
+    x = relu(x)
+    x = maxpool(x, size=2)                              # [B,32,4,4] -- one vector per grid cell
+    cell_logits = conv2d(x, Whead, bhead, stride=1, padding=0)  # [B,channel=4,4,4] (4 classes)
+    cell_probs  = softmax(cell_logits, axis=channel)
+    return cell_probs
+}

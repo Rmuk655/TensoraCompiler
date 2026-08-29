@@ -232,8 +232,9 @@ Level-1 optimization, a project-authored Level-2 MLIR tiling pass, and
 MLIR/LLVM lowering to both JIT execution and a genuine ahead-of-time
 native executable — covering 14 of the 15 operators in
 `docs/testing/TEST_MATRIX.md`'s coverage roll-up (every one except
-general reshape), validated end to end on five real workloads (MLP,
-tiled matmul, CNN, Transformer FFN, single-head attention). What was
+general reshape), validated end to end on six real workloads (MLP,
+tiled matmul, CNN, Transformer FFN, single-head attention, multi-head
+attention). What was
 measured: exact numeric correctness against hand- or reference-computed
 values for every workload, and honest (not cherry-picked) timing
 showing tiling overhead losing at small problem sizes. What worked:

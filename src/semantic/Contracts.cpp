@@ -448,6 +448,10 @@ const Type* checkMaxPool(const Type* xType, int64_t size, int64_t stride, Contra
     return fail(ctx, DiagCode::SemaConvArithmetic, "maxpool: stride must be a positive integer; found " +
                                                         std::to_string(stride));
   }
+  if (size <= 0) {
+    return fail(ctx, DiagCode::SemaConvArithmetic,
+                "maxpool: size must be a positive integer; found " + std::to_string(size));
+  }
 
   int64_t hNum = h.constant - size;   // maxpool == conv2d's formula with padding=0
   int64_t wNum = wd.constant - size;
