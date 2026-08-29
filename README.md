@@ -22,15 +22,20 @@ input/weight), and load them into a compiled Tensora program with
 Tensora then statically verifies, optimizes, and runs that exact
 computation through MLIR/LLVM, and its result matches the PyTorch
 reference within floating-point tolerance. This is not a synthetic
-claim: six demos under `demos/` are genuine, end-to-end, PyTorch-trained
+claim: ten demos under `demos/` are genuine, end-to-end, PyTorch-trained
 programs running through Tensora this way — a tabular MLP, a CNN image
-classifier, a fixed-grid CNN object detector, a single-head
-self-attention text classifier, a 4-head self-attention
-associative-retrieval model, and (going one step further) one real
-self-attention block extracted from a genuine, third-party pretrained
-Transformer (`google/vit-base-patch16-224-in21k`), checked against that
-model's own output on a real photograph — see
-[Real-World Inference Demos](#real-world-inference-demos) below. A
+classifier, a fixed-grid CNN object detector (on synthetic shapes, then
+on real annotated photographs), a single-head self-attention text
+classifier, a 4-head self-attention associative-retrieval model, and
+(going one step further) several demos built on one real self-attention
+block extracted from a genuine, third-party pretrained Transformer
+(`google/vit-base-patch16-224[-in21k]`) — checked against that model's
+own output on a real photograph, verified independently at all 12
+encoder layers, and, strongest of all, spliced into a **live** copy of
+that model mid-inference to confirm its real-world prediction survives
+unchanged. See
+[Real-World Inference Demos](#real-world-inference-demos) below for the
+full list, in order of difficulty. A
 deeper, compile-time integration (for example registering Tensora as a
 `torch.compile` backend, or converging with PyTorch's own MLIR path) is
 design work, not yet built — see
