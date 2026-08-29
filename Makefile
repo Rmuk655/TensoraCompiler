@@ -143,16 +143,24 @@ clean:
 # (alias `setup-demos`) below runs every preparation script in one
 # command -- named to match `tensora-demos`, since this only prepares
 # those, not `compiler-demos` (which needs no preparation). The demo
-# runners themselves need only numpy (no torch).
+# runners themselves need only numpy (no torch). Each prepare script
+# finishes by writing demos/artifacts/<name>/eval/meta.json, so this
+# SKIPS any script whose <name>/eval/meta.json already exists instead
+# of redoing its (sometimes slow, network-bound) work -- delete that
+# demo's demos/artifacts/<name>/ directory to force a from-scratch
+# re-run of just that one demo.
 setup-demos setup-tensora-demos:
 	pip install -q -r tools/models/requirements.txt
-	python3 tools/models/prepare_mlp_demo.py
-	python3 tools/models/prepare_stl10_demo.py
-	python3 tools/models/prepare_grid_detector_demo.py
-	python3 tools/models/prepare_grid_detector_real_demo.py
-	python3 tools/models/prepare_text_attn_demo.py
-	python3 tools/models/prepare_multihead_attn_demo.py
-	python3 tools/models/prepare_vit_attention_demo.py
+	@for pair in mlp:prepare_mlp_demo cnn:prepare_stl10_demo grid_detector:prepare_grid_detector_demo \
+	             grid_detector_real:prepare_grid_detector_real_demo attn:prepare_text_attn_demo \
+	             attn_mh:prepare_multihead_attn_demo vit_attn:prepare_vit_attention_demo; do \
+	  name=$${pair%%:*}; script=$${pair##*:}; \
+	  if [ -f "demos/artifacts/$$name/eval/meta.json" ]; then \
+	    echo "==> $$script: already prepared (demos/artifacts/$$name/eval/ exists, skipping)"; \
+	  else \
+	    echo "==> $$script"; python3 tools/models/$$script.py; \
+	  fi; \
+	done
 	@echo "==> setup-tensora-demos done. Try: make demo-vit-attention-viz"
 
 # Re-run just the ViT preparation step with a different photo and/or
