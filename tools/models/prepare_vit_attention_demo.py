@@ -85,9 +85,9 @@ in examples/attn_multihead_retrieval.tns, now checked at
 production scale against genuine pretrained parameters.
 
 Only the attention block is compiled; the rest of ViT (patch-embedding
-convolution, layernorm, GELU) is future scope for Tensora (see
-docs/ProjectMgmt/11_OPEN_SOURCE_AND_RESEARCH_ROADMAP.md Section 9) --
-this demo does not claim to run the whole model.
+convolution, layernorm, GELU) is future scope for Tensora (to be
+considered in future) -- this demo does not claim to run the whole
+model.
 
 Needs `transformers`, `safetensors`, and `pillow` in addition to
 tools/models/requirements.txt (PyTorch download of a ~350MB checkpoint,

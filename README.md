@@ -36,9 +36,7 @@ See
 full list, in order of difficulty. A
 deeper, compile-time integration (for example registering Tensora as a
 `torch.compile` backend, or converging with PyTorch's own MLIR path) is
-design work, not yet built — see
-[docs/ProjectMgmt/11_OPEN_SOURCE_AND_RESEARCH_ROADMAP.md](docs/ProjectMgmt/11_OPEN_SOURCE_AND_RESEARCH_ROADMAP.md)
-§9.
+design work, not yet built — to be considered in future.
 
 The expected high-level pipeline is:
 
@@ -382,14 +380,10 @@ depth"](docs/development/BUILD.md#reading-the-real-world-demo-output-in-depth).
   self-attention **associative-retrieval** model, both built from
   Tensora's existing operators — a full pretrained BERT/DistilBERT QA
   model needs operators Tensora does not yet have (embedding/gather,
-  layernorm, GELU, integer tensors), tracked in
-  [docs/ProjectMgmt/11_OPEN_SOURCE_AND_RESEARCH_ROADMAP.md](docs/ProjectMgmt/11_OPEN_SOURCE_AND_RESEARCH_ROADMAP.md)
-  §8.9a/§8.9.
+  layernorm, GELU, integer tensors); to be considered in future.
 - The only way to get data into a compiled Tensora program today is
   `.npy` files (`--data-dir`) — there is no in-memory way to hand
   Tensora a live tensor from another process. Making Tensora a
   first-class interop target (for example, a PyTorch custom op that
   passes tensors directly, no file round-trip) is needed for Tensora to
-  be useful across wider use cases; see
-  [docs/ProjectMgmt/11_OPEN_SOURCE_AND_RESEARCH_ROADMAP.md](docs/ProjectMgmt/11_OPEN_SOURCE_AND_RESEARCH_ROADMAP.md)
-  §9.
+  be useful across wider use cases; to be considered in future.
