@@ -13,7 +13,7 @@ JOBS ?= $(shell nproc 2>/dev/null || echo 4)
         lexer-example parser-example semantic-example optimization-example codegen-example \
         final-example demo-mlp-placement demo-cnn-image-classifier demo-attn-text-classifier \
         demo-attn-retrieval demo-cnn-grid-detector demo-cnn-grid-detector-real demo-vit-attention-one-layer demo-vit-attention-all-layers demo-vit-attention-viz \
-        demo-vit-attention-substitution setup-demos prep-vit-attention
+        demo-vit-attention-substitution setup-demos setup-tensora-demos prep-vit-attention
 
 # Configure only when there is no build tree yet. CMake's generated
 # build system re-runs configure by itself when CMakeLists.txt changes
@@ -47,7 +47,7 @@ test: build
 # phase-specific executable to build here, unlike `lexer`/`parser`/etc.
 # above, so every target below depends on the full `build`, and each
 # just runs the matching demos/*.sh script (the existing "one demo per
-# phase" mechanism -- see README.md's Phase Demos section) instead of
+# phase" mechanism -- see README.md's Compiler Demos section) instead of
 # duplicating its logic here.
 # `make example` (alias `examples`) runs ALL phase example demos in
 # order -- source text walked through every phase on the bundled
@@ -104,7 +104,7 @@ compiler-demos: example
 # each one demonstrates) -- genuine PyTorch-trained models run through
 # Tensora, as opposed to `make compiler-demos`'s tests of the compiler
 # itself. Each needs a one-time PyTorch artifact-prep step (see demo-*
-# targets below, or `make setup-demos`); this aggregate SKIPS each one
+# targets below, or `make setup-tensora-demos`); this aggregate SKIPS each one
 # whose demos/artifacts/<name>/ is absent, with a clear message, so it
 # still succeeds on a fresh clone.
 tensora-demos:
@@ -139,10 +139,12 @@ clean:
 # Real-world inference demos: full descriptions, order, and what each
 # one demonstrates are in README.md's "Real-World Inference Demos"
 # section (the single canonical listing -- not repeated here). Prepare
-# the artifacts first (needs PyTorch, one time); `make setup-demos`
-# below runs every preparation script in one command. The demo runners
-# themselves need only numpy (no torch).
-setup-demos:
+# the artifacts first (needs PyTorch, one time); `make setup-tensora-demos`
+# (alias `setup-demos`) below runs every preparation script in one
+# command -- named to match `tensora-demos`, since this only prepares
+# those, not `compiler-demos` (which needs no preparation). The demo
+# runners themselves need only numpy (no torch).
+setup-demos setup-tensora-demos:
 	pip install -q -r tools/models/requirements.txt
 	python3 tools/models/prepare_mlp_demo.py
 	python3 tools/models/prepare_stl10_demo.py
@@ -151,7 +153,7 @@ setup-demos:
 	python3 tools/models/prepare_text_attn_demo.py
 	python3 tools/models/prepare_multihead_attn_demo.py
 	python3 tools/models/prepare_vit_attention_demo.py
-	@echo "==> setup-demos done. Try: make demo-vit-attention-viz"
+	@echo "==> setup-tensora-demos done. Try: make demo-vit-attention-viz"
 
 # Re-run just the ViT preparation step with a different photo and/or
 # encoder layer, e.g.:
