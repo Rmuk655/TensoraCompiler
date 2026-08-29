@@ -235,6 +235,12 @@ make setup-tensora-demos          # runs every tools/models/prepare_*.py script 
 deactivate                       # when finished
 ```
 
+Safe to re-run: each prepare script is skipped (no re-download,
+re-training, or other network/compute work) if its
+`demos/artifacts/<name>/eval/` already exists. Delete one demo's
+`demos/artifacts/<name>/` directory to force just that demo to redo
+its preparation from scratch.
+
 Artifacts land in `demos/artifacts/`
 (git-ignored, reproduced on demand). The demo runners themselves need
 only numpy, so `make demo-*` works without the venv active once the
@@ -243,6 +249,138 @@ and reports Tensora-vs-PyTorch agreement over the whole batch, showing
 a few examples in detail. The CNN prep caches its trained model at
 `demos/artifacts/cnn-model.pt` (the slow step); delete that file to
 retrain from scratch.
+
+## Reading the real-world demo output in depth
+
+README.md's [Real-World Inference
+Demos](../../README.md#real-world-inference-demos) section is the
+concise, canonical overview -- what problem each demo solves and what
+technique it uses. This section is the deeper reference for readers
+who want to interpret one demo's *output* in more detail once it's
+running: design choices, exact provenance of every figure, and what
+each printed/rendered artifact means.
+
+**`demo-cnn-grid-detector` / `demo-cnn-grid-detector-real`.** Both
+predict one object class per grid cell, not a continuous `[x, y, w,
+h]` box -- v1's `return` names exactly one tensor, so a second,
+box-regression output would need a feature not yet in the language
+(see `examples/cnn_grid_detector.tns`'s header comment). Detected
+boxes therefore sit at a cell's own fixed pixel boundary, not a
+tightly-fit box around the object. Because training data guarantees at
+most one object per grid cell, no duplicate-box cleanup ("non-max
+suppression") is needed either. `demo-cnn-grid-detector-real`'s
+printed per-photo region count and recall figure reflect every raw
+per-cell prediction, unfiltered (recall ~49%, many false-positive
+cells on cluttered real backgrounds -- often dozens of same-class
+regions per photograph); the annotated PNG itself draws only the
+single highest-confidence region per photograph, since dozens of
+overlapping boxes would be illegible. The honest numbers are always in
+the printed stats, never hidden by the picture.
+
+**`demo-attn-retrieval`.** The retrieval task is 4-head, rank-4 batched
+attention doing associative key-value retrieval across 6 shuffled
+slots -- a reshuffled binding every example, so it cannot be
+memorized. It exercises batched matmul/transpose/sum at rank 4 and a
+one-hot-selector read-out pattern in place of indexing, a materially
+different code path from the single-head, rank-2/3 attention in
+`demo-attn-text-classifier`.
+
+**`demo-vit-attention-one-layer` / `demo-vit-attention-all-layers`.**
+The one-layer demo checks Tensora's compiled output for one
+self-attention block against that same real pretrained model's own
+output for the same block, on a real photograph.
+`demo-vit-attention-all-layers` (`demos/vit_attention_all_layers_demo.sh`)
+repeats that check independently at all 12 encoder layers: for each
+layer it feeds that layer's own real input hidden state and real
+pretrained weights through the real `tensora` CLI and compares against
+that layer's own real output, printing a per-layer max-error table and
+`PASS 12/12`.
+
+**`demo-vit-attention-viz`** runs `examples/vit_attention_weights.tns`
+-- the same block, stopped right after `softmax` -- through the real
+`tensora` CLI, checks Tensora's own attention weights against the real
+model's, and renders six PNGs under `demos/artifacts/vit_attn/`. Every
+panel is bordered to show its provenance: a solid green
+"TENSORA-VERIFIED" frame means the data came from Tensora's own
+compiled/checked output; a dashed gray "reference only" frame means it
+is real-model PyTorch data that Tensora did not compute.
+
+- `attention_heatmap.png` — one panel per head, showing which patches
+  of the real input photograph the [CLS] token attends to most **per
+  head** — the concrete, visual reason multi-head attention exists,
+  since different heads visibly attend to different parts of the same
+  image — using Tensora's own compiled computation rather than a hand
+  re-derivation.
+- `attention_rollout.png` — a head-averaged view of the
+  Tensora-verified layer next to a full **attention-rollout** trace
+  across all 12 encoder layers (Abnar & Zuidema, 2020; computed
+  directly from the real model's own per-layer attention, since Tensora
+  compiles one block, not the whole chain — hence its dashed
+  "reference only" frame). A single early layer's attention is
+  genuinely noisy (it captures local texture, not semantics); the
+  rollout is the standard technique for a legible summary of where the
+  model's attention concentrates, and cleanly highlights the
+  photographed subject.
+- `attention_microscope.png` — the [CLS] row is only one slice of the
+  full, Tensora-verified `[197, 197]` attention matrix. This figure
+  inspects three patches at once — one on the dog's face, one on its
+  body, one on the background, picked ahead of time from the image's
+  own patch-grid colors, not cherry-picked after seeing the results —
+  and for each patch shows the mean-over-heads "attends to" map next
+  to three **individual heads'** "attends to" maps (the head with the
+  lowest, middle, and highest [CLS]-attention entropy), plus the
+  mean "attended back" column. The per-head columns matter: the
+  mean-over-heads maps for all three patches look similar (a couple of
+  globally-salient background patches dominate every average), but at
+  least one individual head attends very differently depending on the
+  query patch — a structure the mean alone hides. Pass a `"row,col"`
+  argument (each `0`-`13`, since the image is a 14×14 grid of patches)
+  to inspect one specific patch instead, e.g.
+  `python3 tools/models/visualize_vit_attention.py build 6,7`.
+- `attention_asymmetry.png` — attention is directional:
+  `Attention(A → B) ≠ Attention(B → A)` in general. This figure finds
+  the top-3 most asymmetric patch pairs in the Tensora-verified layer
+  and draws each as a distinctly colored arrow with both directions'
+  weights labeled directly on the image (thick = the stronger
+  direction, thin = the weaker), rather than crowding the photo with
+  every candidate pair.
+- `attention_diagnostics.png` — two quantitative checks that don't
+  depend on a human judging a picture: (a) per-head attention entropy,
+  labeled `head 0`-`head 11` with each bar's numeric value (a focused
+  head has low entropy, a diffuse one has high entropy — both computed
+  straight from Tensora's own output), and (b) a
+  real-model-vs-Tensora attention error map at a dramatically enlarged
+  scale, so the "these match" claim is a picture (near-black, i.e. the
+  two are numerically indistinguishable) rather than only the printed
+  max-error number.
+- `attention_topk_boxes.png` — the same "attends to" row from Figures 1
+  and 3, but drawn without a heatmap: a colormap overlay with bilinear
+  interpolation between 14x14 cells adds visual information the model
+  didn't produce. This figure instead draws a box around exactly the
+  top-5 attended patches, each labeled with its printed attention
+  weight and nothing else — a literal picture of what the
+  Tensora-verified matrix contains, not an interpolated impression of
+  it. Pass a `"row,col"` argument for a different query patch, same as
+  Figure 3.
+
+**`demo-vit-attention-substitution`**
+(`demos/vit_attention_substitution_demo.sh`,
+`tools/models/prepare_vit_substitution_demo.py`) loads
+`google/vit-base-patch16-224` — a real, pretrained 1000-way ImageNet
+classifier, not the headless `-in21k` encoder the other ViT demos use
+— runs each of five visibly different real photographs (dog, car,
+elephant, airplane, cat) through it once unmodified to get a baseline
+prediction, then splices Tensora's own recomputation of the last
+encoder layer's attention block into the live model (via a
+forward-hook monkey-patch) and runs the same photograph through the
+same model again. Everything except that one block — the
+patch-embedding convolution, the other 11 attention blocks, every MLP
+block and layernorm, and the classifier head — is the real, unmodified
+HuggingFace model. Also renders a visual dashboard (input photo, top-5
+probability bars baseline-vs-substituted, a layer-substitution
+schematic, and a numeric-error meter) per photograph plus a one-row
+summary gallery, under `demos/artifacts/vit_substitution/*.png`, if
+`matplotlib` is installed.
 
 ## Visualization, independent pipeline, and benchmark
 

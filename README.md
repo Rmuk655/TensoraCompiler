@@ -198,7 +198,11 @@ on a machine with PyTorch
 demo runners themselves need only numpy. `make setup-tensora-demos`
 (alias `make setup-demos`) runs every preparation script below in one
 command (needs internet access and ~350MB of disk, one time, for the
-ViT checkpoint):
+ViT checkpoint). It's safe to re-run: each script is skipped if its
+`demos/artifacts/<name>/eval/` already exists, so re-running never
+redoes a download/training step that already finished; delete a
+specific demo's `demos/artifacts/<name>/` directory to force it to
+redo that one demo from scratch:
 
 ``` bash
 make setup-tensora-demos
@@ -368,6 +372,13 @@ This demo prepares its own checkpoint on first run (separate from
 `setup-tensora-demos`, since it also needs a *built* `tensora` binary
 at prep time, not only numpy) — see the script's header for the
 one-time setup.
+
+For a deeper explanation of each demo's output and design choices
+(e.g. why the grid detectors don't do box regression or
+non-max-suppression, or the exact provenance and meaning of each
+`vit_attn/*.png` figure), see [Reading the real-world demo output in
+depth](docs/development/BUILD.md#reading-the-real-world-demo-output-in-depth)
+in `docs/development/BUILD.md`.
 
 ## Known limitations
 
