@@ -178,13 +178,19 @@ make benchmark        # measure Level-2 matmul-tiling speedup (not a CTest; see 
 ```
 
 `make viz` gives the clearest picture of optimization: the Typed
-Computation Graph *before* and *after* the Level-1 passes, side by side.
-`make demo-independent` is separate from the tests on purpose — the
-CTest suite *asserts* correctness (e.g. `test_passes`, and the gated
-`INT-IR-*-STD` cases that check emitted IR parses under external tools),
-while these demos *visualize* it; both read the same
-`examples/optimizations/*.tns`, and demo 04 ends by running the
-authoritative pass tests rather than re-checking anything itself.
+Computation Graph *before* and *after* the Level-1 passes, side by
+side. `make demo-independent` feeds Tensora's own emitted MLIR/LLVM IR
+to real, external tools (`mlir-opt`, `llc`, `lli`) and checks they
+compute the same result — proof the IR is standards-compliant, not
+just self-consistent inside Tensora.
+
+Both demos are for exploration, not correctness-checking: the CTest
+suite is what actually asserts correctness (`test_passes`, plus the
+gated `INT-IR-*-STD` cases that already do what `demo-independent`
+shows, as an automated check). Demo and test both read the same
+`examples/optimizations/*.tns` files, so they can't silently drift
+apart, and `demos/04_optimization_demo.sh` runs the real `test_passes`
+binary itself at the end rather than re-implementing any of its checks.
 
 # Real-World Inference Demos
 
