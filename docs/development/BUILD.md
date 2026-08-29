@@ -264,78 +264,59 @@ running: design choices, exact provenance of every figure, and what
 each printed/rendered artifact means.
 
 **`demo-cnn-grid-detector` / `demo-cnn-grid-detector-real`.** Both
-predict one object class per grid cell, not a continuous `[x, y, w,
-h]` box -- v1's `return` names exactly one tensor, so a second,
-box-regression output would need a feature not yet in the language
-(see `examples/cnn_grid_detector.tns`'s header comment). Detected
-boxes therefore sit at a cell's own fixed pixel boundary, not a
-tightly-fit box around the object. Because training data guarantees at
-most one object per grid cell, no duplicate-box cleanup ("non-max
-suppression") is needed either. `demo-cnn-grid-detector-real`'s
-printed per-photo region count and recall figure reflect every raw
-per-cell prediction, unfiltered (recall ~49%, many false-positive
-cells on cluttered real backgrounds -- often dozens of same-class
-regions per photograph); the annotated PNG itself draws only the
-single highest-confidence region per photograph, since dozens of
-overlapping boxes would be illegible. The honest numbers are always in
-the printed stats, never hidden by the picture.
+predict one object class per grid cell (no continuous box regression,
+and no duplicate-box cleanup since each cell holds at most one
+object), so detected boxes sit at the cell's fixed pixel boundary, not
+a tightly-fit box. `demo-cnn-grid-detector-real`'s printed stats report
+every raw per-cell prediction, unfiltered (recall ~49% on cluttered
+real backgrounds); the annotated PNG draws only the single
+highest-confidence region per photo so it stays readable -- the honest
+numbers are always in the printed stats, never hidden by the picture.
 
-**`demo-attn-retrieval`.** The retrieval task is 4-head, rank-4 batched
-attention doing associative key-value retrieval across 6 shuffled
-slots -- a reshuffled binding every example, so it cannot be
-memorized. It exercises batched matmul/transpose/sum at rank 4 and a
-one-hot-selector read-out pattern in place of indexing, a materially
-different code path from the single-head, rank-2/3 attention in
-`demo-attn-text-classifier`.
-
-**`demo-attn-relational`.** A genuinely different, harder task on the
-same self-attention building block, not just a bigger one:
-`demo-attn-retrieval`'s answer is a fact stated directly in its input;
-this one's is not. Given up to 3 completed courses and, for each of 6
+**`demo-attn-relational`.** A two-hop relational-reasoning task, not a
+single lookup: given up to 3 completed courses and, for each of 6
 candidate courses, its single prerequisite, the model must find the
 one course the student is now eligible for -- a course that is never
 named as "eligible" anywhere in the input. That takes two chained
 steps: hop 1 is ordinary single-head softmax attention (Q@Kt/softmax/
-A@V, same shape as `demo-attn-retrieval`'s, but with a fixed *learned*
-query rather than a per-example one) reading the completed-course
-facts into one "profile" vector; hop 2 has no attention op at all --
-it projects that profile two ways and matmuls each projection against
-every candidate course's prerequisite embedding and its own embedding,
-producing one "is the prerequisite covered?" and one "is this course
-already done?" score per course, combined with two learned scalars
-(plain elementwise `*`/`+`, since v1 Tensora has no stack/concat op to
-feed a combining MLP instead). The printed output reports two
-different numbers, and they mean different things: "Tensora vs
-PyTorch" is the usual exact-agreement check (this demo's whole point,
-same as every other demo here); "Eligibility accuracy" is a *separate*
-number -- how often the trained PyTorch model itself gets the right
-answer, honestly around 75% (well above the 1/6 chance rate, so real
-two-hop reasoning is happening, but clearly short of a clean answer,
-since this is a strictly harder task than retrieval). A less-than-
-perfect eligibility accuracy is not a bug in Tensora, or in this demo
--- it is what running an imperfect model correctly looks like; see
+A@V, with a fixed *learned* query rather than a per-example one)
+reading the completed-course facts into one "profile" vector; hop 2
+has no attention op at all -- it projects that profile two ways and
+matmuls each projection against every candidate course's prerequisite
+embedding and its own embedding, producing one "is the prerequisite
+covered?" and one "is this course already done?" score per course,
+combined with two learned scalars (plain elementwise `*`/`+`, since v1
+Tensora has no stack/concat op to feed a combining MLP instead). The
+printed output reports two different numbers, and they mean different
+things: "Tensora vs PyTorch" is the usual exact-agreement check (this
+demo's whole point, same as every other demo here); "Eligibility
+accuracy" is a *separate* number -- how often the trained PyTorch
+model itself gets the right answer, honestly around 75% (well above
+the 1/6 chance rate, so real two-hop reasoning is happening, but
+clearly short of a clean answer, since this is a genuinely harder task
+than a single lookup). A less-than-perfect eligibility accuracy is not
+a bug in Tensora, or in this demo -- it is what running an imperfect
+model correctly looks like; see
 `tools/models/prepare_relational_demo.py`'s module docstring for the
 feasibility numbers behind that 75% figure.
 
-**`demo-vit-attention-one-layer` / `demo-vit-attention-all-layers`.**
-The one-layer demo checks Tensora's compiled output for one
-self-attention block against that same real pretrained model's own
-output for the same block, on a real photograph.
-`demo-vit-attention-all-layers` (`demos/vit_attention_all_layers_demo.sh`)
+**`demo-vit-attention`.** One combined demo, three parts, all against
+one real pretrained ViT-Base checkpoint. Part 1 checks Tensora's
+compiled output for one self-attention block against that same real
+model's own output for the same block, on a real photograph. Part 2
 repeats that check independently at all 12 encoder layers: for each
 layer it feeds that layer's own real input hidden state and real
 pretrained weights through the real `tensora` CLI and compares against
 that layer's own real output, printing a per-layer max-error table and
-`PASS 12/12`.
-
-**`demo-vit-attention-viz`** runs `examples/vit_attention_weights.tns`
--- the same block, stopped right after `softmax` -- through the real
-`tensora` CLI, checks Tensora's own attention weights against the real
-model's, and renders six PNGs under `demos/artifacts/vit_attn/`. Every
-panel is bordered to show its provenance: a solid green
-"TENSORA-VERIFIED" frame means the data came from Tensora's own
-compiled/checked output; a dashed gray "reference only" frame means it
-is real-model PyTorch data that Tensora did not compute.
+`PASS 12/12`. Part 3 (optional, needs `matplotlib`) runs
+`examples/vit_attention_weights.tns` -- the same block, stopped right
+after `softmax` -- through the real `tensora` CLI, checks Tensora's own
+attention weights against the real model's, and renders six PNGs under
+`demos/artifacts/vit_attn/`. Every panel is bordered to show its
+provenance: a solid green "TENSORA-VERIFIED" frame means the data came
+from Tensora's own compiled/checked output; a dashed gray "reference
+only" frame means it is real-model PyTorch data that Tensora did not
+compute.
 
 - `attention_heatmap.png` — one panel per head, showing which patches
   of the real input photograph the [CLS] token attends to most **per

@@ -1,9 +1,9 @@
 # Course-eligibility relational reasoning (real-inference demo).
 #
-# A genuinely different task from examples/attn_multihead_retrieval.tns's
-# Associative Recall (AR): AR's answer is a fact stated directly in the
-# sequence (key -> value, verbatim). This task's answer is never
-# stated. The input describes (a) up to 3 courses the student has
+# A genuinely different task from a single key-value lookup: the
+# answer here is never a fact stated directly in the input (unlike a
+# lookup, where the answer is present verbatim, key -> value). The
+# input describes (a) up to 3 courses the student has
 # already completed, and (b) each of 6 candidate courses' single
 # prerequisite -- but nowhere does it say "the student is eligible for
 # X". Example, written in plain words (the model sees only
@@ -25,13 +25,14 @@
 # PyTorch; a feasibility spike found this reliably reaches ~75-80%
 # held-out accuracy (see that script's module docstring) -- clearly
 # above the 1/6 ~ 17% chance rate, confirming genuine two-hop
-# fact-chaining, but, honestly, well short of AR's ~100%, since this
-# is a strictly harder task. The comparison below is still exact
-# (Tensora vs. this same imperfect PyTorch model), same as every other
-# real-inference demo; only the *task* is harder, not the tolerance.
+# fact-chaining, but, honestly, well short of a clean answer, since a
+# single lookup would be an easier task. The comparison below is still
+# exact (Tensora vs. this same imperfect PyTorch model), same as every
+# other real-inference demo; only the *task* is harder, not the
+# tolerance.
 #
-# Hop 1 is single-head softmax attention, same Q@Kt / softmax / A@V
-# shape as attn_multihead_retrieval.tns, but the query is a fixed
+# Hop 1 is single-head softmax attention (Q@Kt / softmax / A@V), but
+# the query is a fixed
 # *learned* "profile query" (Wq1) rather than a per-example token --
 # there is nothing to look up yet, just a fixed question ("what has
 # this student completed?") asked of the completion facts. The
@@ -50,14 +51,14 @@
 #
 # The trailing `sq=1` axis (hop 1's attention query has exactly one
 # row -- there is only one "profile" per example) is dropped with
-# `sum(..., axis=sq)`, the same no-indexing "squeeze a singleton axis"
-# trick attn_multihead_retrieval.tns uses for `axis=seq_q`.
+# `sum(..., axis=sq)`, a no-indexing "squeeze a singleton axis" trick
+# (multiply/sum in place of a slicing op, which v1 Tensora has none of).
 #
 # Scale = 1/sqrt(dk) = 1/sqrt(32); the prep script uses the same
 # constant so the reference matches.
 #
-# The batch axis b is 200 (larger than AR's 30): this task's accuracy
-# is well under 100%, so a bigger held-out batch is needed for the
+# The batch axis b is 200: this task's accuracy is well under 100%, so
+# a bigger-than-usual held-out batch is needed for the
 # printed accuracy number to be statistically meaningful rather than
 # noise from a handful of examples.
 input  Xcomp: Tensor[b=200, ncomp=3, d=32]

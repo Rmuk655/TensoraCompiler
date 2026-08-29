@@ -3,8 +3,7 @@
 attention block's computation for Tensora's own recomputation change a
 real model's real answer?
 
-Every other ViT demo in this project (demo-vit-attention-one-layer,
-demo-vit-attention-all-layers, demo-vit-attention-viz) proves a purely
+Every other ViT demo in this project (make demo-vit-attention) proves a purely
 NUMERICAL claim: "Tensora's output tensor for this block matches
 PyTorch's output tensor for this block, to within 1e-6." That is
 already strong evidence of correctness, but it stops short of

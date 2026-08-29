@@ -94,8 +94,8 @@ cat ../examples/attention.tns
 single-head (the tutorial's Section 2.11 shows the rank-4 multi-head
 version, which type-checks and now also lowers and runs, since batched
 matmul is implemented; see Section 12.5, and
-`examples/attn_multihead_retrieval.tns`/`make
-demo-attn-retrieval` for the real-trained-weights version). Expected
+`examples/vit_attention_block.tns`/`make demo-vit-attention` for a
+real-trained-weights, rank-4, 12-head version). Expected
 output:
 
 ```text

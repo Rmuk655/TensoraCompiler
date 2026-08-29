@@ -5,8 +5,8 @@
 #
 # This is the "extract one attention block" strategy: rather than
 # compiling the whole ViT model (which needs operators Tensora does
-# not have -- patch-embedding conv, layernorm, GELU, see
-# docs/ProjectMgmt/11_OPEN_SOURCE_AND_RESEARCH_ROADMAP.md Section 9),
+# not have -- patch-embedding conv, layernorm, GELU; to be considered
+# in future),
 # tools/models/prepare_vit_attention_demo.py runs a real photograph
 # through the real HuggingFace model up to one encoder layer's
 # self-attention block, captures that block's real input hidden state
@@ -17,18 +17,17 @@
 # the two outputs agree. The prep script extracts the LAST encoder
 # layer (layer index 11 of 12): later layers give a more legible,
 # subject-focused attention pattern than layer 0 for the visualization
-# demo (make demo-vit-attention-viz); the numerical equivalence check
-# (make demo-vit-attention-one-layer) holds for any layer.
+# part of the demo; the numerical equivalence check (make
+# demo-vit-attention) holds for any layer.
 #
 # Shapes match ViT-Base exactly: hidden_size=768, num_attention_heads=
 # 12, head_dim=64 (12*64=768), sequence length 197 (196 16x16 patches
 # from a 224x224 image, plus one [CLS] token).
 #
-# Like examples/attn_multihead_retrieval.tns, the `head` axis is
-# on Q/K/V/output-projection from the start (see that file's header
-# for why this needs no reshape). `qseq`/`kseq` are the same 197
-# positions under two names, the same self-attention naming
-# accommodation used there. `bq`/`bk`/`bv` carry ViT's real per-head
+# The `head` axis is on Q/K/V/output-projection from the start: since
+# general reshape is not lowered, no reshape is used to split/merge
+# it -- batched matmul/transpose/sum handle the per-head math
+# directly. `bq`/`bk`/`bv` carry ViT's real per-head
 # Q/K/V bias (`qkv_bias=True` in the ViT config); `bo` is the real
 # output-projection bias. Scale = 1/sqrt(64), the model's own value.
 input  Xq: Tensor[b=1, head=1, qseq=197, d=768]

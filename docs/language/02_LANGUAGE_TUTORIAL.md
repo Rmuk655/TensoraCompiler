@@ -302,30 +302,24 @@ single-head, matches the numerical reference in
 [`examples/attn_text_classifier.tns`](../../examples/attn_text_classifier.tns)
 (a real PyTorch-trained, batched, single-head self-attention
 classifier — run it with `make demo-attn-text-classifier`), and
-[`examples/attn_multihead_retrieval.tns`](../../examples/attn_multihead_retrieval.tns)
-(rank-4, 4-head, real PyTorch-trained weights, but a deliberately
-different task from the single-head classifier: Associative Recall
-(AR), a standard synthetic benchmark for probing self-attention's
-retrieval ability — given 6 shuffled `key:value` slots and a query
-naming one key, retrieve the value bound to it *in that specific
-sequence* — run it with `make demo-attn-retrieval`; see the example's
-own header for the research citation). The multi-head
-example's header comment works through how it gets a `head` axis onto
-Q/K/V and back off the output projection using only batched
-matmul/transpose/sum — no reshape — since general reshape is not
-lowered (Section 1.7 of
+[`examples/vit_attention_block.tns`](../../examples/vit_attention_block.tns)
+(rank-4, 12-head, real pretrained weights from a genuine ViT-Base
+checkpoint — run it with `make demo-vit-attention`; its header comment
+works through how it gets a `head` axis onto Q/K/V and back off the
+output projection using only batched matmul/transpose/sum — no
+reshape — since general reshape is not lowered (Section 1.7 of
 [`docs/ProjectMgmt/01_INTRODUCTION.md`](../ProjectMgmt/01_INTRODUCTION.md)),
 and how it reads out "the hidden state at the query position" (no
-slicing op either) via a one-hot selector weight and `sum`.
+slicing op either) via a one-hot selector weight and `sum`).
 
 A fourth runnable example,
 [`examples/attn_relational_eligibility.tns`](../../examples/attn_relational_eligibility.tns),
 is a genuinely harder task on the same self-attention building block:
 course eligibility, a two-hop relational-reasoning problem where the
-answer is never a fact stated directly in the input (unlike AR's
-lookup) — run it with `make demo-attn-relational`; see the example's
-own header for the two-hop attention design and its honestly imperfect
-(~75%) accuracy against ground truth.
+answer is never a fact stated directly in the input — run it with
+`make demo-attn-relational`; see the example's own header for the
+two-hop attention design and its honestly imperfect (~75%) accuracy
+against ground truth.
 
 ## 2.11c Tracing Matmul Through the Whole Compiler
 
@@ -385,10 +379,9 @@ number).
 | [`transformer_ffn.tns`](../../examples/transformer_ffn.tns) / [`transformer_ffn_concrete.tns`](../../examples/transformer_ffn_concrete.tns) | a Transformer feed-forward block at real width (Section 2.10) | `tensora --run examples/transformer_ffn_concrete.tns` |
 | [`attention.tns`](../../examples/attention.tns) | single-head scaled dot-product attention, rank-2 (Section 2.11) | `tensora --run examples/attention.tns` |
 | [`attn_text_classifier.tns`](../../examples/attn_text_classifier.tns) | single-head attention, real PyTorch-trained weights | `make demo-attn-text-classifier` |
-| [`attn_multihead_retrieval.tns`](../../examples/attn_multihead_retrieval.tns) | 4-head attention, rank-4, real PyTorch-trained weights, Associative Recall (Section 2.11) | `make demo-attn-retrieval` |
-| [`attn_relational_eligibility.tns`](../../examples/attn_relational_eligibility.tns) | single-head attention (hop 1) + elementwise combine (hop 2), real PyTorch-trained weights, two-hop relational reasoning (course eligibility) — harder than Associative Recall, honestly ~75% accurate | `make demo-attn-relational` |
-| [`vit_attention_block.tns`](../../examples/vit_attention_block.tns) | one self-attention block, 12-head/768-dim, real weights from a genuine pretrained ViT-Base checkpoint (not just a small model trained for the demo); reused, at every encoder layer and inside a live model, by the two demos to its right | `make demo-vit-attention-one-layer` / `make demo-vit-attention-all-layers` / `make demo-vit-attention-substitution` |
-| [`vit_attention_weights.tns`](../../examples/vit_attention_weights.tns) | the same block, stopped right after `softmax` — returns the attention matrix itself, for a per-head attention-heatmap visualization over a real photograph | `make demo-vit-attention-viz` |
+| [`attn_relational_eligibility.tns`](../../examples/attn_relational_eligibility.tns) | single-head attention (hop 1) + elementwise combine (hop 2), real PyTorch-trained weights, two-hop relational reasoning (course eligibility) — the answer is never stated directly, honestly ~75% accurate | `make demo-attn-relational` |
+| [`vit_attention_block.tns`](../../examples/vit_attention_block.tns) | one self-attention block, 12-head/768-dim, real weights from a genuine pretrained ViT-Base checkpoint (not just a small model trained for the demo); reused, at every encoder layer and inside a live model, by the demos to its right | `make demo-vit-attention` / `make demo-vit-attention-substitution` |
+| [`vit_attention_weights.tns`](../../examples/vit_attention_weights.tns) | the same block, stopped right after `softmax` — returns the attention matrix itself, for a per-head attention-heatmap visualization over a real photograph | `make demo-vit-attention` (visualization part) |
 | [`optimizations/*.tns`](../../examples/optimizations/) | one file per Level-1 pass (positive case) — `dead_code.tns`, `shape_fold.tns`, `reshape_cancel.tns`, `transpose_cancel.tns`, `elementwise_fusion.tns`, `linear_bias_activation.tns` | `tensora --emit-graph examples/optimizations/dead_code.tns` vs `--emit-optimized-graph` |
 
 **Step 4 — real trained weights, not synthetic ones.** `--run`'s
@@ -403,7 +396,7 @@ example in the table above that says "real PyTorch-trained weights"
 works exactly this way — a `tools/models/prepare_*.py` script trains a
 small model once in PyTorch, exports its weights and a batch of
 held-out inputs as `.npy` files under `demos/artifacts/`, and the demo
-script (e.g. `demos/attn_retrieval_demo.sh`) runs `tensora --run ...
+script (e.g. `demos/attn_relational_demo.sh`) runs `tensora --run ...
 --data-dir ...` and compares every output row against the saved
 PyTorch reference. See
 [`docs/development/BUILD.md`](../development/BUILD.md) for the full
@@ -417,7 +410,7 @@ change is worth returning to. `prepare_vit_attention_demo.py` accepts
 a different photo and a different encoder layer without editing the
 script — `make prep-vit-attention IMAGE=my-cat.jpg LAYER=8` (`IMAGE`
 is a local file path or URL; `LAYER` is `0`-`11`) — then re-run `make
-demo-vit-attention-viz` and compare the new figures against the
+demo-vit-attention` and compare the new figures against the
 original dog/layer-11 ones. The attention-microscope figure similarly
 takes a `"row,col"` argument for one specific patch instead of its
 default face/body/background trio (README's ViT demos section).

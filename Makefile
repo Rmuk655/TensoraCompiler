@@ -12,7 +12,7 @@ JOBS ?= $(shell nproc 2>/dev/null || echo 4)
         test-lexer test-parser test-semantic test-optimization test-codegen \
         lexer-example parser-example semantic-example optimization-example codegen-example \
         final-example demo-mlp-placement demo-cnn-image-classifier demo-attn-text-classifier \
-        demo-attn-retrieval demo-attn-relational demo-cnn-grid-detector demo-cnn-grid-detector-real demo-vit-attention-one-layer demo-vit-attention-all-layers demo-vit-attention-viz \
+        demo-attn-relational demo-cnn-grid-detector demo-cnn-grid-detector-real demo-vit-attention \
         demo-vit-attention-substitution setup-demos setup-tensora-demos prep-vit-attention
 
 # Configure only when there is no build tree yet. CMake's generated
@@ -109,7 +109,7 @@ compiler-demos: example
 # still succeeds on a fresh clone.
 tensora-demos:
 	$(QUIET_BUILD)
-	@for pair in mlp:mlp_placement cnn:cnn_image_classifier grid_detector:cnn_grid_detector grid_detector_real:cnn_grid_detector_real attn:attn_text_classifier attn_mh:attn_retrieval attn_rel:attn_relational vit_attn:vit_attention_one_layer; do \
+	@for pair in mlp:mlp_placement cnn:cnn_image_classifier grid_detector:cnn_grid_detector grid_detector_real:cnn_grid_detector_real attn:attn_text_classifier attn_rel:attn_relational vit_attn:vit_attention; do \
 	  name=$${pair%%:*}; script=$${pair##*:}; \
 	  if [ -d "demos/artifacts/$$name" ]; then \
 	    echo "==> demo ($$script)"; ./demos/$${script}_demo.sh $(BUILD); \
@@ -117,11 +117,6 @@ tensora-demos:
 	    echo "SKIP $$script: no artifacts in demos/artifacts/$$name/ (run the matching tools/models/prepare_*.py first)"; \
 	  fi; \
 	done
-	@if [ -d "demos/artifacts/vit_attn/eval_all_layers" ]; then \
-	  echo "==> demo (vit_attention_all_layers)"; ./demos/vit_attention_all_layers_demo.sh $(BUILD); \
-	else \
-	  echo "SKIP vit_attention_all_layers: no artifacts in demos/artifacts/vit_attn/eval_all_layers/ (run tools/models/prepare_vit_attention_demo.py first)"; \
-	fi
 	@if python3 -c "import transformers" >/dev/null 2>&1; then \
 	  echo "==> demo (vit_attention_substitution)"; ./demos/vit_attention_substitution_demo.sh $(BUILD); \
 	else \
@@ -153,7 +148,7 @@ setup-demos setup-tensora-demos:
 	pip install -q -r tools/models/requirements.txt
 	@for pair in mlp:prepare_mlp_demo cnn:prepare_stl10_demo grid_detector:prepare_grid_detector_demo \
 	             grid_detector_real:prepare_grid_detector_real_demo attn:prepare_text_attn_demo \
-	             attn_mh:prepare_multihead_attn_demo attn_rel:prepare_relational_demo vit_attn:prepare_vit_attention_demo; do \
+	             attn_rel:prepare_relational_demo vit_attn:prepare_vit_attention_demo; do \
 	  name=$${pair%%:*}; script=$${pair##*:}; \
 	  if [ -f "demos/artifacts/$$name/eval/meta.json" ]; then \
 	    echo "==> $$script: already prepared (demos/artifacts/$$name/eval/ exists, skipping)"; \
@@ -161,7 +156,7 @@ setup-demos setup-tensora-demos:
 	    echo "==> $$script"; python3 tools/models/$$script.py; \
 	  fi; \
 	done
-	@echo "==> setup-tensora-demos done. Try: make demo-vit-attention-viz"
+	@echo "==> setup-tensora-demos done. Try: make demo-vit-attention"
 
 # Re-run just the ViT preparation step with a different photo and/or
 # encoder layer, e.g.:
@@ -191,26 +186,14 @@ demo-cnn-grid-detector-real: build
 demo-attn-text-classifier: build
 	./demos/attn_text_classifier_demo.sh $(BUILD)
 
-demo-attn-retrieval: build
-	./demos/attn_retrieval_demo.sh $(BUILD)
-
 demo-attn-relational: build
 	./demos/attn_relational_demo.sh $(BUILD)
 
-demo-vit-attention-one-layer: build
-	./demos/vit_attention_one_layer_demo.sh $(BUILD)
-
-demo-vit-attention-all-layers: build
-	./demos/vit_attention_all_layers_demo.sh $(BUILD)
-
-# Optional: renders PNGs from Tensora's own compiled output for
-# examples/vit_attention_weights.tns. Needs matplotlib in addition to
-# demo-vit-attention-one-layer's prerequisites; not part of
-# `make tensora-demos` (produces image files for inspection, not a
-# pass/fail check, though it does assert Tensora's weights match the
-# real model).
-demo-vit-attention-viz: build
-	python3 tools/models/visualize_vit_attention.py $(BUILD)
+# Combined: one-layer check + all-12-layers check + optional
+# visualization (needs matplotlib for the last part only), all against
+# one real pretrained ViT-Base checkpoint. See demos/vit_attention_demo.sh.
+demo-vit-attention: build
+	./demos/vit_attention_demo.sh $(BUILD)
 
 demo-vit-attention-substitution: build
 	./demos/vit_attention_substitution_demo.sh $(BUILD)
