@@ -13,6 +13,8 @@
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <type_traits>
+#include <utility>
 #include <vector>
 
 #include "tensora/lexer/Lexer.h"
@@ -388,13 +390,47 @@ struct MemRefBuffer {
   void* ptr() { return bytes.data(); }
 };
 
+// `--run`/`-o` support tensors up to this rank. Some finite,
+// compile-time upper bound is inherent to this approach -- C++
+// templates (and MLIR's own memref ABI) fix a tensor's rank at compile
+// time, so the marshaling code below cannot literally handle "any
+// rank" without a hard ceiling baked in somewhere. But *which* ceiling
+// is a free choice, not a property of the language or the MLIR/LLVM
+// lowering (neither caps rank): 4 was the previous value here only
+// because rank-4 (4-head batched attention) is the highest rank any
+// current example/demo happens to use. Set generously higher, to 8,
+// so realistic future needs (e.g. a 5D video tensor, or a 6D
+// grouped/multi-batch layout) already fit; the dispatch helpers below
+// try every rank up to this one automatically (recursion, not a
+// hand-written `case` per rank), so raising it further is a one-line
+// change here, nothing else to touch.
+constexpr int MAX_SUPPORTED_RANK = 8;
+
+// Tries compile-time rank N against the requested runtime `rank`; on a
+// miss, recurses to N+1 until Max is exceeded. This is the one place
+// that turns "a runtime rank" into "a compile-time template argument"
+// for all three marshaling helpers below, so MAX_SUPPORTED_RANK is the
+// only thing to change to raise the ceiling -- no per-rank `case` line
+// needed anywhere.
+template <int N, int Max, typename F>
+auto dispatchByRank(int rank, bool& ok, F&& makeAtRank) -> decltype(makeAtRank(std::integral_constant<int, N>{})) {
+  if constexpr (N > Max) {
+    ok = false;
+    return {};
+  } else if (rank == N) {
+    ok = true;
+    return makeAtRank(std::integral_constant<int, N>{});
+  } else {
+    return dispatchByRank<N + 1, Max>(rank, ok, std::forward<F>(makeAtRank));
+  }
+}
+
 // This CLI-only helper needs a compile-time rank N to build
 // StridedMemRefType<float, N> -- its `sizes`/`strides` are fixed-size
 // C arrays, so N must be a literal somewhere. A single template body
 // does the shared work (fill the row-major sizes/strides, copy the
-// bytes); only the small dispatch switch below repeats one line per
-// supported rank, so raising MAX_SUPPORTED_RANK just needs a new
-// `case` line here, not a whole new function.
+// bytes); dispatchByRank above supplies the literal N for whatever
+// rank is actually requested, at runtime.
 template <int N>
 MemRefBuffer makeMemRefBufferN(float* data, const std::vector<int64_t>& sizes) {
   StridedMemRefType<float, N> m;
@@ -413,27 +449,10 @@ MemRefBuffer makeMemRefBufferN(float* data, const std::vector<int64_t>& sizes) {
   return buf;
 }
 
-// `--run`/`-o` support tensors up to this rank (the highest rank any
-// current example/demo needs -- rank-4, 4-head batched attention).
-// Nothing in the language or the MLIR/LLVM lowering caps rank; this is
-// only a limit of this JIT-execution helper. Raising it needs a new
-// `case` line in the three dispatch switches below (makeMemRefBuffer,
-// readMemRefElement0, readMemRefData) plus the matching error-message
-// text near the call sites -- no new struct-building code, since
-// makeMemRefBufferN above already handles any N.
-constexpr int MAX_SUPPORTED_RANK = 4;
-
 MemRefBuffer makeMemRefBuffer(float* data, const std::vector<int64_t>& sizes, bool& ok) {
-  ok = true;
-  switch (sizes.size()) {
-    case 1: return makeMemRefBufferN<1>(data, sizes);
-    case 2: return makeMemRefBufferN<2>(data, sizes);
-    case 3: return makeMemRefBufferN<3>(data, sizes);
-    case 4: return makeMemRefBufferN<4>(data, sizes);
-    default:
-      ok = false;
-      return {};
-  }
+  return dispatchByRank<1, MAX_SUPPORTED_RANK>(
+      static_cast<int>(sizes.size()), ok,
+      [&](auto rankConst) { return makeMemRefBufferN<decltype(rankConst)::value>(data, sizes); });
 }
 
 // Reads back element 0, and reports the total count, from a result
@@ -449,13 +468,10 @@ float readMemRefElement0N(const MemRefBuffer& buf) {
 }
 
 float readMemRefElement0(const MemRefBuffer& buf, int rank) {
-  switch (rank) {
-    case 1: return readMemRefElement0N<1>(buf);
-    case 2: return readMemRefElement0N<2>(buf);
-    case 3: return readMemRefElement0N<3>(buf);
-    case 4: return readMemRefElement0N<4>(buf);
-    default: return NAN;
-  }
+  bool ok = false;
+  float result = dispatchByRank<1, MAX_SUPPORTED_RANK>(
+      rank, ok, [&](auto rankConst) { return readMemRefElement0N<decltype(rankConst)::value>(buf); });
+  return ok ? result : NAN;
 }
 
 // Copies all `total` result elements out of a result descriptor, for
@@ -469,14 +485,10 @@ const float* memRefDataPtrN(const MemRefBuffer& buf) {
 }
 
 void readMemRefData(const MemRefBuffer& buf, int rank, int64_t total, float* out) {
-  const float* data = nullptr;
-  switch (rank) {
-    case 1: data = memRefDataPtrN<1>(buf); break;
-    case 2: data = memRefDataPtrN<2>(buf); break;
-    case 3: data = memRefDataPtrN<3>(buf); break;
-    case 4: data = memRefDataPtrN<4>(buf); break;
-    default: return;
-  }
+  bool ok = false;
+  const float* data = dispatchByRank<1, MAX_SUPPORTED_RANK>(
+      rank, ok, [&](auto rankConst) { return memRefDataPtrN<decltype(rankConst)::value>(buf); });
+  if (!ok) return;
   for (int64_t i = 0; i < total; ++i) out[static_cast<size_t>(i)] = data[i];
 }
 
