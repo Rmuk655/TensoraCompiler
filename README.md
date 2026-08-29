@@ -352,9 +352,9 @@ header for the one-time setup.
 For a deeper explanation of each demo's output and design choices
 (e.g. why the grid detectors don't do box regression or
 non-max-suppression, or the exact provenance and meaning of each
-`vit_attn/*.png` figure), see ["Reading the real-world demo output in
-depth"](docs/development/BUILD.md#reading-the-real-world-demo-output-in-depth)
-in `docs/development/BUILD.md`.
+`vit_attn/*.png` figure), see
+[docs/development/BUILD.md § "Reading the real-world demo output in
+depth"](docs/development/BUILD.md#reading-the-real-world-demo-output-in-depth).
 
 ## Known limitations
 
