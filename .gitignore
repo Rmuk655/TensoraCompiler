@@ -21,3 +21,9 @@ demos/artifacts/
 CLAUDE.md
 docs/role/*
 .github/copilot-instructions.md
+
+# Mechanical concatenation of the source tree, regenerated on demand by
+# ./tools/regen_appendix.py (or `make appendix`). Not hand-edited, not
+# needed to build/run/test, and churns every source change -- never
+# committed.
+docs/development/10_APPENDIX_SOURCE_LISTING.md
