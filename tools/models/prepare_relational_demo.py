@@ -15,8 +15,8 @@ architecture this script mirrors op-for-op (matmul, transpose,
 softmax, sum, elementwise +/-/* -- no masking/gather/stack op, none of
 which v1 Tensora has).
 
-This is a harder task than Associative Recall, and it does not reach
-that demo's ~100% reliability: a feasibility spike across 5 small
+This is a genuinely hard task, and it does not reach a single-hop
+lookup's ~100% reliability: a feasibility spike across 5 small
 architectures (see the project's own session notes; not committed to
 the repo, since a negative/partial spike result isn't a documented
 claim) consistently plateaus at 75-80% held-out accuracy, clearly
