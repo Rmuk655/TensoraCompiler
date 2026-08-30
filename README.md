@@ -306,15 +306,21 @@ the same core building block inside every Transformer model (GPT,
 BERT, ViT), just at toy scale.
 
 `demo-attn-relational` is a harder task, and a different *kind* of
-task, not just a bigger one: given which courses a student has already
-completed and which prerequisite each candidate course needs, say
-which course the student can now take. The answer is never stated in
-the input — it takes two chained attention/lookup steps (read what's
-completed, then check each candidate's requirement against it) to find
-it. That's a genuinely harder problem, and the trained model is
-honestly imperfect at it (~75% accuracy against ground truth, well
-above chance) — this demo checks that Tensora reproduces that same,
-imperfect model exactly, not that the task itself is solved perfectly.
+task, not just a bigger one: given real, natural-language sentences
+about which courses a student has already completed and which
+prerequisite each candidate course needs — drawn from a 24-course pool
+with randomized names, phrasing, and distractor facts, not a fixed
+symbol table — say which course the student can now take. The answer
+is never stated in the input; it takes two chained attention/lookup
+steps (read what's completed, then check each candidate's requirement
+against it) to find it. v1 Tensora has no embedding/gather/tokenizer
+op, so every sentence is turned into a float vector by a from-scratch
+word-embedding + mean-pool encoder entirely in PyTorch before Tensora
+ever runs. That's a genuinely harder problem than a single key-value
+lookup, and the trained model is honestly imperfect at it (~55-60%
+accuracy against ground truth, well above the 1/6 ~ 17% chance rate) —
+this demo checks that Tensora reproduces that same, imperfect model
+exactly, not that the task itself is solved perfectly.
 See [docs/development/BUILD.md](docs/development/BUILD.md) for how to
 read this demo's output.
 

@@ -9,7 +9,7 @@
 # Reports the model's own accuracy against ground truth *and*
 # Tensora-vs-PyTorch agreement separately -- the two are different
 # questions. This task's PyTorch model is honestly imperfect
-# (~75-80% held-out, see tools/models/prepare_relational_demo.py's
+# (~55-60% held-out, see tools/models/prepare_relational_demo.py's
 # docstring); what this demo actually proves is that Tensora
 # reproduces that same, imperfect model exactly, not that the task is
 # solved perfectly. Only numpy is needed here (no torch); run
@@ -41,25 +41,28 @@ d, tol = sys.argv[1], float(sys.argv[2])
 meta = json.load(open(f"{d}/meta.json"))
 exp  = np.load(f"{d}/expected.npy")      # [N,6] PyTorch logits
 got  = np.load(f"{d}/tensora_out.npy")   # [N,6] Tensora logits
-courses = meta["courses"]
 examples = meta["examples"]
 N = exp.shape[0]
 
 disp = sorted({round(k * (N - 1) / 4) for k in range(5)})
-print(f"Showing {len(disp)} of {N} eligibility queries:\n")
+print(f"Showing {len(disp)} of {N} eligibility queries (real generated sentences, not symbols):\n")
 for i in disp:
     ex = examples[i]
-    reqs = ", ".join(f"{c} needs {p}" for c, p in ex["prerequisites"].items() if p)
-    print(f"Query (row {i} of {N}): completed={ex['completed']}  requirements: {reqs}")
+    candidates = ex["candidates"]
+    print(f"Query (row {i} of {N}):")
+    for s in ex["completed_sentences"]:
+        print(f"    {s}")
+    for c in candidates:
+        print(f"    {ex['prerequisite_sentences'][c]}  ({ex['identity_sentences'][c]})")
     print(f"  Ground truth:      {ex['target']}")
-    print(f"  PyTorch reference: {courses[int(exp[i].argmax())]}")
-    print(f"  Tensora result:    {courses[int(got[i].argmax())]}")
+    print(f"  PyTorch reference: {candidates[int(exp[i].argmax())]}")
+    print(f"  Tensora result:    {candidates[int(got[i].argmax())]}")
     print()
 
 agree = int((exp.argmax(1) == got.argmax(1)).sum())
 max_err = float(np.max(np.abs(exp - got)))
 mean_err = float(np.mean(np.abs(exp - got)))
-truth_idx = np.array([courses.index(ex["target"]) for ex in examples])
+truth_idx = np.array([ex["candidates"].index(ex["target"]) for ex in examples])
 pt_acc = float((exp.argmax(1) == truth_idx).mean())
 tn_acc = float((got.argmax(1) == truth_idx).mean())
 print(f"Over all {N} held-out queries:")

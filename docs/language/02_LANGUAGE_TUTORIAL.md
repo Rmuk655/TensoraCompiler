@@ -315,10 +315,11 @@ slicing op either) via a one-hot selector weight and `sum`).
 A fourth runnable example,
 [`examples/attn_relational_eligibility.tns`](../../examples/attn_relational_eligibility.tns),
 is a genuinely harder task on the same self-attention building block:
-course eligibility, a two-hop relational-reasoning problem where the
+course eligibility, a two-hop relational-reasoning problem over real
+natural-language sentences (not a symbol table) where the
 answer is never a fact stated directly in the input — run it with
 `make demo-attn-relational`; see the example's own header for the
-two-hop attention design and its honestly imperfect (~75%) accuracy
+two-hop attention design and its honestly imperfect (~55-60%) accuracy
 against ground truth.
 
 ## 2.11c Tracing Matmul Through the Whole Compiler
@@ -379,7 +380,7 @@ number).
 | [`transformer_ffn.tns`](../../examples/transformer_ffn.tns) / [`transformer_ffn_concrete.tns`](../../examples/transformer_ffn_concrete.tns) | a Transformer feed-forward block at real width (Section 2.10) | `tensora --run examples/transformer_ffn_concrete.tns` |
 | [`attention.tns`](../../examples/attention.tns) | single-head scaled dot-product attention, rank-2 (Section 2.11) | `tensora --run examples/attention.tns` |
 | [`attn_text_classifier.tns`](../../examples/attn_text_classifier.tns) | single-head attention, real PyTorch-trained weights | `make demo-attn-text-classifier` |
-| [`attn_relational_eligibility.tns`](../../examples/attn_relational_eligibility.tns) | single-head attention (hop 1) + elementwise combine (hop 2), real PyTorch-trained weights, two-hop relational reasoning (course eligibility) — the answer is never stated directly, honestly ~75% accurate | `make demo-attn-relational` |
+| [`attn_relational_eligibility.tns`](../../examples/attn_relational_eligibility.tns) | single-head attention (hop 1) + elementwise combine (hop 2), real PyTorch-trained weights, two-hop relational reasoning over real sentences (course eligibility) — the answer is never stated directly, honestly ~55-60% accurate | `make demo-attn-relational` |
 | [`vit_attention_block.tns`](../../examples/vit_attention_block.tns) | one self-attention block, 12-head/768-dim, real weights from a genuine pretrained ViT-Base checkpoint (not just a small model trained for the demo); reused, at every encoder layer and inside a live model, by the demos to its right | `make demo-vit-attention` / `make demo-vit-attention-substitution` |
 | [`vit_attention_weights.tns`](../../examples/vit_attention_weights.tns) | the same block, stopped right after `softmax` — returns the attention matrix itself, for a per-head attention-heatmap visualization over a real photograph | `make demo-vit-attention` (visualization part) |
 | [`optimizations/*.tns`](../../examples/optimizations/) | one file per Level-1 pass (positive case) — `dead_code.tns`, `shape_fold.tns`, `reshape_cancel.tns`, `transpose_cancel.tns`, `elementwise_fusion.tns`, `linear_bias_activation.tns` | `tensora --emit-graph examples/optimizations/dead_code.tns` vs `--emit-optimized-graph` |
