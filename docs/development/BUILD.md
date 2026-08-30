@@ -274,31 +274,39 @@ highest-confidence region per photo so it stays readable -- the honest
 numbers are always in the printed stats, never hidden by the picture.
 
 **`demo-attn-relational`.** A two-hop relational-reasoning task, not a
-single lookup: given up to 3 completed courses and, for each of 6
-candidate courses, its single prerequisite, the model must find the
-one course the student is now eligible for -- a course that is never
-named as "eligible" anywhere in the input. That takes two chained
-steps: hop 1 is ordinary single-head softmax attention (Q@Kt/softmax/
-A@V, with a fixed *learned* query rather than a per-example one)
-reading the completed-course facts into one "profile" vector; hop 2
-has no attention op at all -- it projects that profile two ways and
-matmuls each projection against every candidate course's prerequisite
-embedding and its own embedding, producing one "is the prerequisite
-covered?" and one "is this course already done?" score per course,
-combined with two learned scalars (plain elementwise `*`/`+`, since v1
-Tensora has no stack/concat op to feed a combining MLP instead). The
-printed output reports two different numbers, and they mean different
-things: "Tensora vs PyTorch" is the usual exact-agreement check (this
-demo's whole point, same as every other demo here); "Eligibility
-accuracy" is a *separate* number -- how often the trained PyTorch
-model itself gets the right answer, honestly around 75% (well above
-the 1/6 chance rate, so real two-hop reasoning is happening, but
-clearly short of a clean answer, since this is a genuinely harder task
-than a single lookup). A less-than-perfect eligibility accuracy is not
-a bug in Tensora, or in this demo -- it is what running an imperfect
-model correctly looks like; see
-`tools/models/prepare_relational_demo.py`'s module docstring for the
-feasibility numbers behind that 75% figure.
+single lookup, over real natural-language sentences, not a symbol
+table: given up to 3 completed-course sentences and, for each of 6
+candidate courses (drawn per example from a 24-course pool, with
+randomized student names, phrasing, and distractor facts), a sentence
+stating its single prerequisite, the model must find the one course
+the student is now eligible for -- a course that is never named as
+"eligible" anywhere in the input. Every sentence is turned into a
+float vector by a from-scratch word-embedding + mean-pool encoder,
+shared across all sentence roles, trained entirely in PyTorch (v1
+Tensora has no embedding/gather/tokenizer op, so it never sees a
+token, only the resulting vectors). That takes two chained steps: hop
+1 is ordinary single-head softmax attention (Q@Kt/softmax/A@V, with a
+fixed *learned* query rather than a per-example one) reading the
+completed-course sentences into one "profile" vector; hop 2 has no
+attention op at all -- it projects that profile two ways and matmuls
+each projection against every candidate course's prerequisite-sentence
+encoding and its own identity-sentence encoding, producing one "is the
+prerequisite covered?" and one "is this course already done?" score
+per course, combined with two learned scalars (plain elementwise
+`*`/`+`, since v1 Tensora has no stack/concat op to feed a combining
+MLP instead). The printed output reports two different numbers, and
+they mean different things: "Tensora vs PyTorch" is the usual
+exact-agreement check (this demo's whole point, same as every other
+demo here); "Eligibility accuracy" is a *separate* number -- how often
+the trained PyTorch model itself gets the right answer, honestly
+around 55-60% (well above the 1/6 ~ 17% chance rate, so real two-hop
+fact-chaining over real sentences is happening, but clearly short of a
+clean answer, since this is a genuinely harder task than a single
+lookup, and mean-pooled sentence encodings dilute the signal further).
+A less-than-perfect eligibility accuracy is not a bug in Tensora, or in
+this demo -- it is what running an imperfect model correctly looks
+like; run `tools/models/prepare_relational_demo.py` to see the exact
+current figure.
 
 **`demo-vit-attention`.** One combined demo, three parts, all against
 one real pretrained ViT-Base checkpoint. Part 1 checks Tensora's

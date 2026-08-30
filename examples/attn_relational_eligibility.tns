@@ -3,16 +3,34 @@
 # A genuinely different task from a single key-value lookup: the
 # answer here is never a fact stated directly in the input (unlike a
 # lookup, where the answer is present verbatim, key -> value). The
-# input describes (a) up to 3 courses the student has
-# already completed, and (b) each of 6 candidate courses' single
-# prerequisite -- but nowhere does it say "the student is eligible for
-# X". Example, written in plain words (the model sees only
-# embeddings):
+# input is real, natural-language sentences -- not a symbol table --
+# describing (a) up to 3 courses a student has already completed, and
+# (b) each of 6 candidate courses' single prerequisite -- but nowhere
+# does any sentence say "the student is eligible for X". Example,
+# written in plain words (the model sees only embeddings of these
+# actual sentences, one word-embedding table shared across every
+# sentence role):
 #
-#     Completed: CS101, MA101
-#     Prerequisites: CS201 needs CS101 | MA201 needs MA101
-#                    | PHY101 needs (none) | BIO101 needs (none)
-#     Eligible (not completed, prerequisite satisfied): PHY101
+#     Maya has completed CS101.
+#     Maya already finished MA101.
+#     CS201 requires CS101 as a prerequisite.
+#     MA201 needs MA101 before you can enroll.
+#     PHY101 has no prerequisite.
+#     BIO101 requires nothing beforehand.
+#     -> eligible: PHY101
+#
+# Every example draws its own random 6-course subset from a 24-course
+# pool (tools/models/prepare_relational_demo.py's COURSE_POOL), its
+# own random student name, and (often) an irrelevant distractor
+# completed-course sentence the model must learn to ignore -- so no
+# example repeats the same course-to-slot identity, and the sentence
+# wording itself varies per example (several templates per fact
+# kind). Nothing here is a fixed symbol table: only the *presence of
+# the same course name* across two sentences is a stable signal, and
+# v1 Tensora never sees a token or a symbol -- every sentence is
+# turned into a float vector by a from-scratch word-embedding +
+# mean-pool encoder entirely in PyTorch before Tensora runs (v1
+# Tensora has no embedding/gather/tokenizer op of its own).
 #
 # Solving it needs two chained lookups, not one: attend over the
 # completed-course facts to build a "profile" of what the student
@@ -22,14 +40,15 @@
 # "attend to completed courses, attend separately to requirements,
 # combine, ignore what doesn't apply" reasoning a lookup table cannot
 # do. tools/models/prepare_relational_demo.py trains this once in
-# PyTorch; a feasibility spike found this reliably reaches ~75-80%
-# held-out accuracy (see that script's module docstring) -- clearly
-# above the 1/6 ~ 17% chance rate, confirming genuine two-hop
-# fact-chaining, but, honestly, well short of a clean answer, since a
-# single lookup would be an easier task. The comparison below is still
-# exact (Tensora vs. this same imperfect PyTorch model), same as every
-# other real-inference demo; only the *task* is harder, not the
-# tolerance.
+# PyTorch over real sentences with a 24-course pool and randomized
+# phrasing; held-out accuracy lands around 55-60% (run the script to
+# see the exact figure) -- clearly above the 1/6 ~ 17% chance rate,
+# confirming genuine two-hop fact-chaining, but, honestly, well short
+# of a clean answer, since this is a genuinely hard task once the
+# input is real text instead of a symbol table. The comparison below
+# is still exact (Tensora vs. this same imperfect PyTorch model), same
+# as every other real-inference demo; only the *task* is harder, not
+# the tolerance.
 #
 # Hop 1 is single-head softmax attention (Q@Kt / softmax / A@V), but
 # the query is a fixed
