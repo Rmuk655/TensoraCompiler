@@ -44,16 +44,27 @@ got  = np.load(f"{d}/tensora_out.npy")   # [N,6] Tensora logits
 examples = meta["examples"]
 N = exp.shape[0]
 
-disp = sorted({round(k * (N - 1) / 4) for k in range(5)})
-print(f"Showing {len(disp)} of {N} eligibility queries (real generated sentences, not symbols):\n")
+truth_idx_all = np.array([ex["candidates"].index(ex["target"]) for ex in examples])
+pt_pred_all = exp.argmax(1)
+correct_rows = [i for i in range(N) if pt_pred_all[i] == truth_idx_all[i]]
+wrong_rows   = [i for i in range(N) if pt_pred_all[i] != truth_idx_all[i]]
+# Show a mix of rows the model gets right and rows it gets wrong -- since
+# accuracy is well under 100%, picking rows by position alone (e.g. every
+# 50th) can land entirely on one bucket by chance and misleadingly suggest
+# the model always succeeds or always fails.
+disp = sorted(correct_rows[:3] + wrong_rows[:2])
+print(f"Showing {len(disp)} of {N} eligibility queries (real generated sentences, not symbols; "
+      f"a mix of correct and incorrect predictions, not cherry-picked):\n")
 for i in disp:
     ex = examples[i]
     candidates = ex["candidates"]
+    student = ex["student"]
     print(f"Query (row {i} of {N}):")
     for s in ex["completed_sentences"]:
         print(f"    {s}")
     for c in candidates:
         print(f"    {ex['prerequisite_sentences'][c]}  ({ex['identity_sentences'][c]})")
+    print(f"  Question: Which of {{{', '.join(candidates)}}} can {student} now take?")
     print(f"  Ground truth:      {ex['target']}")
     print(f"  PyTorch reference: {candidates[int(exp[i].argmax())]}")
     print(f"  Tensora result:    {candidates[int(got[i].argmax())]}")
@@ -62,9 +73,8 @@ for i in disp:
 agree = int((exp.argmax(1) == got.argmax(1)).sum())
 max_err = float(np.max(np.abs(exp - got)))
 mean_err = float(np.mean(np.abs(exp - got)))
-truth_idx = np.array([ex["candidates"].index(ex["target"]) for ex in examples])
-pt_acc = float((exp.argmax(1) == truth_idx).mean())
-tn_acc = float((got.argmax(1) == truth_idx).mean())
+pt_acc = float((exp.argmax(1) == truth_idx_all).mean())
+tn_acc = float((got.argmax(1) == truth_idx_all).mean())
 print(f"Over all {N} held-out queries:")
 print(f"  Tensora vs PyTorch:   {agree}/{N} predictions agree")
 print(f"  Max logit error:      {max_err:.2e}   mean {mean_err:.2e}   (tolerance {tol:g})")
