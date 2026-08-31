@@ -103,15 +103,20 @@ done
 
 # Real-world demos (make demo-*) use Python: torch to PREPARE artifacts,
 # numpy to RUN. Deps go in a project-local .venv (never system Python).
+# python3 alone (no venv, no packages) is also all INT-DOCLINKS-SYNC
+# needs -- the ctest that checks every "[RM 3.6](...)"-style doc link
+# lands on the section its own label names, not just on some anchor
+# that happens to exist. CMake skips that one test if python3 is
+# missing, so its absence never fails the rest of the suite.
 if command -v python3 >/dev/null 2>&1; then
-  pass "python3 ($(python3 --version 2>&1)) -- for real-world demos"
+  pass "python3 ($(python3 --version 2>&1)) -- for real-world demos, and for the INT-DOCLINKS-SYNC doc-link check"
   if [ -d .venv ]; then
     pass ".venv present (demo virtualenv, has numpy/torch once set up)"
   else
     note ".venv not created -- for 'make demo-*': ./tools/setup-dev.sh --demos"
   fi
 else
-  note "python3 -- for real-world demos: sudo apt install -y python3 python3-venv"
+  note "python3 -- for real-world demos and INT-DOCLINKS-SYNC: sudo apt install -y python3 python3-venv"
 fi
 
 echo

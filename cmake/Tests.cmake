@@ -208,6 +208,17 @@ add_test(NAME INT-TESTMATRIX-SYNC COMMAND bash ${CMAKE_SOURCE_DIR}/tools/check_t
 add_test(NAME INT-DISCOVERY-SYNC COMMAND bash ${CMAKE_SOURCE_DIR}/tools/check_discovery.sh
          $<TARGET_FILE_DIR:test_lexer>)
 
+# INT-DOCLINKS-SYNC: every numbered cross-reference link in docs/*.md
+# (e.g. "[RM 3.6](...)") must land on the section its own label names,
+# not merely on some anchor that happens to exist. Gated on python3
+# (already an optional dependency for tools/regen_appendix.py and the
+# demo scripts), so the suite stays green on a machine without it.
+find_package(Python3 QUIET COMPONENTS Interpreter)
+if(Python3_FOUND)
+  add_test(NAME INT-DOCLINKS-SYNC COMMAND ${Python3_EXECUTABLE}
+           ${CMAKE_SOURCE_DIR}/tools/check_doc_link_targets.py)
+endif()
+
 # Category labels for `ctest -L <category>` filtering. These come from
 # the same ID-prefix rule the C++ harness uses
 # (tests/support/TestHarness.h categoryOf). This block sets the label

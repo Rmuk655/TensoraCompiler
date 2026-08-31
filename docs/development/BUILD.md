@@ -148,6 +148,32 @@ make test-optimization  # build + ctest -L optimization
 make test-codegen       # build + ctest -L codegen
 ```
 
+## Documentation link checks
+
+This project has no CI configured — nothing here runs automatically on
+push or pull request; you run these yourself. Every `[label](target)`
+cross-reference in `docs/*.md` is checked two different ways:
+
+- **Does the link resolve at all** (file exists, `#anchor` exists)?
+  Run by hand with `make docs` (below); it needs Node/npm (already on
+  most dev machines) but no permanent global install, since it runs
+  the tool (`markdown-link-check`) through `npx`.
+- **Does the link land on the section its own label claims** (for
+  example, does `[RM 3.6](...)` actually land on RM section 3.6, and
+  not on 3.7 by a copy-paste mistake)? Checked automatically as the
+  `INT-DOCLINKS-SYNC` test that `ctest`/`make test` already runs
+  (`tools/check_doc_link_targets.py`). The only requirement is
+  `python3` on `PATH` -- already the same optional dependency
+  `./tools/check-deps.sh` reports for the real-world demos. If
+  `python3` is missing, CMake skips just this one test instead of
+  failing the whole suite.
+
+Run both checks together, without a full compiler build first, with:
+
+```bash
+make docs
+```
+
 ## Run the lexer on an example
 
 ```bash
@@ -499,6 +525,7 @@ authoritative equivalents.
 | `demo-independent` | run emitted IR through upstream mlir-opt/llc/lli |
 | `benchmark` | measure matmul-tiling speedup |
 | `appendix` | regenerate the source-listing appendix |
+| `docs` | check every `docs/*.md` cross-reference: link existence (`npx markdown-link-check`) + landing on the right section (`tools/check_doc_link_targets.py`) |
 
 ## Regenerate the source-listing appendix
 
