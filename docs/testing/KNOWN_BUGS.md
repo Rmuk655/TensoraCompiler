@@ -52,8 +52,8 @@ Actual:        src/lexer/Lexer.cpp casts SC_INT lexemes with
                any literal over INT64_MAX. tokenize() does not catch
                this exception, so it escapes the function.
 Status:        fixed -> REG-001
-Notes:         LANG-001 fixed this (docs/language/CHANGE_PROPOSALS/
-               LANG-001-integer-literal-bound.md): intLiteral is now
+Notes:         LANG-001 fixed this (docs/language/
+               05_LANGUAGE_EVOLUTION.md §5.9): intLiteral is now
                bounded to a signed 64-bit integer. An overflow is now a
                LexIntegerOverflow diagnostic (Diagnostic.h), not an
                uncaught exception; src/lexer/Lexer.cpp now uses
