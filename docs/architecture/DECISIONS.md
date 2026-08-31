@@ -15,7 +15,7 @@ backend?
 (c) a typed, SSA computation graph.
 
 **Decision.** (c) A typed, SSA computation graph with named-axis types
-(see [IR.md](IR.md)).
+(see [INTERFACES.md §3a](INTERFACES.md#3a-typed-computation-graph-tcg)).
 
 **Rationale.** The backend must not re-check semantics. Graph passes
 need verified types and producer/consumer structure. Development needs

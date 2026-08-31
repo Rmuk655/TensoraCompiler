@@ -1,9 +1,9 @@
 # Tensora Compiler Architecture
 
 > System Architect document. Authoritative for module boundaries, phase
-> ownership, and the frontend/semantic/codegen designs. Companion files:
-> [IR.md](IR.md) (Typed Computation Graph), [INTERFACES.md](INTERFACES.md)
-> (concrete cross-phase C++ interfaces), [DECISIONS.md](DECISIONS.md)
+> ownership, and the frontend/semantic/codegen designs. Companion file:
+> [INTERFACES.md](INTERFACES.md) (Typed Computation Graph §3a, plus the
+> concrete cross-phase C++ interfaces), [DECISIONS.md](DECISIONS.md)
 > (architecture decision records). The language it implements is frozen in
 > [../language/00_WHITEPAPER.md](../language/00_WHITEPAPER.md) and
 > [../language/03_LANGUAGE_REFERENCE_MANUAL.md](../language/03_LANGUAGE_REFERENCE_MANUAL.md).
@@ -38,7 +38,7 @@ include/tensora/
 ├── shared/         SourceSpan, SourceBuffer, Result<T>, Diagnostic/
 │                   DiagnosticEngine, AST (Decl/Expr nodes/AstProgram),
 │                   IR (Value, GraphNode, TypedGraph, GraphBuilder,
-│                   GraphVerifier -- see IR.md), Type/TensorType/DimSolver:
+│                   GraphVerifier -- see INTERFACES.md #3a), Type/TensorType/DimSolver:
 │                   every genuinely cross-phase representation, in one place
 ├── lexer/          Token, TokenKind, Lexer (wraps the ANTLR-generated
 │                   lexer), TokenAdapter (ANTLR token -> project Token)
@@ -187,7 +187,7 @@ this:
      ([ADR ARCH-007](DECISIONS.md#arch-007-error-recovery-by-type-poisoning)).
 3. **Return.** It resolves the `return` name and sets the graph's
    output value.
-4. **Finalize.** It runs `GraphVerifier` ([IR.md Section 6](IR.md#6-construction-and-verification))
+4. **Finalize.** It runs `GraphVerifier` ([INTERFACES.md §3a.6](INTERFACES.md#3a6-construction-and-verification))
    on each graph and attaches the program to `out`.
 
 ### 6.1 Required academic-compiler checks
@@ -465,7 +465,7 @@ throughout ([LOW-005](../testing/TEST_MATRIX.md#lowering-rm-322)). There is no c
   before/after structure.
 - **Tester (M5)** runs `--check` semantic tests with no backend at all.
 
-`GraphBuilder` and `GraphVerifier` ([IR.md](IR.md);
+`GraphBuilder` and `GraphVerifier` ([INTERFACES.md §3a](INTERFACES.md#3a-typed-computation-graph-tcg);
 [ADR ARCH-008](DECISIONS.md#arch-008-graphbuilder--graphverifier-as-the-mock-enablers))
 make this possible: any downstream owner can build valid IR without the
 upstream phase.

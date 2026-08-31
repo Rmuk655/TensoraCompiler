@@ -452,7 +452,7 @@ TypedGraph SemanticAnalyzer::analyzeGraph(const ast::GraphDecl& g) {
 
   TypedGraph graph = gc.builder.finish();
   // GraphVerifier catches bugs from a broken pass or a bad hand-built
-  // fixture (IR.md §6), on a graph that is otherwise clean. It should
+  // fixture (INTERFACES.md §3a.6), on a graph that is otherwise clean. It should
   // not add a second, redundant diagnostic to a graph semantic
   // analysis already knows is broken (for example, `return` of an
   // undefined name leaves an empty graph with no output, which is

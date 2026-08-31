@@ -1,4 +1,4 @@
-// Typed Computation Graph tests (IR.md). These check GraphBuilder and
+// Typed Computation Graph tests (INTERFACES.md §3a). These check GraphBuilder and
 // GraphVerifier rules (GR-*), matching docs/testing/TEST_MATRIX.md.
 // Each case has its own name; see tests/support/TestHarness.h.
 #include <string>

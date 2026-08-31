@@ -6,7 +6,7 @@
 #include <unordered_map>
 #include <vector>
 
-// The Tensora type system (RM 3.3-3.5; IR.md §2; ARCH-005/006).
+// The Tensora type system (RM 3.3-3.5; INTERFACES.md §3a.2; ARCH-005/006).
 // TypeContext interns and owns every type. Code refers to a type by
 // raw const pointer (TypePtr = const Type*), for the life of one
 // TypedProgram. The element type is always f32 in v1; there is no
