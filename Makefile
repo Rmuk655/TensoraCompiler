@@ -7,7 +7,7 @@ BUILD ?= build
 # multi-core machine. Override with `make build JOBS=1` if needed.
 JOBS ?= $(shell nproc 2>/dev/null || echo 4)
 
-.PHONY: build test example examples demo demos compiler-demos tensora-demos clean appendix benchmark viz demo-independent \
+.PHONY: build test example examples demo demos compiler-demos tensora-demos clean appendix docs benchmark viz demo-independent \
         lexer parser semantic optimization codegen full \
         test-lexer test-parser test-semantic test-optimization test-codegen \
         lexer-example parser-example semantic-example optimization-example codegen-example \
@@ -221,6 +221,35 @@ viz: build
 # should not fire on every build.
 appendix:
 	./tools/regen_appendix.py
+
+# Check docs/*.md cross-references by hand, since this project has no
+# CI (see docs/development/BUILD.md's "Documentation link checks"):
+# nothing enforces this unless you run it yourself. Two checks,
+# deliberately independent of `build`/`test` (docs have nothing to do
+# with the compiler binary):
+#   1. Does every [label](target) link resolve at all (file exists,
+#      #anchor exists)? Runs via `npx`, so it needs Node/npm but no
+#      permanent global install (npx caches the package under ~/.npm
+#      and reuses it next time).
+#   2. Does each link land on the section its own label claims (e.g.
+#      does "[RM 3.6](...)" really point at RM 3.6, not 3.7)? Runs
+#      tools/check_doc_link_targets.py; needs only python3, which
+#      ./tools/check-deps.sh already checks for. This is also test
+#      INT-DOCLINKS-SYNC in `make test`, so `make test` alone already
+#      covers it -- `make docs` exists for the *other* check, and to
+#      let you run both together without a full compiler build first.
+# Recipe lines start with `@`, and each check ends with an explicit
+# echo, because `-q`/`--quiet` on both tools means "errors only" -- with
+# no `@echo`, a clean run would print nothing at all after the command
+# line itself, which reads as "did this even do anything?" rather than
+# "checked, and it's fine."
+docs:
+	@echo "== 1/2: do doc links land on the section their label claims? =="
+	@python3 tools/check_doc_link_targets.py
+	@echo
+	@echo "== 2/2: does every doc link resolve (file + #anchor exist)? =="
+	@npx --yes markdown-link-check@3 -q -c .github/markdown-link-check-config.json \
+	  $$(find docs README.md -name '*.md') && echo "OK: no broken links in docs/*.md + README.md"
 
 # Build one compiler phase at a time (docs/development/BUILD.md "Build
 # one phase at a time"). Each depends only on the CMake targets that
