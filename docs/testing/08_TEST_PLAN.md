@@ -3,7 +3,6 @@
 > Tester document. Test suites come directly from the Language
 > Reference Manual ([../language/03_LANGUAGE_REFERENCE_MANUAL.md](../language/03_LANGUAGE_REFERENCE_MANUAL.md))
 > and the architecture ([../architecture/06_COMPILER_ARCHITECTURE.md](../architecture/06_COMPILER_ARCHITECTURE.md),
-> [../architecture/IR.md](../architecture/IR.md),
 > [../architecture/INTERFACES.md](../architecture/INTERFACES.md)). The
 > test suite is a second, executable reading of the specification:
 > every RM rule maps to at least one test. [TEST_MATRIX.md](TEST_MATRIX.md)
@@ -162,7 +161,7 @@ Tensora-specific checks (the differentiators):
 - **unresolvable shape** (RM 3.4): a program needing reasoning outside the
   bounded subset -> `SemaUnresolvableShape`, not a crash.
 
-## 6. Graph Tests (RM 3.18, 3.20; IR.md)
+## 6. Graph Tests (RM 3.18, 3.20; [INTERFACES.md §3a](../architecture/INTERFACES.md#3a-typed-computation-graph-tcg))
 
 Using `GraphBuilder`/`GraphVerifier` on hand-built fixtures:
 

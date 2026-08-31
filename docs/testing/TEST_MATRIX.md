@@ -212,19 +212,19 @@ which had listed SEM-RS-003 as `SemaReshapeCount`.
 | ATT-001 | [3.7](../language/03_LANGUAGE_REFERENCE_MANUAL.md#37-matrix-multiplication), [3.8](../language/03_LANGUAGE_REFERENCE_MANUAL.md#38-elementwise-arithmetic-and-broadcasting), [3.11](../language/03_LANGUAGE_REFERENCE_MANUAL.md#311-softmax), [3.14](../language/03_LANGUAGE_REFERENCE_MANUAL.md#314-transpose) | V | the full attention program (whitepaper 10.4) type-checks end to end: batched `@`, rank-4 `transpose`, scalar `*`, `softmax(axis=kseq)` | accept | done | [test_semantic.cpp:238](../../tests/semantic/test_semantic.cpp#L238) |
 | ATT-002 | [3.8](../language/03_LANGUAGE_REFERENCE_MANUAL.md#38-elementwise-arithmetic-and-broadcasting) | X | mutated ATT-001: swap `Q`'s and `K`'s leading axis names (`batch`/`head` transposed on one operand) so the batched matmul's leading-axis broadcast fails | reject: SemaAxisNameMismatch | done | [semantic.tns:324](../../tests/fixtures/semantic.tns#L324) |
 
-## Graph (RM 3.18, 3.20; IR.md)
+## Graph (RM 3.18, 3.20; [INTERFACES.md §3a](../architecture/INTERFACES.md#3a-typed-computation-graph-tcg))
 
 | ID | RM | Kind | Case | Result | Status | Test |
 |----|----|----|----|----|----|----|
 | GR-001 | [3.20](../language/03_LANGUAGE_REFERENCE_MANUAL.md#320-typed-computation-graph) | V | MLP program analyzed end to end: golden structural TCG (node count/kinds/order, param count) | graph | done | [test_graph.cpp:33](../../tests/semantic/test_graph.cpp#L33) |
-| GR-002 | IR §1 | X | hand-built `GraphBuilder` fixture with a cycle | GraphVerifier reject: IrInvariantViolation | done | [test_graph.cpp:52](../../tests/semantic/test_graph.cpp#L52) |
-| GR-003 | IR §1 | X | hand-built fixture with a dangling operand (out-of-range ValueId) | GraphVerifier reject: IrInvariantViolation | done | [test_graph.cpp:74](../../tests/semantic/test_graph.cpp#L74) |
+| GR-002 | INTERFACES §3a.1 | X | hand-built `GraphBuilder` fixture with a cycle | GraphVerifier reject: IrInvariantViolation | done | [test_graph.cpp:52](../../tests/semantic/test_graph.cpp#L52) |
+| GR-003 | INTERFACES §3a.1 | X | hand-built fixture with a dangling operand (out-of-range ValueId) | GraphVerifier reject: IrInvariantViolation | done | [test_graph.cpp:74](../../tests/semantic/test_graph.cpp#L74) |
 | GR-004 | [3.18](../language/03_LANGUAGE_REFERENCE_MANUAL.md#318-graph-semantics) | V | producer/consumer queries correct on a small hand-built chain | accept | done | [test_graph.cpp:91](../../tests/semantic/test_graph.cpp#L91) |
 | GR-005 | [3.20](../language/03_LANGUAGE_REFERENCE_MANUAL.md#320-typed-computation-graph) | V | single reachable output; every node in topological order | accept | done | [test_graph.cpp:113](../../tests/semantic/test_graph.cpp#L113) |
 | GR-006 | ARCH-008 | V | a `GraphVerifier`-clean fixture built entirely by hand (no sema) passes, demonstrating the mock-enabler contract | accept | done | [test_graph.cpp:129](../../tests/semantic/test_graph.cpp#L129) |
 | GR-007 | [3.18](../language/03_LANGUAGE_REFERENCE_MANUAL.md#318-graph-semantics) | V | a graph referencing the same global input twice adds it as exactly one param (lazy dedup) | 1 param, 2 consumers | done | [test_graph.cpp:154](../../tests/semantic/test_graph.cpp#L154) |
 
-`--emit-graph`'s textual dump format (IR.md §7) is not implemented by this
+`--emit-graph`'s textual dump format (INTERFACES.md §3a.7) is not implemented by this
 phase (driver/CLI work); GR-001's "golden" comparison is a structural
 C++ assertion over the built `TypedGraph`, matching how parser golden
 tests already work in this project (no invented textual format).

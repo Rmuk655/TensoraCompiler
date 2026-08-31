@@ -10,10 +10,10 @@
 #include "tensora/shared/SourceSpan.h"
 #include "tensora/shared/Type.h"
 
-// The Typed Computation Graph (TCG), RM 3.20; IR.md. This is the
+// The Typed Computation Graph (TCG), RM 3.20; INTERFACES.md §3a. This is the
 // boundary between semantic analysis and the backend: a verified, SSA,
 // arena-owned graph. Later phases (passes and lowering) read this
-// graph without re-checking its semantics. See IR.md for the full
+// graph without re-checking its semantics. See INTERFACES.md §3a for the full
 // reasoning.
 namespace tensora {
 
@@ -93,7 +93,7 @@ class TypedGraph {
   NodeId producerOf(ValueId id) const { return values_.at(id).producer; }
   const std::vector<NodeId>& consumersOf(ValueId id) const { return consumers_.at(id); }
 
-  // Adds a proven property to an already-built node (IR.md §4: a place
+  // Adds a proven property to an already-built node (INTERFACES.md §3a.4: a place
   // to record proven properties without re-deriving them). A pass uses
   // this, for example, to mark a fusion group it found, without
   // changing the graph's structure. This never changes SSA order,
@@ -151,7 +151,7 @@ class GraphBuilder {
   // or forward-referencing ValueId. Instead, it bounds-checks the
   // consumer-index update rather than using .at(). This lets
   // GraphVerifier do its real job: catch bugs from a broken pass or a
-  // bad hand-built fixture (IR.md §6). Without this, a hand-built test
+  // bad hand-built fixture (INTERFACES.md §3a.6). Without this, a hand-built test
   // could not build a dangling or forward-referencing operand to
   // check that GraphVerifier catches it.
   ValueId emit(OpKind op, std::vector<ValueId> inputs, NodeAttrs attrs, const TensorType* resultType,
@@ -209,7 +209,7 @@ class GraphBuilder {
   TypedGraph graph_;
 };
 
-// Re-checks IR.md §1's invariants, no matter how the graph was built.
+// Re-checks INTERFACES.md §3a.1's invariants, no matter how the graph was built.
 // This catches bugs from a broken pass or a bad hand-built fixture. An
 // empty result means the graph is valid. Every diagnostic here uses
 // DiagCode::IrInvariantViolation.

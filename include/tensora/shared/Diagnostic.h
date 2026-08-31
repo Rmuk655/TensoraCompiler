@@ -39,7 +39,7 @@ enum class DiagCode {
   // RM 3.3: axis names must be unique within one tensor type (Stage 9
   // decision, 2026-08-19 -- see docs/architecture/DECISIONS.md ARCH-013).
   SemaDuplicateAxisName,
-  // IR.md §6: GraphVerifier re-checks TCG invariants (SSA, acyclic and
+  // INTERFACES.md §3a.6: GraphVerifier re-checks TCG invariants (SSA, acyclic and
   // closed, single output), no matter how the graph was built. A
   // violation here is a compiler-internal defect (a buggy pass or a bad
   // hand-built fixture), not a user-program error. Every Sema* code
