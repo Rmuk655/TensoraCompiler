@@ -145,3 +145,49 @@ optimization was rejected in Section 3.21, since it could not meet
 that bar. If a proposed "implementation change" would alter a
 program's accepted/rejected status or its output, it is a language
 change, and Section 5.7 applies instead.
+
+## 5.9 Accepted Language Changes
+
+Every change that went through Section 5.7's policy is recorded here,
+in one place, instead of as separate per-change files. This keeps the
+policy (5.7) and the record of what it has actually approved together.
+
+### LANG-001 — Bound `intLiteral` to a signed 64-bit integer
+
+**Motivation.** RM 3.1 defines `intLiteral ::= [0-9]+` with no width
+bound. The lexer (`src/lexer/Lexer.cpp`) converted every literal with
+`std::stoll`, which throws `std::out_of_range` for a literal wider
+than `int64_t` (for example, a 40-digit number) — an uncaught
+exception, not the diagnostic `Lexer.h`'s contract promises. Every
+statically compiled language with fixed-width integers makes the same
+choice (C, Java, Rust, Go): an over-wide literal is a compile-time
+error, not silent wraparound, truncation, or a crash.
+
+**Syntax.** Unchanged; `intLiteral ::= [0-9]+` stays the same.
+
+**Semantics.** An `intLiteral` token's decimal value must fit in a
+signed 64-bit integer (`0` to `9223372036854775807`). A literal outside
+this range is rejected with a new diagnostic code,
+`DiagCode::LexIntegerOverflow`, at the literal's span; scanning
+continues afterward, the same way it already continues past
+`LexIllegalChar`, and the rejected token still takes an `Error` slot in
+the token stream. This bound comfortably fits every real Tensora
+program: axis sizes, `stride`, `padding`, `size`, and reduction-axis
+indices never approach 2^63.
+
+**Affected.** `include/tensora/shared/Diagnostic.h` (added
+`DiagCode::LexIntegerOverflow`); `src/lexer/Lexer.cpp` (replaced the
+unchecked `std::stoll` call with a checked parse); `tests/lexer/
+test_lexer.cpp` `LEX-011` (changed from a "does not crash" case to a
+real negative case asserting the diagnostic, span, `Error`-kind token,
+and continued scanning, plus a min/max boundary pair);
+`docs/language/03_LANGUAGE_REFERENCE_MANUAL.md` RM 3.1 (the bound);
+`docs/architecture/INTERFACES.md` `DiagCode` list.
+
+**Migration impact.** None for realistic programs. Only a pathological
+literal (tens of digits) is affected, and it moves from "crashes" to "a
+normal, located compile error." No accepted program's behavior changes.
+
+**Decision.** ACCEPTED, 2026-08-18 (fixed as `REG-001` — see
+`docs/testing/REGRESSION_LOG.md` and `docs/testing/KNOWN_BUGS.md`
+`BUG-001`).
