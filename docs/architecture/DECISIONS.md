@@ -620,3 +620,66 @@ path, on every example that runs today, not only that it runs without
 error. The generated LLVM IR does differ under the flag (more branches,
 more lines), so this is a real transform, not a silent no-op. Without
 the flag, behavior and output are unchanged (`INT-FULL-*` still pass).
+
+---
+
+## Implementation Timeline
+
+A condensed build history: what shipped in each milestone, and why a
+few now-fixed bugs mattered enough to leave a trace. The `ARCH-*`
+records above already carry the *design* rationale for the durable
+pieces below (linked inline); this section does not repeat that
+reasoning, and it deliberately omits point-in-time test counts, which
+go stale as the suite grows (`docs/testing/TEST_MATRIX.md` has the
+current, authoritative count).
+
+**Phase 1 — Lexer.** The ANTLR4 lexer (`grammar/Tensora.g4`), `Token`/
+`TokenKind`, `SourceSpan`/`SourceBuffer`, and the shared `Diagnostic`/
+`DiagnosticEngine` (see [ARCH-011](DECISIONS.md#arch-011-antlr4-based-frontend)).
+`tensora --emit-tokens` was the driver's first stage.
+
+**Phase 2 — Parser.** The ANTLR4 parser plus `AstBuilder`
+(`src/parser/AstBuilder.cpp`), which walks the generated parse tree in
+project-owned C++ with no grammar actions
+(see [ARCH-011](DECISIONS.md#arch-011-antlr4-based-frontend)). The AST node set
+(`include/tensora/shared/Ast.h`) carries syntax only, per RM 3.7-3.17's
+split between parsing and semantic checking.
+
+**Phase 3 — Semantic Analysis.** `SemanticAnalyzer`, the per-operator
+contracts (`semantic/Contracts.h`), the Typed Computation Graph itself
+(`shared/Ir.h`), `GraphBuilder`/`GraphVerifier`
+(see [ARCH-008](DECISIONS.md#arch-008-graphbuilder--graphverifier-as-the-mock-enablers)),
+`DimSolver` (see [ARCH-006](DECISIONS.md#arch-006-bounded-dimension-solver-no-smt)),
+and `SymbolTable` (RM 3.6 name/scope rules). One early gap: `emit()`'s
+per-operator call sites all passed an empty `debugName`, so
+`--emit-graph`/`--explain` (added the next phase) had nothing readable
+to print; fixed with an additive `GraphBuilder::setDebugName(ValueId,
+string)` called once per statement, instead of threading a name
+parameter through every operator-specific analyze helper.
+
+**Phase 4 — Optimization and Code Generation.** The six frozen Level-1
+graph passes (see [ARCH-009](DECISIONS.md#arch-009-two-optimization-levels-one-data-flow-analysis)),
+tensor liveness analysis, MLIR lowering for 11 of 13 `OpKind`s
+(general reshape and batched matmul are not implemented — see
+[06_COMPILER_ARCHITECTURE.md §7.1](06_COMPILER_ARCHITECTURE.md)), the
+project-authored `MatmulTilingPass` (see
+[ARCH-009](DECISIONS.md#arch-009-two-optimization-levels-one-data-flow-analysis)),
+JIT execution via `mlir::ExecutionEngine`, an ahead-of-time-compiled
+native path (`tools/codegen_mlp_native.cpp`) producing a real x86-64
+ELF object with zero MLIR/LLVM runtime dependency, and the CLI driver's
+growth from a 71-line `--emit-tokens`-only stub into the full
+multi-phase tool `docs/language/02_LANGUAGE_TUTORIAL.md` §2.12
+documents. This phase found several MLIR pipeline bugs whose fixes are
+now load-bearing, written up where the code they fix lives
+([06_COMPILER_ARCHITECTURE.md §7.1](06_COMPILER_ARCHITECTURE.md) and
+[§7.2](06_COMPILER_ARCHITECTURE.md)): the `scf` bufferizable-op-interface
+registration gap, `linalg.matmul`/`conv_2d`/`pooling_nchw_max`'s
+accumulate-into-`outs` semantics needing an explicit `linalg.fill`,
+`ExpandStridedMetadataPass`/`LowerAffinePass`'s required ordering
+relative to `ArithToLLVM`, and `ExecutionEngine::invokePacked`'s
+undecorated-name requirement (see
+[ARCH-016](DECISIONS.md#arch-016-runtime-data-io-for---run-npy-loadstore)). Known,
+still-open gaps as of this phase: general reshape, batched matmul, and
+average pooling are not implemented; symbolic-dimension lowering fails
+MLIR verification (`LOW-005`, see `docs/testing/TEST_MATRIX.md`) and is
+rejected by the driver before lowering rather than crashing.
