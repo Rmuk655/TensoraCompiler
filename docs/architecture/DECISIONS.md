@@ -127,7 +127,7 @@ sema-produced ones.
 
 **Affected.** `ir/`, all downstream tests.
 
-**Consequences.** Real parallel work (ARCHITECTURE.md §8), at a small
+**Consequences.** Real parallel work (06_COMPILER_ARCHITECTURE.md §8), at a small
 cost: the builder and verifier must be kept authoritative together.
 
 ---
@@ -444,7 +444,7 @@ progress) fails safe, instead of hanging the compiler.
 (`PassStats::iterations`, `PassManager::runAll`),
 `src/optimization/GraphPasses.cpp` (`hasFactPrefix`,
 `ElementwiseFusionPass`, `LinearBiasActivationFusionPass`),
-`docs/architecture/06_COMPILER_ARCHITECTURE.md` §6.10,
+`docs/architecture/06_COMPILER_ARCHITECTURE.md` §6a,
 `docs/testing/TEST_MATRIX.md`.
 
 **Consequences.** No existing test's expected final graph changed —
