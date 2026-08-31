@@ -2,7 +2,7 @@
 
 > Tester document. Test suites come directly from the Language
 > Reference Manual ([../language/03_LANGUAGE_REFERENCE_MANUAL.md](../language/03_LANGUAGE_REFERENCE_MANUAL.md))
-> and the architecture ([../architecture/ARCHITECTURE.md](../architecture/ARCHITECTURE.md),
+> and the architecture ([../architecture/06_COMPILER_ARCHITECTURE.md](../architecture/06_COMPILER_ARCHITECTURE.md),
 > [../architecture/IR.md](../architecture/IR.md),
 > [../architecture/INTERFACES.md](../architecture/INTERFACES.md)). The
 > test suite is a second, executable reading of the specification:

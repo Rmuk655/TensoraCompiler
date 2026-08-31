@@ -21,7 +21,7 @@ Added:
 Design notes:
 
 - Matches `docs/architecture/INTERFACES.md` §1 (Token/Lexer) and
-  `docs/architecture/ARCHITECTURE.md` §5.1.
+  `docs/architecture/06_COMPILER_ARCHITECTURE.md` §5.1.
 - `TokenAdapter` converts each ANTLR-generated token into the project
   `Token`, with line/column tracking in C++ (`src/lexer/Lexer.cpp`).
   The parser (Phase 2) consumes the resulting token stream, per
@@ -65,7 +65,7 @@ Added:
 Design notes:
 
 - Matches `docs/architecture/INTERFACES.md` §2 (Parser/AST) and
-  `docs/architecture/ARCHITECTURE.md` §5.2.
+  `docs/architecture/06_COMPILER_ARCHITECTURE.md` §5.2.
 - The grammar is LL(1)-recognizable in practice (a `statement` by
   `identifier "="`, a `returnStmt` by `"return"`); documented formally
   in `docs/language/03_LANGUAGE_REFERENCE_MANUAL.md` §3.24, "in the
@@ -112,7 +112,7 @@ Added:
 Design notes:
 
 - Matches `docs/architecture/INTERFACES.md` §3 (Sema) and
-  `docs/architecture/ARCHITECTURE.md` §6; never depends on MLIR/LLVM
+  `docs/architecture/06_COMPILER_ARCHITECTURE.md` §6; never depends on MLIR/LLVM
   (enforced by which CMake targets link which libraries -- `tensora_semantic`
   has no MLIR include paths at all).
 - Axis names are a property of the surface language and the TCG; they
@@ -196,7 +196,7 @@ Added:
 
 Design notes:
 
-- Matches `docs/architecture/ARCHITECTURE.md` §7 (rewritten this phase
+- Matches `docs/architecture/06_COMPILER_ARCHITECTURE.md` §7 (rewritten this phase
   to describe what's actually implemented, not the earlier aspirational
   `Backend`/`CodegenOptions` abstraction) and INTERFACES §4.
 - Three layers are kept explicit and distinguishable throughout:

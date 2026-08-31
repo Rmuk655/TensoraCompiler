@@ -4,7 +4,7 @@
 > the contracts that let the frontend, type system, semantic analysis,
 > optimization, and backend work develop in parallel, each against a
 > stable boundary. Once frozen, they stay stable. Companion files:
-> [ARCHITECTURE.md](ARCHITECTURE.md), [IR.md](IR.md). This C++ is
+> [06_COMPILER_ARCHITECTURE.md](06_COMPILER_ARCHITECTURE.md), [IR.md](IR.md). This C++ is
 > illustrative; the exact headers live in `include/tensora/`.
 
 ## 0. Shared Foundations
@@ -182,7 +182,7 @@ global entries, plus one scope per graph with its final local bindings
 and a resolution log (referenced name -> `global::name`/`local::name`/
 `undefined`) — captured from the real `SymbolTable` instance, not a
 parallel reconstruction. `tensora --emit-symbols` renders it (main.cpp);
-see 06_COMPILER_ARCHITECTURE.md §6.6 and whitepaper §4.1.
+see whitepaper §4.1.
 
 Internal operator-contract interface (one per operator; the unit of M3's
 work and of the semantic test suite):

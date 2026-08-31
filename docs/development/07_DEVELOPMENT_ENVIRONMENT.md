@@ -71,7 +71,7 @@ reports `21.1.8`.
 
 This pin needs no source changes to the frontend or semantic analyzer,
 and allows none — neither has any MLIR/LLVM dependency
-(`docs/architecture/06_COMPILER_ARCHITECTURE.md` §6.3/§6.11). Only the
+(`docs/architecture/06_COMPILER_ARCHITECTURE.md` §2). Only the
 `lowering/` module and its tests and tools depend on MLIR/LLVM.
 
 ## 7.4 Build
