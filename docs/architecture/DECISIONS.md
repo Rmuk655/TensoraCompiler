@@ -659,10 +659,10 @@ parameter through every operator-specific analyze helper.
 
 **Phase 4 — Optimization and Code Generation.** The six frozen Level-1
 graph passes (see [ARCH-009](DECISIONS.md#arch-009-two-optimization-levels-one-data-flow-analysis)),
-tensor liveness analysis, MLIR lowering for 11 of 13 `OpKind`s
-(general reshape and batched matmul are not implemented — see
-[06_COMPILER_ARCHITECTURE.md §7.1](06_COMPILER_ARCHITECTURE.md)), the
-project-authored `MatmulTilingPass` (see
+tensor liveness analysis, MLIR lowering for every `OpKind` except
+general reshape (`MlirLowerer`'s lowering switch hits
+`llvm_unreachable`, not a silent fallthrough, for anything it does not
+handle), the project-authored `MatmulTilingPass` (see
 [ARCH-009](DECISIONS.md#arch-009-two-optimization-levels-one-data-flow-analysis)),
 JIT execution via `mlir::ExecutionEngine`, an ahead-of-time-compiled
 native path (`tools/codegen_mlp_native.cpp`) producing a real x86-64
@@ -678,8 +678,13 @@ accumulate-into-`outs` semantics needing an explicit `linalg.fill`,
 `ExpandStridedMetadataPass`/`LowerAffinePass`'s required ordering
 relative to `ArithToLLVM`, and `ExecutionEngine::invokePacked`'s
 undecorated-name requirement (see
-[ARCH-016](DECISIONS.md#arch-016-runtime-data-io-for---run-npy-loadstore)). Known,
-still-open gaps as of this phase: general reshape, batched matmul, and
-average pooling are not implemented; symbolic-dimension lowering fails
-MLIR verification (`LOW-005`, see `docs/testing/TEST_MATRIX.md`) and is
-rejected by the driver before lowering rather than crashing.
+[ARCH-016](DECISIONS.md#arch-016-runtime-data-io-for---run-npy-loadstore)).
+Batched matmul and rank-1/rank>=3 `linear` were a gap at this phase's
+end (sema accepted these ranks per RM 3.7/3.9, but lowering only
+handled rank 2); [ARCH-014](DECISIONS.md#arch-014-semabackend-rank-gap-closed-unsafe-cast-retired)
+closed it in a later review pass. The one remaining, still-open gap is
+general reshape (arbitrary regrouping beyond `flatten`'s fixed
+collapse — no workload attempted has needed it); symbolic-dimension
+lowering also still fails MLIR verification (`LOW-005`, see
+`docs/testing/TEST_MATRIX.md`) and is rejected by the driver before
+lowering rather than crashing.

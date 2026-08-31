@@ -131,10 +131,12 @@ full, comprehensive test suite, stable across repeated runs.
 Tier B is also complete: richer axis-name-checked broadcasting,
 convolution/pooling (including padding), graph fusion, the six-pass
 Level-1 suite, a Transformer feed-forward block, batched matmul, and
-single-head attention (whitepaper Section 10.4's frozen core-operator
-form). Multi-head attention specifically is not yet demonstrated with
-an example, though batched matmul (Section 1.7 of the Introduction) no
-longer blocks it.
+attention (whitepaper Section 10.4's frozen core-operator form) —
+including multi-head attention, demonstrated end to end against a real
+pretrained ViT-Base checkpoint's own 12-head, 768-dim self-attention
+block (`demo-vit-attention`, verified independently at all 12 encoder
+layers; see [README.md](../../README.md#real-world-inference-demos)),
+not only the single-head hand-built case.
 
 Beyond Tier B, the project also delivers a Tier-B/C-adjacent item not
 originally itemized in Section 4.5: a project-authored **Level-2 MLIR
@@ -149,9 +151,12 @@ is a general-purpose CLI driver that takes any `.tns` file through the
 full pipeline (`--run`/`-o`); every MLIR-lowering and codegen *test*,
 though, still builds each `TypedGraph` directly in C++ test/tool code
 and exercises the real lowering, optimization, and backend from there
-(see Section 1.7 of the Introduction). A small number of Tier C items
-(general reshape, GPU lowering) remain future work by design; batched
-matmul, originally a Tier C item, is now done (Section 1.7).
+(the mock-enabler pattern `GraphBuilder`/`GraphVerifier` make possible
+— see [08_TEST_PLAN.md](../testing/08_TEST_PLAN.md) and
+[ARCH-008](../architecture/DECISIONS.md#arch-008-graphbuilder--graphverifier-as-the-mock-enablers)).
+A small number of Tier C items (general reshape, GPU lowering) remain
+future work by design; batched matmul, originally a Tier C item, is
+now done (see [01_INTRODUCTION.md §1.5](01_INTRODUCTION.md#15-scope)).
 
 Toolchain risk (Section 4.6's "MLIR setup consumes weeks") materialized
 in a smaller form than feared: MLIR/LLVM 21 C++ dev headers were not
@@ -185,35 +190,53 @@ preinstalled and had to be added via `apt` (`llvm-21-dev`,
                                       end-to-end CPU path
   -----------------------------------------------------------------------
 
-## 4.7 Open-Source Plan
+## 4.7 Open-Source Readiness
 
-The repository should include:
+Original plan: the repository should include a clear README, a
+quick-start example, an architecture diagram, a language
+specification, a contributor guide, a reproducible build, examples,
+regression tests, benchmark scripts, issue templates, a chosen
+license, and a tagged release.
 
--   clear README;
--   quick-start example;
--   architecture diagram;
--   language specification;
--   contributor guide;
--   reproducible build;
--   examples;
--   regression tests;
--   benchmark scripts;
--   issue templates;
--   license selected by the team/institution;
--   tagged academic-compiler release.
+Status: most of the substance is done, but the repository is not yet
+actually published, so three items below stay open by omission, not by
+oversight.
 
-## 4.8 Research-Readiness Plan
+Done:
 
-Do not claim a paper in advance. Instead preserve artifacts needed for
-one:
+-   **README** — comprehensive: project description, pipeline diagram,
+    one-time setup, canonical build/test commands, and a full demo
+    catalog ([README.md](../../README.md)).
+-   **Quick-start example** — the "Canonical build and test" and
+    "Compiler Demos" sections of the README double as this (`cmake`
+    configure/build/test, then `make demo-mlp` and friends).
+-   **Architecture diagram** — as a text pipeline diagram in the
+    README and as the module map in
+    [06_COMPILER_ARCHITECTURE.md §2](../architecture/06_COMPILER_ARCHITECTURE.md),
+    not (yet) as a rendered image file.
+-   **Language specification** —
+    [03_LANGUAGE_REFERENCE_MANUAL.md](../language/03_LANGUAGE_REFERENCE_MANUAL.md),
+    plus the whitepaper and tutorial.
+-   **Reproducible build** — CMake `FetchContent` pins the ANTLR jar
+    and C++ runtime; see
+    [BUILD.md](../development/BUILD.md)/[07_DEVELOPMENT_ENVIRONMENT.md](../development/07_DEVELOPMENT_ENVIRONMENT.md).
+-   **Examples** — `examples/*.tns` plus the `demos/` end-to-end
+    PyTorch-interop programs.
+-   **Regression tests** — the CTest suite plus
+    [REGRESSION_LOG.md](../testing/REGRESSION_LOG.md) and
+    [KNOWN_BUGS.md](../testing/KNOWN_BUGS.md).
+-   **Benchmark scripts** — `tools/benchmark_matmul_tiling.cpp`
+    (tiled-vs-untiled timing, backing the Level-2 claim in
+    [ARCH-009](../architecture/DECISIONS.md#arch-009-two-optimization-levels-one-data-flow-analysis)).
 
--   versioned benchmark suite;
--   failure corpus with provenance;
--   before/after IR;
--   baseline comparisons;
--   performance measurements;
--   ablation-friendly pass infrastructure;
--   precise statement of which facts each optimization consumes.
+Not yet done:
 
-A research question, once this academic compiler is done, can then be scoped with faculty using
-measured evidence.
+-   **Contributor guide** — no `CONTRIBUTING.md`.
+-   **Issue templates** — no `.github/ISSUE_TEMPLATE/`.
+-   **License and a tagged release** — no `LICENSE` file and no git
+    tag exist yet; these are the actual publish-time gate, since a
+    public repository with no license grants no one any rights to use
+    it. The remaining work here is a licensing decision (owned by the
+    team/institution, not a compiler-engineering task) followed by
+    adding the three items above and cutting a tag — not further
+    compiler work.
