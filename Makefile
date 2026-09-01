@@ -214,11 +214,11 @@ demo-independent: build
 viz: build
 	./demos/08_viz_demo.sh $${FILE:-examples/optimizations/dead_code.tns} $(BUILD)
 
-# Regenerate docs/development/10_APPENDIX_SOURCE_LISTING.md from the
-# current source tree (docs/development/10_APPENDIX_SOURCE_LISTING.md
-# §10.10). A doc-maintenance step, run by hand after a source change --
-# not part of `build`/`test`, since it edits a committed file and
-# should not fire on every build.
+# Build docs/development/10_APPENDIX_SOURCE_LISTING.md from
+# docs/development/appendix_template.md and the current source tree
+# (see that appendix's own §10.10). The appendix is generated, not
+# committed. A doc-maintenance step, run by hand -- not part of
+# `build`/`test`, since it has no bearing on the compiler binary.
 appendix:
 	./tools/regen_appendix.py
 
