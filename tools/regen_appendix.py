@@ -2,19 +2,28 @@
 """Regenerate docs/development/10_APPENDIX_SOURCE_LISTING.md.
 
 The appendix is a mechanical concatenation of the real source tree
-(see its own Section 10.10), not a hand-maintained document. Run this
-after any change to a file the appendix already lists, so the listing
-never silently drifts from what was actually built and tested:
+(see its own Section 10.10), not a hand-maintained document. It is
+built fresh on demand and is not committed -- run this after any
+change to a file it lists, or any time you need the listing:
 
     ./tools/regen_appendix.py
 
+The committed input is docs/development/appendix_template.md: the same
+document with every code fence left empty. It holds the parts that
+cannot be derived from the source tree -- the prose, the Section
+10.3-10.8 grouping, and the "### `path`" headers saying which file
+belongs in which section. Everything else is filled in from disk here.
+
 What it does:
-  - Refreshes every "### `path`" file dump already in the appendix
-    (Sections 10.3-10.9) from the file's current content on disk,
-    tagged with the language matching its extension.
-  - Regenerates the Section 10.2 repository manifest (`find grammar
+  - Starts from the template, so the output never depends on a
+    previous run's output, and the appendix can always be rebuilt
+    from a fresh clone.
+  - Fills every "### `path`" file dump (Sections 10.3-10.9) from the
+    file's current content on disk, tagged with the language matching
+    its extension.
+  - Generates the Section 10.2 repository manifest (`find grammar
     include src tools examples -type f | sort`) and the Section 10.9
-    test manifest (`find tests -type f | sort`) from scratch.
+    test manifest (`find tests -type f | sort`).
   - Updates Section 10.10's base commit hash and generation date.
   - Reports, but does not silently fix, two situations that need a
     human decision: a manifest entry with no "### `path`" dump
@@ -23,10 +32,11 @@ What it does:
     exists on disk (a removed or renamed file -- decide whether to
     delete the section or update the path).
 
-This script does not add or remove "### `path`" headers itself: the
-grouping into Sections 10.3-10.8 is a curated-by-topic breakdown (one
-section per compiler phase), not something a manifest diff can infer
-on its own.
+Fix both of those in the template, not in the generated appendix:
+edits to the appendix are discarded on the next run. The grouping into
+Sections 10.3-10.8 is a curated-by-topic breakdown (one section per
+compiler phase), not something a manifest diff can infer on its own,
+which is why it lives in a committed file.
 """
 import re
 import subprocess
@@ -36,6 +46,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 APPENDIX = REPO / "docs/development/10_APPENDIX_SOURCE_LISTING.md"
+TEMPLATE = REPO / "docs/development/appendix_template.md"
 
 LANG_BY_EXT = {
     ".h": "cpp",
@@ -136,7 +147,13 @@ def find_heading(text: str, heading: str) -> int:
 
 
 def main() -> int:
-    text = APPENDIX.read_text()
+    if not TEMPLATE.is_file():
+        print(f"error: missing structure template {TEMPLATE.relative_to(REPO)}", file=sys.stderr)
+        return 1
+    text = TEMPLATE.read_text()
+    # The template opens with an HTML comment saying what it is. That is
+    # for whoever edits the template, not for the appendix.
+    text = re.sub(r"\A<!--.*?-->\n", "", text, count=1, flags=re.DOTALL)
     end_idx = find_heading(text, "## 10.10 Mechanical Generation")
     text, n_dumps, missing_on_disk = refresh_file_dumps(text, end_idx)
 
