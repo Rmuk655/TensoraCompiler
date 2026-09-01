@@ -57,6 +57,8 @@ import json
 import os
 import subprocess
 import sys
+import time
+import urllib.error
 import urllib.request
 
 import numpy as np
@@ -249,6 +251,58 @@ def process_one_image(name, img_path, model, processor, id2label, tensora_bin):
     }
 
 
+def download_photograph(src, path, attempts=4):
+    """Download one photograph to `path`, with retries.
+
+    The gallery pulls several photographs from the same host, one after
+    the other. Hosts rate-limit that and answer HTTP 429, which is
+    temporary: the correct response is to wait and ask again, not to
+    stop the demo. Server-side 5xx errors get the same treatment.
+
+    The file is written to a temporary name and moved into place only
+    after the download is complete. A download that fails part of the
+    way through therefore leaves no file behind. Without this, the
+    partial file stays on disk, the `os.path.exists` cache check finds
+    it on the next run, and the demo then reads a truncated image.
+    """
+    tmp = path + ".partial"
+    delay = 2.0
+    for attempt in range(1, attempts + 1):
+        try:
+            # Wikimedia (and some other hosts) reject the default
+            # urllib User-Agent with a 403; identify honestly instead.
+            req = urllib.request.Request(src, headers={"User-Agent": "TensoraCompilerDemo/1.0"})
+            with urllib.request.urlopen(req, timeout=60) as resp, open(tmp, "wb") as f:
+                f.write(resp.read())
+            os.replace(tmp, path)
+            return
+        except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as exc:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+            transient = (
+                isinstance(exc, (urllib.error.URLError, TimeoutError))
+                and not isinstance(exc, urllib.error.HTTPError)
+            ) or (isinstance(exc, urllib.error.HTTPError) and exc.code in (429, 500, 502, 503, 504))
+            if not transient or attempt == attempts:
+                raise SystemExit(
+                    f"error: could not download the {os.path.basename(path)} photograph.\n"
+                    f"  source: {src}\n"
+                    f"  cause:  {exc}\n\n"
+                    "This is a network problem, not a compiler problem. Photographs\n"
+                    "already downloaded are kept, so running the demo again continues\n"
+                    "from where it stopped. To use your own photograph instead, set\n"
+                    "TENSORA_VIT_IMAGE to a local image path."
+                )
+            # Hosts that send 429 often say how long to wait; obey that.
+            wait = delay
+            retry_after = getattr(exc, "headers", None) and exc.headers.get("Retry-After")
+            if retry_after and retry_after.isdigit():
+                wait = float(retry_after)
+            print(f"  {exc} -- retrying in {wait:.0f}s ({attempt}/{attempts - 1})")
+            time.sleep(wait)
+            delay *= 2
+
+
 def main():
     torch.manual_seed(0)
     os.makedirs(OUT_DIR, exist_ok=True)
@@ -268,11 +322,7 @@ def main():
             os.makedirs(os.path.dirname(path), exist_ok=True)
             if not os.path.exists(path):
                 print(f"Downloading a real sample photograph ({name}) from {src} ...")
-                # Wikimedia (and some other hosts) reject the default
-                # urllib User-Agent with a 403; identify honestly instead.
-                req = urllib.request.Request(src, headers={"User-Agent": "TensoraCompilerDemo/1.0"})
-                with urllib.request.urlopen(req) as resp, open(path, "wb") as f:
-                    f.write(resp.read())
+                download_photograph(src, path)
         else:
             path = src
         downloaded[name] = path
