@@ -529,9 +529,10 @@ authoritative equivalents.
 
 ## Regenerate the source-listing appendix
 
-[docs/development/10_APPENDIX_SOURCE_LISTING.md](10_APPENDIX_SOURCE_LISTING.md)
-is a mechanical concatenation of the real source tree, not a
-hand-maintained document (see its own Section 10.10). After changing a
+`docs/development/10_APPENDIX_SOURCE_LISTING.md` is a mechanical
+concatenation of the real source tree, not a hand-maintained document
+(see its own Section 10.10). It is generated rather than committed, so
+it is absent from a fresh clone. After changing a
 file it already lists, run:
 
 ```bash
