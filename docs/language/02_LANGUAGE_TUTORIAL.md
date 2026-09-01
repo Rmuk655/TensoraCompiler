@@ -1,6 +1,10 @@
 # 2. Tensora Language Tutorial
 
-## 2.1 First Program
+## 2.0 Your First 5 Minutes
+
+Tensora is a small declarative language for describing forward ML
+computations using statically checked tensors with named axes. Here is
+a complete Tensora program:
 
 ``` tensora
 input  x: Tensor[batch=B, feat=784]
@@ -12,11 +16,53 @@ graph projection {
 }
 ```
 
-`B` is symbolic. The compiler infers this type:
+Save it as `projection.tns` and run it through the compiler's type
+checker, no execution needed:
+
+``` bash
+tensora --explain projection.tns
+```
+
+which prints every value's inferred type:
 
 ``` text
 y : Tensor[batch=B, out=256]
 ```
+
+`B` is symbolic — a batch size the program never fixes. The compiler
+still proves `x`'s feature axis (`784`) matches `W`'s input axis
+(`784`) and infers the rest. Now break it: change `weight W` above to
+`Tensor[in=512, out=256]`, save it, and run `tensora --check`. Section
+2.2 walks through exactly what error you should see, and why. That
+predict → break → fix loop, repeated on progressively bigger programs,
+is the rest of this tutorial.
+
+**Where this is going.** The same four constructs above
+(`input`/`weight`/`graph`/`@`) are enough to eventually check and run a
+real self-attention block taken from a genuine pretrained ViT-Base
+Transformer and verify Tensora's output against PyTorch's to
+`1.86e-07`. See the [README's real-world
+demos](../../README.md#real-world-inference-demos) for that payoff
+(one-time setup: `make setup-tensora-demos` — nothing below needs it yet), and
+Section 2.14 for the full, honest case for why Tensora exists
+alongside PyTorch rather than instead of it.
+
+Section 2.12 covers the full CLI (`--check`, `--explain`, `--run`,
+`--emit-graph`/`--emit-optimized-graph`, `--emit-mlir`) and every
+runnable example in this tutorial's build-up order. Section 2.13 forks
+into an ML-focused path and a compiler-internals path once the basics
+below are done.
+
+## 2.1 First Program, in Detail
+
+Section 2.0's `projection` program above is this tutorial's running
+example. `input` and `weight` both declare tensors with named,
+sized axes; the only difference is that `--run` expects `weight`
+values to come from trained data (Section 2.12 Step 4), while `input`
+values are supplied per call. `graph` is the unit the compiler
+type-checks and compiles. `y = x @ W` is matrix multiplication; Section
+2.2 covers exactly which axes it contracts and why the result's type
+comes out `Tensor[batch=B, out=256]`.
 
 ## 2.2 Understanding Matrix Multiplication
 
@@ -47,6 +93,14 @@ Tensor[batch=B, feat=784] @ Tensor[in=512, out=256]
 
 The compiler rejects it, because `784 != 512`.
 
+> **Try it — break it (1 minute).** Copy Section 2.0's program to
+> `bad_matmul.tns` and change `weight W` to
+> `Tensor[in=512, out=256]`. Run `tensora --check bad_matmul.tns` and
+> read the diagnostic; it should point at exactly the mismatched sizes
+> above. Then fix it back to `784` and re-run to see it pass. This
+> predict-break-fix loop is worth repeating for any change you're
+> unsure about, throughout the rest of this tutorial.
+
 ## 2.3 Linear Layers
 
 ``` tensora
@@ -66,19 +120,14 @@ argument is not optional in the core language.
 
 ## 2.4 Building an MLP
 
-``` tensora
-input  x:  Tensor[batch=B, feat=784]
-weight W1: Tensor[in=784, out=256]
-weight b1: Tensor[out=256]
-weight W2: Tensor[in=256, out=10]
-weight b2: Tensor[out=10]
+Chain two linear layers with a `relu` between them and you have a full
+multilayer perceptron. The runnable version is
+[`examples/mlp.tns`](../../examples/mlp.tns) — open it rather than
+retyping it here; it is the same 784 → 256 → 10 shape as Section 2.3,
+just with a second layer appended. Try:
 
-graph mlp {
-    h = linear(x, W1, b1)
-    h = relu(h)
-    y = linear(h, W2, b2)
-    return y
-}
+``` text
+tensora --explain examples/mlp.tns
 ```
 
 Type flow:
@@ -102,7 +151,7 @@ Tensor[batch=B, out=10]
 ## 2.5 Explain Mode
 
 ``` text
-tensora explain mlp.tns
+tensora --explain examples/mlp.tns
 ```
 
 This command shows the inferred type of every value. It also shows the
@@ -128,6 +177,10 @@ sizes must equal the product of the source sizes.
 reshape(x, [batch=B, head=10, dim=64])   # invalid: 10*64 = 640 != 768
 ```
 
+Both cases are exercised, accept and reject, in the test suite:
+[`SEM-RS-001`](../testing/TEST_MATRIX.md#semantic--reshape--flatten-rm-312-313)
+and [`SEM-RS-002`](../testing/TEST_MATRIX.md#semantic--reshape--flatten-rm-312-313).
+
 ## 2.7 Transpose
 
 The compiler can permute `Tensor[batch=B, seq=S, head=H, dim=D]` into
@@ -139,7 +192,10 @@ y = transpose(x, perm=[0, 2, 1, 3])
 
 `perm` must name each axis position exactly once. Under the
 permutation, each size and each axis name moves together with its new
-position.
+position — see
+[`SEM-TR-001`](../testing/TEST_MATRIX.md#semantic--transpose--reductions--softmax-rm-314-311-315)
+for this exact rank-4 case, and the two rows after it for the reject
+cases (repeated or out-of-range `perm` index).
 
 ## 2.8 Elementwise Operations and Broadcasting
 
@@ -158,7 +214,18 @@ z = a + b   # error: axis 0 is 'batch' on the left but 'feat' on the right
 ```
 
 This is the main reason Tensora's checker catches bugs that a
-size-only shape checker would miss.
+size-only shape checker would miss. **Further reading:** `SEM-EW-003`
+in the [test matrix](../testing/TEST_MATRIX.md#semantic--elementwise--broadcasting--axis-names-rm-38),
+whitepaper [Section 10.8](00_WHITEPAPER.md#108-invalid-axis-name-mismatch-a-bug-only-names-catch)
+for this exact failure mode in more depth.
+
+> **Try it — break it (1 minute).** Save the invalid `a + b` program
+> above to `bad_broadcast.tns` and run `tensora --check
+> bad_broadcast.tns`. Predict the error first: will Tensora accept it
+> because the *sizes* (`32`, `64`) line up, or reject it because the
+> *names* don't? Then rename `b`'s axes to `Tensor[batch=32, feat=64]`
+> (matching `a`) and re-run — now it passes. A size-only checker (and
+> plain PyTorch) would have accepted the original, buggy version.
 
 ## 2.9 CNN Example
 
@@ -179,36 +246,37 @@ graph features {
 ```
 
 The compiler derives the output spatial dimensions from the
-convolution and pooling formulas (see whitepaper Section 4.5).
+convolution and pooling formulas (see whitepaper Section 4.5). That
+covers one conv/pool stage; for the full two-stage classifier with a
+`flatten` and a final `linear` head, run
+[`examples/cnn.tns`](../../examples/cnn.tns) — its header comment gives
+a hand-computed reference value that
+[`tests/codegen/test_cnn_e2e.cpp`](../../tests/codegen/test_cnn_e2e.cpp)
+checks the compiler against.
 
 ## 2.10 Transformer Feed-Forward Example
 
-``` tensora
-input  x:  Tensor[batch=B, seq=S, model=768]
-weight W1: Tensor[in=768, out=3072]
-weight b1: Tensor[out=3072]
-weight W2: Tensor[in=3072, out=768]
-weight b2: Tensor[out=768]
-
-graph transformer_mlp {
-    h = linear(x, W1, b1)
-    h = relu(h)
-    y = linear(h, W2, b2)
-    return y
-}
-```
-
-v1 uses `relu`. Real Transformers use `gelu`. That activation, and
-others such as `sigmoid` and `tanh`, are future scope. They are not
-part of the frozen v1 set.
+A Transformer's feed-forward block is exactly the MLP shape from
+Section 2.4 at Transformer width: two `linear` layers with a `relu`
+between them, applied per sequence position. Run
+[`examples/transformer_ffn.tns`](../../examples/transformer_ffn.tns)
+directly — it is the whitepaper's own
+[Section 10.3](00_WHITEPAPER.md#103-transformer-feed-forward-block-valid)
+example, so there is no separate copy to keep in sync here. v1 uses
+`relu`; real Transformers use `gelu`. That activation, and others such
+as `sigmoid` and `tanh`, are future scope (not part of the frozen v1
+set).
 
 ## 2.11 Multi-Head Attention Example
 
-Attention is part of the frozen v1 language (see whitepaper Section
-10.4). The compiler builds it entirely from core operators. Q, K, and V
-already come split into heads. The query and key sequence axes have
-separate names (`qseq`, `kseq`), so `softmax(..., axis=kseq)` has only
-one meaning:
+Attention is part of the frozen v1 language. This is the same example
+as the whitepaper's Transformer showcase
+([Section 10.4](00_WHITEPAPER.md#104-multi-head-scaled-dot-product-attention-advanced-valid)),
+repeated here in the tutorial's build-up order rather than the
+whitepaper's fully-annotated form. The compiler builds it entirely from
+core operators. Q, K, and V already come split into heads. The query
+and key sequence axes have separate names (`qseq`, `kseq`), so
+`softmax(..., axis=kseq)` has only one meaning:
 
 ``` tensora
 input Q: Tensor[batch=B, head=12, qseq=S, dim=64]
@@ -225,90 +293,139 @@ graph attention {
 }
 ```
 
+This exact rank-4 program type-checks end to end
+([`ATT-001`](../testing/TEST_MATRIX.md#semantic--attention--multi-head-whitepaper-104)),
+and it now runs, too — three runnable siblings exist:
+[`examples/attention.tns`](../../examples/attention.tns) (rank-2,
+single-head, matches the numerical reference in
+[`TEST_MATRIX.md` row E2E-004](../testing/TEST_MATRIX.md#end-to-end-rm-322-whitepaper-10)),
+[`examples/attn_text_classifier.tns`](../../examples/attn_text_classifier.tns)
+(a real PyTorch-trained, batched, single-head self-attention
+classifier — run it with `make demo-attn-text-classifier`), and
+[`examples/vit_attention_block.tns`](../../examples/vit_attention_block.tns)
+(rank-4, 12-head, real pretrained weights from a genuine ViT-Base
+checkpoint — run it with `make demo-vit-attention`; its header comment
+works through how it gets a `head` axis onto Q/K/V and back off the
+output projection using only batched matmul/transpose/sum — no
+reshape — since general reshape is not lowered (Section 1.7 of
+[`docs/ProjectMgmt/01_INTRODUCTION.md`](../ProjectMgmt/01_INTRODUCTION.md)),
+and how it reads out "the hidden state at the query position" (no
+slicing op either) via a one-hot selector weight and `sum`).
+
+A fourth runnable example,
+[`examples/attn_relational_eligibility.tns`](../../examples/attn_relational_eligibility.tns),
+is a genuinely harder task on the same self-attention building block:
+course eligibility, a two-hop relational-reasoning problem over real
+natural-language sentences (not a symbol table) where the
+answer is never a fact stated directly in the input — run it with
+`make demo-attn-relational`; see the example's own header for the
+two-hop attention design and its honestly imperfect (~55-60%) accuracy
+against ground truth.
+
 ## 2.11c Tracing Matmul Through the Whole Compiler
 
-`C = A @ B` is the one computation worth understanding in full depth.
-Tensora carries it through every level of the compiler. Tracing this
-one computation is the clearest way to see how the phases connect:
+`C = A @ B` is the one computation worth understanding in full depth:
+Tensora carries it through every level of the compiler, from the typed
+SSA graph down through MLIR, structured loops, tiling, and LLVM. This
+is the whitepaper's own trace
+([Section 8.3](00_WHITEPAPER.md#83-matrix-multiplication-the-reference-computation)),
+so there is no separate copy to keep in sync here — read it there for
+the full pipeline diagram and the tiling design rationale (whitepaper
+Section 8.4).
 
-``` text
-source     C = A @ B
-semantic   A: Tensor[i=M, k=K], B: Tensor[k=K, j=N]  =>  C: Tensor[i=M, j=N]
-SSA graph  %C = matmul %A, %B
-MLIR       linalg.matmul
-loops      for i: for j: for k: C[i,j] += A[i,k] * B[k,j]
-tiled      for ii: for jj: for kk: for i,j,k in tiles: C[i,j] += ...
-LLVM       LLVM IR  ->  native CPU
+## 2.12 Running Programs Yourself
+
+Every example above is a real, checkable `.tns` file, not a snippet
+invented for this tutorial. The fastest way to learn the rest of the
+language is to run them yourself, in the order below — simplest first,
+ending with the full, real-data programs.
+
+**Step 1 — check and explain a program.** These two flags accept any
+well-formed program, symbolic dimensions included, and they are where
+you start when learning what a program means:
+
+``` bash
+tensora --check   examples/mlp.tns   # OK, or a diagnostic pointing at the exact line/values
+tensora --explain examples/mlp.tns   # every value's inferred type, and which RM rule produced it
 ```
 
-The tiling step (see whitepaper Section 8.4) is a team-authored
-design choice: the compiler picks tile sizes from the verified shapes
-`M`, `N`, and `K`. This one example touches semantic analysis, SSA,
-lowering, and loop optimization. These are the core topics of the
-course.
+**Step 2 — run a program.** `--run` and `-o` need every input, weight,
+and output size to be **concrete** (not symbolic) — a known limit
+([`TEST_MATRIX.md` LOW-005](../testing/TEST_MATRIX.md#lowering-rm-322)),
+reported with a clear compiler error rather than a miscompile. That is
+why the table below has both a symbolic-shaped teaching version of a
+program (`examples/mlp.tns`) and a concrete-shaped runnable twin
+(`examples/mlp_concrete.tns`) where the distinction matters:
 
-## 2.12 Compilation
-
-Every flag below is real. You can run each one (`build/tensora`), and
-each flag maps to one compiler phase:
-
-``` text
-tensora --emit-tokens          file.tns   # lexer: token stream
-tensora --emit-parse-tree      file.tns   # parser: raw ANTLR parse tree
-tensora --emit-ast             file.tns   # parser: the AST
-tensora --emit-ast-dot         file.tns   # parser: the AST as Graphviz DOT
-tensora --check                file.tns   # semantic analysis: OK or diagnostics
-tensora --emit-symbols         file.tns   # semantic analysis: the symbol table (RM 3.6)
-tensora --emit-graph           file.tns   # semantic analysis: the Typed Computation Graph
-tensora --emit-graph-dot       file.tns   # semantic analysis: the graph as Graphviz DOT
-tensora --explain              file.tns   # like --emit-graph, annotated per RM section
-tensora --emit-optimized-graph file.tns   # optimization: the graph after the Level-1 passes
-tensora --emit-mlir            file.tns   # lowering: MLIR (Level-2 tiling included)
-tensora --emit-llvm            file.tns   # backend: translated LLVM IR
-tensora --run                  file.tns   # full pipeline: JIT-execute
-tensora file.tns -o file.o                # full pipeline: ahead-of-time native object file
-
-# With --run, load real values instead of synthetic all-ones data:
-tensora --run file.tns --data-dir DIR     # load DIR/<name>.npy per input/weight (float32)
-tensora --run file.tns --output OUT.npy   # write the full result tensor to a .npy file
+``` bash
+tensora --run examples/mlp_concrete.tns   # JIT-executes with synthetic all-ones inputs
 ```
 
-Each flag maps to one compiler phase, and each phase has its own
-output form. The lexer produces tokens. The parser produces the parse
-tree and the AST. Semantic analysis produces the Typed Computation
-Graph. Optimization produces the optimized graph. Lowering produces
-MLIR. The backend produces LLVM IR. So the CLI is a map of the whole
-pipeline, not just a debugging tool added on at the end.
+All-ones inputs are still easy to check by hand: for a matmul, every
+output element equals the size of the contracted dimension (see the
+comment at the top of each `examples/*.tns` file for its own worked
+number).
 
-The flags `--emit-tokens`, `--emit-parse-tree`, `--emit-ast`,
-`--emit-ast-dot`, `--check`, `--emit-symbols`, `--emit-graph`,
-`--emit-graph-dot`, `--explain`, and `--emit-optimized-graph` work on
-any well-formed program, including one with symbolic dimensions.
-`--emit-mlir`, `--emit-llvm`, `--run`, and `-o` need every input,
-weight, and the graph's output to have a **concrete** (non-symbolic)
-size. Lowering a symbolic dimension past type-checking is a known
-limit (see `docs/testing/TEST_MATRIX.md` LOW-005). This limit is not a
-silent bug: the driver rejects a symbolic shape with a clear error,
-instead of compiling it wrong. `--run` uses the same synthetic value,
-1, for every declared input and weight, unless `--data-dir` is given.
-Tensora source states shapes, not values — the language has no
-tensor-literal syntax. The all-ones choice is still easy to check by
-hand: for a matmul, every output element equals the size of the
-contracted dimension. To run a real trained model instead, pass
-`--data-dir DIR`, which loads a float32 `.npy` file per declared input
-and weight (`DIR/<name>.npy`), checking each file's shape and dtype
-against the declared tensor; `--output OUT.npy` writes the whole result
-tensor. The real-world demos in `tools/models/` and `demos/` use these
-to run genuine PyTorch-trained parameters through Tensora and compare
-against a PyTorch reference (see `docs/development/BUILD.md`).
+**Step 3 — run every example, in order.** This table is the whole
+`examples/` catalog, in the same build-up order as this tutorial:
 
-The `examples/` directory has runnable, concrete-shaped versions of
-the programs in this tutorial: `mlp_concrete.tns`, `matmul_large.tns`
-(256x256x256, large enough to trigger the Level-2 tiling pass — check
-with `--emit-mlir` for `scf.for` loops), `cnn.tns`, and `attention.tns`
-(single-head). The compiler can lower batched matmul, so the rank-4,
-multi-head version from Section 2.11 can also run; the project has
-simply not added that example file yet.
+| File | Demonstrates | Try it |
+|---|---|---|
+| [`mlp.tns`](../../examples/mlp.tns) | `linear` + `relu`, symbolic batch (Section 2.4) | `tensora --explain examples/mlp.tns` |
+| [`mlp_concrete.tns`](../../examples/mlp_concrete.tns) | the same MLP, concrete shapes | `tensora --run examples/mlp_concrete.tns` |
+| [`matmul_large.tns`](../../examples/matmul_large.tns) | a 256x256x256 matmul, large enough to trigger Level-2 tiling | `tensora --emit-mlir examples/matmul_large.tns` (look for `scf.for`) |
+| [`cnn.tns`](../../examples/cnn.tns) | `conv2d` -> `relu` -> `flatten` -> `linear` -> `softmax` (Section 2.9) | `tensora --run examples/cnn.tns` |
+| [`cnn_grid_detector.tns`](../../examples/cnn_grid_detector.tns) | fixed-grid object detection: per-cell `conv2d`/`relu`/`maxpool` backbone + 1x1 `conv2d` classification head, real PyTorch-trained weights, draws boxes | `make demo-cnn-grid-detector` |
+| [`cnn_grid_detector_real.tns`](../../examples/cnn_grid_detector_real.tns) | same task, real Pascal-VOC-2012 photographs at finer (16x16) grid resolution instead of drawn shapes | `make demo-cnn-grid-detector-real` |
+| [`transformer_ffn.tns`](../../examples/transformer_ffn.tns) / [`transformer_ffn_concrete.tns`](../../examples/transformer_ffn_concrete.tns) | a Transformer feed-forward block at real width (Section 2.10) | `tensora --run examples/transformer_ffn_concrete.tns` |
+| [`attention.tns`](../../examples/attention.tns) | single-head scaled dot-product attention, rank-2 (Section 2.11) | `tensora --run examples/attention.tns` |
+| [`attn_text_classifier.tns`](../../examples/attn_text_classifier.tns) | single-head attention, real PyTorch-trained weights | `make demo-attn-text-classifier` |
+| [`attn_relational_eligibility.tns`](../../examples/attn_relational_eligibility.tns) | single-head attention (hop 1) + elementwise combine (hop 2), real PyTorch-trained weights, two-hop relational reasoning over real sentences (course eligibility) — the answer is never stated directly, honestly ~55-60% accurate | `make demo-attn-relational` |
+| [`vit_attention_block.tns`](../../examples/vit_attention_block.tns) | one self-attention block, 12-head/768-dim, real weights from a genuine pretrained ViT-Base checkpoint (not just a small model trained for the demo); reused, at every encoder layer and inside a live model, by the demos to its right | `make demo-vit-attention` / `make demo-vit-attention-substitution` |
+| [`vit_attention_weights.tns`](../../examples/vit_attention_weights.tns) | the same block, stopped right after `softmax` — returns the attention matrix itself, for a per-head attention-heatmap visualization over a real photograph | `make demo-vit-attention` (visualization part) |
+| [`optimizations/*.tns`](../../examples/optimizations/) | one file per Level-1 pass (positive case) — `dead_code.tns`, `shape_fold.tns`, `reshape_cancel.tns`, `transpose_cancel.tns`, `elementwise_fusion.tns`, `linear_bias_activation.tns` | `tensora --emit-graph examples/optimizations/dead_code.tns` vs `--emit-optimized-graph` |
+
+**Step 4 — real trained weights, not synthetic ones.** `--run`'s
+default all-ones input is for hand-checking the compiler, not for
+seeing a trained model work. To run a program on genuine data, pass
+`--data-dir DIR`: the compiler loads one float32 `.npy` file per
+declared input and weight (`DIR/<name>.npy`), checks its shape and
+dtype against what the program declares, and rejects a mismatch with a
+clear diagnostic instead of silently misreading memory. `--output
+OUT.npy` writes the result tensor the same way. Every attention/MLP/CNN
+example in the table above that says "real PyTorch-trained weights"
+works exactly this way — a `tools/models/prepare_*.py` script trains a
+small model once in PyTorch, exports its weights and a batch of
+held-out inputs as `.npy` files under `demos/artifacts/`, and the demo
+script (e.g. `demos/attn_relational_demo.sh`) runs `tensora --run ...
+--data-dir ...` and compares every output row against the saved
+PyTorch reference. See
+[`docs/development/BUILD.md`](../development/BUILD.md) for the full
+`--data-dir`/`--output` reference, and the [README's real-world
+demos](../../README.md#real-world-inference-demos) section for how to
+prepare each one. `make setup-tensora-demos` prepares every one of them in one
+command (Section 2.0).
+
+**Give it knobs.** A static demo is interesting once; one you can
+change is worth returning to. `prepare_vit_attention_demo.py` accepts
+a different photo and a different encoder layer without editing the
+script — `make prep-vit-attention IMAGE=my-cat.jpg LAYER=8` (`IMAGE`
+is a local file path or URL; `LAYER` is `0`-`11`) — then re-run `make
+demo-vit-attention` and compare the new figures against the
+original dog/layer-11 ones. The attention-microscope figure similarly
+takes a `"row,col"` argument for one specific patch instead of its
+default face/body/background trio (README's ViT demos section).
+Predicting what changes before running it, then checking, is the same
+loop as the "break it" exercises above, applied to a real model
+instead of a hand-written program.
+
+**Step 5 — the whole compiler, phase by phase.** If you also want to
+see *how* the compiler gets from source to native code — not just that
+it does — the six `demos/0N_*.sh` scripts (`make example`) walk the
+same pipeline one flag per compiler phase (tokens, parse tree/AST,
+type-checking, optimization, MLIR/LLVM, and the full JIT/ahead-of-time
+run). That level of detail is the [README's phase-demo
+table](../../README.md#tensora-phase-demos), not repeated here.
 
 ## 2.13 Learning Progression
 
@@ -320,15 +437,51 @@ matmul (traced through the whole compiler, including tiling)
  -> MLP
  -> CNN
  -> Transformer feed-forward block
- -> multi-head attention (showcase)
+ -> single-head attention
+ -> multi-head attention (real trained weights)
 ```
 
-Every stage uses only the frozen v1 operator set (see whitepaper
-Section 2.5). Nothing in this progression needs a future extension. A
-full Transformer encoder layer needs `layernorm`, `gelu`, and
-`rename`. That layer is future scope.
+Every stage uses only the frozen v1 operator set (further reading:
+whitepaper Section 2.5). Nothing in this progression needs a future
+extension. A full Transformer encoder layer needs `layernorm`, `gelu`,
+and `rename`. That layer is future scope.
+
+**Pick a path.** From here, the material forks into two independent
+directions — follow either, or both, in any order:
+
+``` text
+                  Section 2.1-2.12 (basics)
+                          |
+              +-----------+-----------+
+              |                       |
+        ML EXPLORER            COMPILER EXPLORER
+              |                       |
+   real CNN (2.9, 2.14)      matmul trace (2.11c)
+              |                       |
+   real attention (2.11)     --emit-mlir / tiling (2.12 Step 3)
+              |                       |
+   real pretrained ViT       optimization passes (2.12 Step 3, 2.13's own
+   (README's ViT demos)      note above)
+              |                       |
+   attention microscope /    phase-by-phase demos
+   asymmetry / diagnostics   (2.12 Step 5)
+   (README's ViT demos)
+```
+
+The ML-explorer path answers "what does this computation do and why
+does it work?"; the compiler-explorer path answers "how does Tensora
+get from this source text to native code?". Section 2.14 (next) is the
+start of the ML-explorer path's case for why the language exists at
+all.
 
 ## 2.14 Why Tensora: For First-Time ML Engineers
+
+Tensora is a learning and verification tool. It is not a replacement
+for PyTorch: it targets forward inference only, so training stays in
+the frameworks you already use. What it offers instead is a model
+that is small, declarative, statically checked, and explainable — a
+place to see exactly what an inference graph is doing and why the
+compiler accepted or rejected it.
 
 The most common first model anyone builds is an image or digit
 classifier. Here it is in Tensora — the whole inference definition,
@@ -347,7 +500,23 @@ graph classifier {
 }
 ```
 
-Here are three concrete, honest benefits for someone learning ML:
+This snippet is illustrative (no MNIST weights attached to it), but the
+same idea runs for real: `make demo-cnn-image-classifier` classifies
+genuine STL-10 images (10 real classes, not illustrative ones) through
+[`examples/cnn_stl10.tns`](../../examples/cnn_stl10.tns) with
+PyTorch-trained weights, and checks the result against PyTorch — see
+Section 2.12's Step 4 for how `--data-dir` gets those trained weights
+into the program above's `linear`-based cousin. A second CNN demo goes
+one step further than whole-image classification: `make
+demo-cnn-grid-detector` predicts a class *per cell* of a fixed 4x4 grid
+over a 32x32 image containing 1-3 shapes
+([`examples/cnn_grid_detector.tns`](../../examples/cnn_grid_detector.tns)),
+then draws a box at each detected cell — "what AND where", not just
+"what", using the same `conv2d`/`relu`/`maxpool`/`softmax` operators
+already introduced above (a 1x1 `conv2d` as a per-cell linear head, no
+new operators needed).
+
+Here are four concrete, honest benefits for someone learning ML:
 
 1. **No framework boilerplate.** The code above is the entire
    inference program: no `class`, no `nn.Module`, no device or dtype
@@ -378,21 +547,32 @@ Here are three concrete, honest benefits for someone learning ML:
    2.8).
 
 3. **You can see the model's shapes and the reasoning behind them.**
-   `explain` prints the inferred type of every value, and the
+   `--explain` prints the inferred type of every value, and the
    contract that produced it. A learner can watch shapes flow through
    the network:
 
    ``` text
-   tensora explain classifier.tns
+   tensora --explain classifier.tns
    ```
 
-4. **The compiler applies optimizations you would otherwise hand-tune.**
-   In PyTorch, getting fusion and redundant-op elimination means
-   learning the compilation pipeline (`torch.compile`, fusion
-   backends). In Tensora, these run as ordinary compiler passes on the
-   graph. You do not configure anything extra.
+4. **The optimizer's decisions are visible, not a black box.**
+   PyTorch itself also fuses ops and tiles matmuls (`torch.compile`,
+   Inductor) — that is not something Tensora does that PyTorch
+   cannot. The difference is inspectability: `--emit-graph` and
+   `--emit-optimized-graph` show the exact graph before and after each
+   Level-1 pass (dead-code elimination, reshape/transpose
+   cancellation, elementwise fusion), and `--emit-mlir` shows whether
+   a matmul was tiled and with what tile sizes. A learner can see
+   which rewrite fired and why, rather than reading a JIT trace or
+   inductor log.
 
-Tensora is a learning and verification tool. It is not a replacement
-for PyTorch: it targets forward inference only, so training stays in
-the frameworks. Its value is this: the model is a small, declarative,
-statically checked, and explainable program.
+Tensora's value for a first-time ML engineer is not that it is faster
+or more capable than PyTorch — it is not, and does not try to be. It
+is that the whole inference graph, and every check and rewrite the
+compiler performs on it, fits in view at once.
+
+For a model of this same shape with genuine PyTorch-trained weights
+instead of illustrative ones, run
+[`examples/mlp_placement.tns`](../../examples/mlp_placement.tns) via
+`make demo-mlp-placement` — it is where this tutorial's ideas meet real
+data.

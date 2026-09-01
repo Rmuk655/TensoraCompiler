@@ -1,16 +1,12 @@
-# 12. Viva Voce Preparation
+# 12. Project FAQ and Design Defense
 
 ## 12.1 Format
 
-A 10–15 minute oral exam. Bring: two non-trivial **working** examples,
-two **non-working** (compilation-fail) examples, and a screen-share-
-ready terminal. Additional questions on the demo may follow. Suggested
-pacing for 12–13 minutes of the 15:
-
-- 1 min — one-sentence pitch (Section 12.2).
-- 4–5 min — the two working examples, live (Section 12.3).
-- 3–4 min — the two non-working examples, live (Section 12.4).
-- 3–4 min — anticipated questions (Section 12.5).
+This doc is a self-contained walkthrough for demonstrating and
+defending the compiler: two non-trivial **working** examples, two
+**non-working** (compilation-fail) examples, and a set of anticipated
+design questions with answers. Useful for a live demo, a design
+review, or just re-orienting after time away from the code.
 
 **Update: this caveat used to say there was no general-purpose CLI —
 that gap is now closed.** `tensora` (`src/driver/main.cpp`) is a real,
@@ -41,7 +37,7 @@ not, since they stop before lowering.
 "Tensora is a small declarative language for ML computation graphs
 that statically verifies tensor shapes *and axis names* — catching a
 class of bugs a size-only checker (and PyTorch) misses — then lowers a
-verified graph through team-authored optimization passes and a real
+verified graph through hand-authored optimization passes and a real
 MLIR/LLVM backend to either JIT execution or a genuine ahead-of-time-
 compiled native executable."
 
@@ -96,8 +92,11 @@ cat ../examples/attention.tns
 
 `transpose`, `matmul`, scalar `*`, `softmax`, `matmul` — rank-2,
 single-head (the tutorial's Section 2.11 shows the rank-4 multi-head
-version, which type-checks and now also lowers, since batched matmul
-is implemented; see Section 12.5). Expected output:
+version, which type-checks and now also lowers and runs, since batched
+matmul is implemented; see Section 12.5, and
+`examples/vit_attention_block.tns`/`make demo-vit-attention` for a
+real-trained-weights, rank-4, 12-head version). Expected
+output:
 
 ```text
 ran 'attention' with synthetic all-ones inputs
@@ -200,33 +199,34 @@ observable output under IEEE-754 f32 non-associativity.) Each pass has
 a documented legality condition, a positive test, and a deliberate
 near-miss test that must *not* transform.
 
-**What's the Level-2 tiling pass, and why does it count as your own
-work rather than "using MLIR"?** `MatmulTilingPass` is a real MLIR
-`PassWrapper` we wrote. It applies the tile sizes `TilingDecision`
+**What's the Level-2 tiling pass, and why does it count as
+project-authored work rather than "using MLIR"?** `MatmulTilingPass` is
+a real, hand-written MLIR
+`PassWrapper`. It applies the tile sizes `TilingDecision`
 chose from the TCG's *verified* M/N/K shapes (and, under memory
 pressure, a liveness estimate), using MLIR's own
 `TilingInterface`/`scf::tileUsingSCF`. `TilingDecision` itself is pure
 C++, independently unit-tested. The mechanical rewrite is MLIR's; the
-*decision* of what to tile and by how much is ours, and it traces
-directly to sema's output, not re-derived from the IR.
+*decision* of what to tile and by how much is project-authored, and it
+traces directly to sema's output, not re-derived from the IR.
 
 **How do you know the optimization passes preserve behavior, not just
 "look smaller"?** Every pass has a positive-transformation test and a
 near-miss test. The linear-bias-activation fusion, specifically, is
 checked end to end (`LOW-E2E-MLP`/`NATIVE-001`): apply the fusion,
 then JIT/native-execute, then compare against a hand-computed numeric
-reference. We do not infer correctness from node count alone.
+reference. Correctness is never inferred from node count alone.
 
 **What's not implemented, and why?** General (non-flatten) `reshape`.
 `flatten`'s fixed, batch-preserving collapse covered every real
-workload attempted, so we did not build the riskier general form (a
-runtime shape operand with weaker bufferization support)
+workload attempted, so the riskier general form (a
+runtime shape operand with weaker bufferization support) was not built
 speculatively. This is recorded as a scope boundary in
 `docs/testing/TEST_MATRIX.md`, and `MlirLowerer`'s lowering switch
 hits `llvm_unreachable` (not a silent fallthrough) for anything
 unhandled. Batched matmul, once also unimplemented, is now done.
 
-**What was the hardest bug you found?** A few candidates: (1)
+**What was the hardest bug found?** A few candidates: (1)
 `linalg.matmul`/`conv_2d_nchw_fchw`/`pooling_nchw_max` all *accumulate*
 into their output operand rather than initializing it — an
 uninitialized accumulator caused a genuinely intermittent (not always
@@ -254,7 +254,7 @@ pipeline produces a genuinely standalone executable, not something that
 only runs inside an MLIR host process — confirmed via `ldd` showing no
 MLIR/LLVM runtime dependency at all.
 
-## 12.6 Pre-Viva Checklist
+## 12.6 Pre-Demo Checklist
 
 - [ ] `cd build && cmake --build . -j4` — clean build, no errors.
 - [ ] `ctest` — all cases passing. Run it twice; this project's own

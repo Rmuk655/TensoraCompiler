@@ -2,7 +2,7 @@
 
 ## INTEG-001 — Canonical platform: WSL2 + Ubuntu
 
-**Problem.** Where do all team members build and run Tensora, so results
+**Problem.** Where should Tensora be built and run, so results
 are reproducible and the frontend-generator (and later LLVM/MLIR)
 toolchain is easy to install?
 
@@ -11,7 +11,7 @@ toolchain is easy to install?
 - (b) WSL2 + Ubuntu (or native Linux).
 - (c) Per-developer choice.
 
-**Chosen approach.** (b) WSL2 + Ubuntu, frozen team-wide.
+**Chosen approach.** (b) WSL2 + Ubuntu, frozen as the canonical platform.
 
 **Reason.** A JRE (for the ANTLR generator, INTEG-004), CMake, and
 LLVM/MLIR are all first-class on Linux, and install with one `apt`
@@ -34,9 +34,9 @@ and OneDrive (`.gitignore`). Normalize line endings to LF (`.gitattributes`).
 **Problem.** `INTERFACES.md` §2 freezes the Parser boundary as
 `Parser(std::span<const Token>, DiagnosticEngine&)`, but `std::span` is
 a C++20 library feature. §7.1 of this document (and `CMakeLists.txt`)
-had frozen the toolchain at C++17, which does not compile this. The
-team found this direct contradiction, between an architecture/interface
-document and the integration/build spec, while building the parser
+had frozen the toolchain at C++17, which does not compile this. This
+direct contradiction, between an architecture/interface
+document and the integration/build spec, surfaced while building the parser
 (Phase 2).
 
 **Options.**
@@ -75,8 +75,8 @@ headers and CMake config files. Only the LLVM *runtime* library and
 - (a) `apt install llvm-21-dev libmlir-21-dev mlir-21-tools` (Ubuntu
   universe repo has 17 through 22 available).
 - (b) Build LLVM/MLIR from source with `-DLLVM_ENABLE_PROJECTS=mlir`
-  (hours, tens of GB, and a from-source toolchain no team member could
-  reproduce without the exact same build flags).
+  (hours, tens of GB, and a from-source toolchain that could not be
+  reproduced elsewhere without the exact same build flags).
 
 **Chosen approach.** (a) apt packages, version 21 (1:21.1.8-6ubuntu1),
 installed by the user with `sudo apt install llvm-21-dev libmlir-21-dev

@@ -1,0 +1,86 @@
+# This fixture file holds real .tns source, kept syntax-highlightable,
+# one case per '### ID | description' block. tests/support/FixtureLoader.h
+# reads this file at runtime and registers one test case per entry (see
+# cmake/Tests.cmake's tensora_discover_fixture_cases for how each entry
+# also gets its own CTest). Each block runs until the next '### ' line
+# or end of file.
+#
+# expect: ok               -- program is accepted, no further check
+# expect: reject <DiagCode> -- program is rejected, and the FIRST reported
+#                              diagnostic must have this DiagCode
+
+### PAR-014 | negative: missing '=' in a statement
+### expect: reject ParseExpected
+graph g {
+  a b
+  return a
+}
+
+### PAR-015 | negative: missing ']' closing a tensorType
+### expect: reject ParseExpected
+input x: Tensor[a=1
+graph g { return x }
+
+### PAR-016 | negative: missing '[' opening a tensorType
+### expect: reject ParseExpected
+input x: Tensor a=1]
+graph g { return x }
+
+### PAR-017 | negative: empty tensorType Tensor[] (axis list requires >= 1)
+### expect: reject ParseExpected
+input x: Tensor[]
+graph g { return x }
+
+### PAR-018 | negative: missing '=' in an axis
+### expect: reject ParseExpected
+input x: Tensor[a 1]
+graph g { return x }
+
+### PAR-019 | negative: graphDecl missing returnStmt before '}'
+### expect: reject ParseExpected
+graph g {
+  a = b
+}
+
+### PAR-021 | negative: returnStmt missing its identifier
+### expect: reject ParseExpected
+graph g {
+  return
+}
+
+### PAR-022 | negative: zero-arg call relu() (arg list requires >= 1)
+### expect: reject ParseExpected
+graph g {
+  a = relu()
+  return a
+}
+
+### PAR-023 | negative: missing closing ')' on a call
+### expect: reject ParseExpected
+graph g {
+  a = relu(x
+  return a
+}
+
+### PAR-024 | negative: trailing comma in an arg list relu(h,)
+### expect: reject ParseExpected
+graph g {
+  a = relu(x,)
+  return a
+}
+
+### PAR-025 | negative: keyword arg with no value (stride=))
+### expect: reject ParseExpected
+graph g {
+  a = f(stride=)
+  return a
+}
+
+### PAR-026 | negative: a decl after a graphDecl violates decl* graphDecl+ ordering
+### expect: reject ParseExpected
+graph g { return a }
+input x: Tensor[b=1]
+
+### PAR-027 | negative: a program with zero graphDecls (graphDecl+ requires >= 1)
+### expect: reject ParseExpected
+input x: Tensor[a=1]

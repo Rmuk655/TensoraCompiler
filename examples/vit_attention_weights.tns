@@ -1,0 +1,29 @@
+# Attention weights only, from the same real ViT-Base self-attention
+# block as examples/vit_attention_block.tns (see that file's header
+# for the full extraction strategy and shape rationale). This program
+# stops at `softmax` -- it returns the [head, qseq, kseq] attention
+# matrix itself, not the block's final output, so it can drive an
+# attention-heatmap visualization of which image patches the real
+# pretrained model actually attends to.
+#
+# Reuses the same Xq/Xk/Wq/bq/Wk/bk artifacts as vit_attention_block.tns
+# (Wv/Wo/bv/bo are not needed here, since V and the output projection
+# happen after the value this program returns).
+input  Xq: Tensor[b=1, head=1, qseq=197, d=768]
+input  Xk: Tensor[b=1, head=1, kseq=197, d=768]
+weight Wq: Tensor[b=1, head=12, d=768, dk=64]
+weight bq: Tensor[head=12, qseq=1, dk=64]
+weight Wk: Tensor[b=1, head=12, d=768, dk=64]
+weight bk: Tensor[head=12, kseq=1, dk=64]
+
+graph vit_attn_weights {
+    Qp     = Xq @ Wq
+    Q      = Qp + bq
+    Kp     = Xk @ Wk
+    K      = Kp + bk
+    Kt     = transpose(K, perm=[0, 1, 3, 2])
+    scores = Q @ Kt
+    scaled = scores * 0.125
+    A      = softmax(scaled, axis=kseq)
+    return A
+}

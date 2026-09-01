@@ -1,0 +1,19 @@
+# A Transformer position-wise feed-forward block (linear -> relu ->
+# linear, applied the same way to every sequence position), matching
+# docs/language/00_WHITEPAPER.md Section 10.3 and
+# tests/codegen/test_ffn_e2e.cpp's op sequence (that unit test proves
+# the lowering at smaller shapes; this file uses the whitepaper's
+# actual dimensions). No residual connection or layernorm: neither is
+# a lowered op yet (Section 12, future scope).
+input  x:  Tensor[batch=B, seq=S, model=768]
+weight W1: Tensor[in=768, out=3072]
+weight b1: Tensor[out=3072]
+weight W2: Tensor[in=3072, out=768]
+weight b2: Tensor[out=768]
+
+graph transformer_ffn {
+    h = linear(x, W1, b1)   # [batch=B, seq=S, out=3072]
+    h = relu(h)             # [batch=B, seq=S, out=3072]
+    y = linear(h, W2, b2)   # [batch=B, seq=S, out=768]
+    return y
+}

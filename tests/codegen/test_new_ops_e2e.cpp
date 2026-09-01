@@ -7,6 +7,7 @@
 // own earlier in this phase.
 #include <cmath>
 #include <cstdio>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -28,74 +29,73 @@
 
 #include "tensora/codegen/DialectSetup.h"
 #include "tensora/codegen/MlirLowerer.h"
+#include "support/JitHarness.h"
 
 namespace tns = tensora;
 using namespace mlir;
 using MlirValue = mlir::Value;
+using tensora::testing::constTensor;
 
 namespace {
 
-MlirValue constTensor(OpBuilder& b, Location loc, RankedTensorType type, ArrayRef<float> values) {
-  auto attr = DenseElementsAttr::get(type, values);
-  return arith::ConstantOp::create(b, loc, type, attr);
+
+// Runs the standard MLIR/LLVM lowering pipeline (tests/support/JitHarness.h),
+// JIT-executes "test_main" (zero args, scalar f32 return), and returns
+// the result or NAN on failure. Uses the full JitPipelineOptions profile
+// (ExpandStridedMetadata/LowerAffine for collapse_shape/subview-like
+// ops, ConvertMathToLLVM for softmax's math.exp, and the C-runner-utils
+// shared lib for flatten/collapse_shape/conv2d's memrefCopy calls)
+// unconditionally -- harmless no-ops for graphs that don't use them.
+float runAndGetScalar(ModuleOp module, MLIRContext& ctx, const char* label) {
+  auto jitOpts = tensora::testing::JitPipelineOptions::full();
+  if (!tensora::testing::runStandardLoweringPipeline(ctx, module, jitOpts, label)) return NAN;
+
+  auto maybeEngine = tensora::testing::createJitEngine(module, jitOpts, label);
+  if (!maybeEngine) return NAN;
+  auto maybeFn = tensora::testing::lookupJitEntry<float (*)()>(**maybeEngine, "test_main", label);
+  if (!maybeFn) return NAN;
+  return (*maybeFn)();
 }
 
-// Runs the standard MLIR/LLVM lowering pipeline (bufferize -> loops ->
-// control-flow -> LLVM dialects), JIT-executes "test_main" (zero args,
-// scalar f32 return), and returns the result or NAN on failure. Includes
-// ExpandStridedMetadata/LowerAffine (needed once collapse_shape/subview-
-// like ops appear) and ConvertMathToLLVM (needed for softmax's
-// math.exp) unconditionally -- harmless no-ops for graphs that don't
-// use them.
-float runAndGetScalar(ModuleOp module, MLIRContext& ctx, const char* label) {
-  if (failed(verify(module))) {
-    fprintf(stderr, "%s FAIL: module does not verify\n", label);
-    module.dump();
-    return NAN;
-  }
+// Every test below shares the same shape: build a TypedGraph, lower it,
+// build a scalar harness that calls the lowered function with some
+// constant-tensor arguments, extracts (or otherwise reduces) one
+// element from the result, and runs it. lowerCallAndRun() factors out
+// everything but the two genuinely per-test pieces: the arguments (via
+// buildArgs) and how the single f32 to check is obtained from the call
+// result (via buildResult). extractAt() covers the common "pick one
+// element by index" case; LOW-009b uses a custom buildResult because it
+// checks two elements at once (see its call site).
+using ArgsBuilder = std::function<std::vector<MlirValue>(OpBuilder&, Location, Type)>;
+using ResultBuilder = std::function<MlirValue(OpBuilder&, Location, MlirValue)>;
 
-  mlir::PassManager pm(&ctx);
-  bufferization::OneShotBufferizePassOptions bufOpts;
-  bufOpts.bufferizeFunctionBoundaries = true;
-  bufOpts.allowReturnAllocsFromLoops = true;
-  bufOpts.functionBoundaryTypeConversion = bufferization::LayoutMapOption::FullyDynamicLayoutMap;
-  pm.addPass(bufferization::createOneShotBufferizePass(bufOpts));
-  pm.addPass(createConvertLinalgToLoopsPass());
-  pm.addPass(createSCFToControlFlowPass());
-  pm.addPass(createConvertControlFlowToLLVMPass());
-  pm.addPass(memref::createExpandStridedMetadataPass());
-  pm.addPass(createLowerAffinePass());
-  pm.addPass(createConvertMathToLLVMPass());
-  pm.addPass(createArithToLLVMConversionPass());
-  pm.addPass(createFinalizeMemRefToLLVMConversionPass());
-  pm.addPass(createConvertFuncToLLVMPass());
-  pm.addPass(createReconcileUnrealizedCastsPass());
-  if (failed(pm.run(module))) {
-    fprintf(stderr, "%s FAIL: standard lowering pipeline failed\n", label);
-    module.dump();
-    return NAN;
-  }
+float lowerCallAndRun(tns::TypeContext& types, tns::TypedGraph graph, const std::string& fnName,
+                      const ArgsBuilder& buildArgs, const ResultBuilder& buildResult, const char* label) {
+  tns::TypedProgram program(types);
+  program.addGraph(std::move(graph));
 
-  // flatten/collapse_shape (and, later, conv2d's padding) can lower to a
-  // call into MLIR's own `memrefCopy` runtime helper, same as tiling's
-  // per-tile memref.copy in test_tiling_e2e.cpp.
-  ExecutionEngineOptions engineOpts;
-  static const std::string kRunnerUtils = MLIR_C_RUNNER_UTILS_PATH;
-  static const llvm::SmallVector<llvm::StringRef, 1> kSharedLibs = {kRunnerUtils};
-  engineOpts.sharedLibPaths = kSharedLibs;
-  auto maybeEngine = ExecutionEngine::create(module, engineOpts);
-  if (!maybeEngine) {
-    fprintf(stderr, "%s FAIL: ExecutionEngine::create failed\n", label);
-    return NAN;
-  }
-  auto engine = std::move(*maybeEngine);
-  auto maybeFn = engine->lookup("test_main");
-  if (!maybeFn) {
-    fprintf(stderr, "%s FAIL: could not look up 'test_main'\n", label);
-    return NAN;
-  }
-  auto fn = reinterpret_cast<float (*)()>(*maybeFn);
-  return fn();
+  auto lowered = tensora::testing::lowerProgram(program);
+  MLIRContext& ctx = *lowered.ctx;
+  ModuleOp module = lowered.module;
+  auto f32 = mlir::Float32Type::get(&ctx);
+  OpBuilder hb = tensora::testing::appendScalarHarness(ctx, module, f32);
+  Location loc = hb.getUnknownLoc();
+
+  std::vector<MlirValue> args = buildArgs(hb, loc, f32);
+  auto fn = module.lookupSymbol<func::FuncOp>(fnName);
+  auto call = func::CallOp::create(hb, loc, fn, ValueRange(args));
+  MlirValue elem = buildResult(hb, loc, call.getResult(0));
+  func::ReturnOp::create(hb, loc, ValueRange{elem});
+
+  return runAndGetScalar(module, ctx, label);
+}
+
+ResultBuilder extractAt(std::vector<int64_t> indices) {
+  return [indices](OpBuilder& hb, Location loc, MlirValue result) -> MlirValue {
+    std::vector<MlirValue> idx;
+    for (int64_t i : indices) idx.push_back(arith::ConstantOp::create(hb, loc, hb.getIndexType(), hb.getIndexAttr(i)));
+    return tensor::ExtractOp::create(hb, loc, result, ValueRange(idx));
+  };
 }
 
 // --- LOW-013: elementwise add with real tensor-tensor broadcasting ---
@@ -117,32 +117,15 @@ bool testElementwiseBroadcast() {
   builder.setOutput(zVal);
   tns::TypedGraph graph = builder.finish();
 
-  tns::TypedProgram program(types);
-  program.addGraph(std::move(graph));
+  float result = lowerCallAndRun(
+      types, std::move(graph), "ew_broadcast_test",
+      [](OpBuilder& hb, Location loc, Type f32) -> std::vector<MlirValue> {
+        MlirValue x = constTensor(hb, loc, RankedTensorType::get({2, 3}, f32), {1, 2, 3, 4, 5, 6});
+        MlirValue y = constTensor(hb, loc, RankedTensorType::get({3}, f32), {10, 20, 30});
+        return {x, y};
+      },
+      extractAt({1, 2}), "LOW-013");
 
-  DialectRegistry registry = tns::makeTensoraDialectRegistry();
-  MLIRContext ctx(registry);
-  ctx.loadAllAvailableDialects();
-  tns::MlirLowerer lowerer(ctx);
-  ModuleOp module = lowerer.lower(program);
-
-  OpBuilder b(&ctx);
-  Location loc = b.getUnknownLoc();
-  b.setInsertionPointToEnd(module.getBody());
-  auto f32 = b.getF32Type();
-  auto harness = func::FuncOp::create(b, loc, "test_main", b.getFunctionType({}, {f32}));
-  Block* entry = harness.addEntryBlock();
-  OpBuilder hb(entry, entry->begin());
-  MlirValue x = constTensor(hb, loc, RankedTensorType::get({2, 3}, f32), {1, 2, 3, 4, 5, 6});
-  MlirValue y = constTensor(hb, loc, RankedTensorType::get({3}, f32), {10, 20, 30});
-  auto fn = module.lookupSymbol<func::FuncOp>("ew_broadcast_test");
-  auto call = func::CallOp::create(hb, loc, fn, ValueRange{x, y});
-  MlirValue c1 = arith::ConstantOp::create(hb, loc, hb.getIndexType(), hb.getIndexAttr(1));
-  MlirValue c2 = arith::ConstantOp::create(hb, loc, hb.getIndexType(), hb.getIndexAttr(2));
-  MlirValue elem = tensor::ExtractOp::create(hb, loc, call.getResult(0), ValueRange{c1, c2});
-  func::ReturnOp::create(hb, loc, ValueRange{elem});
-
-  float result = runAndGetScalar(module, ctx, "LOW-013");
   if (result != 36.0f) {
     fprintf(stderr, "LOW-013 FAIL: expected 36.0, got %f\n", result);
     return false;
@@ -168,31 +151,13 @@ bool testTranspose() {
   builder.setOutput(yVal);
   tns::TypedGraph graph = builder.finish();
 
-  tns::TypedProgram program(types);
-  program.addGraph(std::move(graph));
+  float result = lowerCallAndRun(
+      types, std::move(graph), "transpose_test",
+      [](OpBuilder& hb, Location loc, Type f32) -> std::vector<MlirValue> {
+        return {constTensor(hb, loc, RankedTensorType::get({2, 3}, f32), {1, 2, 3, 4, 5, 6})};
+      },
+      extractAt({2, 0}), "LOW-006");
 
-  DialectRegistry registry = tns::makeTensoraDialectRegistry();
-  MLIRContext ctx(registry);
-  ctx.loadAllAvailableDialects();
-  tns::MlirLowerer lowerer(ctx);
-  ModuleOp module = lowerer.lower(program);
-
-  OpBuilder b(&ctx);
-  Location loc = b.getUnknownLoc();
-  b.setInsertionPointToEnd(module.getBody());
-  auto f32 = b.getF32Type();
-  auto harness = func::FuncOp::create(b, loc, "test_main", b.getFunctionType({}, {f32}));
-  Block* entry = harness.addEntryBlock();
-  OpBuilder hb(entry, entry->begin());
-  MlirValue x = constTensor(hb, loc, RankedTensorType::get({2, 3}, f32), {1, 2, 3, 4, 5, 6});
-  auto fn = module.lookupSymbol<func::FuncOp>("transpose_test");
-  auto call = func::CallOp::create(hb, loc, fn, ValueRange{x});
-  MlirValue c2 = arith::ConstantOp::create(hb, loc, hb.getIndexType(), hb.getIndexAttr(2));
-  MlirValue c0 = arith::ConstantOp::create(hb, loc, hb.getIndexType(), hb.getIndexAttr(0));
-  MlirValue elem = tensor::ExtractOp::create(hb, loc, call.getResult(0), ValueRange{c2, c0});
-  func::ReturnOp::create(hb, loc, ValueRange{elem});
-
-  float result = runAndGetScalar(module, ctx, "LOW-006");
   if (result != 3.0f) {
     fprintf(stderr, "LOW-006 FAIL: expected 3.0, got %f\n", result);
     return false;
@@ -217,31 +182,13 @@ bool testFlatten() {
   builder.setOutput(yVal);
   tns::TypedGraph graph = builder.finish();
 
-  tns::TypedProgram program(types);
-  program.addGraph(std::move(graph));
+  float result = lowerCallAndRun(
+      types, std::move(graph), "flatten_test",
+      [](OpBuilder& hb, Location loc, Type f32) -> std::vector<MlirValue> {
+        return {constTensor(hb, loc, RankedTensorType::get({2, 2, 2}, f32), {1, 2, 3, 4, 5, 6, 7, 8})};
+      },
+      extractAt({1, 2}), "LOW-007");
 
-  DialectRegistry registry = tns::makeTensoraDialectRegistry();
-  MLIRContext ctx(registry);
-  ctx.loadAllAvailableDialects();
-  tns::MlirLowerer lowerer(ctx);
-  ModuleOp module = lowerer.lower(program);
-
-  OpBuilder b(&ctx);
-  Location loc = b.getUnknownLoc();
-  b.setInsertionPointToEnd(module.getBody());
-  auto f32 = b.getF32Type();
-  auto harness = func::FuncOp::create(b, loc, "test_main", b.getFunctionType({}, {f32}));
-  Block* entry = harness.addEntryBlock();
-  OpBuilder hb(entry, entry->begin());
-  MlirValue xConst = constTensor(hb, loc, RankedTensorType::get({2, 2, 2}, f32), {1, 2, 3, 4, 5, 6, 7, 8});
-  auto fn = module.lookupSymbol<func::FuncOp>("flatten_test");
-  auto call = func::CallOp::create(hb, loc, fn, ValueRange{xConst});
-  MlirValue c1 = arith::ConstantOp::create(hb, loc, hb.getIndexType(), hb.getIndexAttr(1));
-  MlirValue c2 = arith::ConstantOp::create(hb, loc, hb.getIndexType(), hb.getIndexAttr(2));
-  MlirValue elem = tensor::ExtractOp::create(hb, loc, call.getResult(0), ValueRange{c1, c2});
-  func::ReturnOp::create(hb, loc, ValueRange{elem});
-
-  float result = runAndGetScalar(module, ctx, "LOW-007");
   if (result != 7.0f) {
     fprintf(stderr, "LOW-007 FAIL: expected 7.0, got %f\n", result);
     return false;
@@ -267,31 +214,13 @@ bool testSoftmax() {
   builder.setOutput(yVal);
   tns::TypedGraph graph = builder.finish();
 
-  tns::TypedProgram program(types);
-  program.addGraph(std::move(graph));
+  float result = lowerCallAndRun(
+      types, std::move(graph), "softmax_test",
+      [](OpBuilder& hb, Location loc, Type f32) -> std::vector<MlirValue> {
+        return {constTensor(hb, loc, RankedTensorType::get({1, 3}, f32), {1.0f, 2.0f, 3.0f})};
+      },
+      extractAt({0, 2}), "LOW-008");
 
-  DialectRegistry registry = tns::makeTensoraDialectRegistry();
-  MLIRContext ctx(registry);
-  ctx.loadAllAvailableDialects();
-  tns::MlirLowerer lowerer(ctx);
-  ModuleOp module = lowerer.lower(program);
-
-  OpBuilder b(&ctx);
-  Location loc = b.getUnknownLoc();
-  b.setInsertionPointToEnd(module.getBody());
-  auto f32 = b.getF32Type();
-  auto harness = func::FuncOp::create(b, loc, "test_main", b.getFunctionType({}, {f32}));
-  Block* entry = harness.addEntryBlock();
-  OpBuilder hb(entry, entry->begin());
-  MlirValue xConst = constTensor(hb, loc, RankedTensorType::get({1, 3}, f32), {1.0f, 2.0f, 3.0f});
-  auto fn = module.lookupSymbol<func::FuncOp>("softmax_test");
-  auto call = func::CallOp::create(hb, loc, fn, ValueRange{xConst});
-  MlirValue c0 = arith::ConstantOp::create(hb, loc, hb.getIndexType(), hb.getIndexAttr(0));
-  MlirValue c2 = arith::ConstantOp::create(hb, loc, hb.getIndexType(), hb.getIndexAttr(2));
-  MlirValue elem = tensor::ExtractOp::create(hb, loc, call.getResult(0), ValueRange{c0, c2});
-  func::ReturnOp::create(hb, loc, ValueRange{elem});
-
-  float result = runAndGetScalar(module, ctx, "LOW-008");
   float expected = 0.665241f;
   if (std::fabs(result - expected) > 1e-4f) {
     fprintf(stderr, "LOW-008 FAIL: expected %f, got %f\n", expected, result);
@@ -333,34 +262,16 @@ bool testConv2D() {
   builder.setOutput(yVal);
   tns::TypedGraph graph = builder.finish();
 
-  tns::TypedProgram program(types);
-  program.addGraph(std::move(graph));
+  float result = lowerCallAndRun(
+      types, std::move(graph), "conv2d_test",
+      [](OpBuilder& hb, Location loc, Type f32) -> std::vector<MlirValue> {
+        MlirValue x = constTensor(hb, loc, RankedTensorType::get({1, 1, 3, 3}, f32), {1, 2, 3, 4, 5, 6, 7, 8, 9});
+        MlirValue w = constTensor(hb, loc, RankedTensorType::get({1, 1, 2, 2}, f32), {1, 1, 1, 1});
+        MlirValue bias = constTensor(hb, loc, RankedTensorType::get({1}, f32), {10.0f});
+        return {x, w, bias};
+      },
+      extractAt({0, 0, 1, 1}), "LOW-009");
 
-  DialectRegistry registry = tns::makeTensoraDialectRegistry();
-  MLIRContext ctx(registry);
-  ctx.loadAllAvailableDialects();
-  tns::MlirLowerer lowerer(ctx);
-  ModuleOp module = lowerer.lower(program);
-
-  OpBuilder b(&ctx);
-  Location loc = b.getUnknownLoc();
-  b.setInsertionPointToEnd(module.getBody());
-  auto f32 = b.getF32Type();
-  auto harness = func::FuncOp::create(b, loc, "test_main", b.getFunctionType({}, {f32}));
-  Block* entry = harness.addEntryBlock();
-  OpBuilder hb(entry, entry->begin());
-  MlirValue xConst =
-      constTensor(hb, loc, RankedTensorType::get({1, 1, 3, 3}, f32), {1, 2, 3, 4, 5, 6, 7, 8, 9});
-  MlirValue wConst = constTensor(hb, loc, RankedTensorType::get({1, 1, 2, 2}, f32), {1, 1, 1, 1});
-  MlirValue biasConst = constTensor(hb, loc, RankedTensorType::get({1}, f32), {10.0f});
-  auto fn = module.lookupSymbol<func::FuncOp>("conv2d_test");
-  auto call = func::CallOp::create(hb, loc, fn, ValueRange{xConst, wConst, biasConst});
-  MlirValue c0 = arith::ConstantOp::create(hb, loc, hb.getIndexType(), hb.getIndexAttr(0));
-  MlirValue c1 = arith::ConstantOp::create(hb, loc, hb.getIndexType(), hb.getIndexAttr(1));
-  MlirValue elem = tensor::ExtractOp::create(hb, loc, call.getResult(0), ValueRange{c0, c0, c1, c1});
-  func::ReturnOp::create(hb, loc, ValueRange{elem});
-
-  float result = runAndGetScalar(module, ctx, "LOW-009");
   if (result != 38.0f) {
     fprintf(stderr, "LOW-009 FAIL: expected 38.0, got %f\n", result);
     return false;
@@ -404,40 +315,28 @@ bool testConv2DPadding() {
   builder.setOutput(yVal);
   tns::TypedGraph graph = builder.finish();
 
-  tns::TypedProgram program(types);
-  program.addGraph(std::move(graph));
-
-  DialectRegistry registry = tns::makeTensoraDialectRegistry();
-  MLIRContext ctx(registry);
-  ctx.loadAllAvailableDialects();
-  tns::MlirLowerer lowerer(ctx);
-  ModuleOp module = lowerer.lower(program);
-
-  OpBuilder b(&ctx);
-  Location loc = b.getUnknownLoc();
-  b.setInsertionPointToEnd(module.getBody());
-  auto f32 = b.getF32Type();
-  auto harness = func::FuncOp::create(b, loc, "test_main", b.getFunctionType({}, {f32}));
-  Block* entry = harness.addEntryBlock();
-  OpBuilder hb(entry, entry->begin());
-  MlirValue xConst = constTensor(hb, loc, RankedTensorType::get({1, 1, 2, 2}, f32), {1, 1, 1, 1});
-  MlirValue wConst = constTensor(hb, loc, RankedTensorType::get({1, 1, 1, 1}, f32), {2.0f});
-  MlirValue biasConst = constTensor(hb, loc, RankedTensorType::get({1}, f32), {0.0f});
-  auto fn = module.lookupSymbol<func::FuncOp>("conv2d_pad_test");
-  auto call = func::CallOp::create(hb, loc, fn, ValueRange{xConst, wConst, biasConst});
-  MlirValue c0 = arith::ConstantOp::create(hb, loc, hb.getIndexType(), hb.getIndexAttr(0));
-  MlirValue c1 = arith::ConstantOp::create(hb, loc, hb.getIndexType(), hb.getIndexAttr(1));
   // Both a padding-introduced-zero corner ([0][0]) and a real-data
   // position ([1][1]) are checked, so a bug that pads with the wrong
   // value (or doesn't shift the real data at all) would be caught.
-  MlirValue elemPad = tensor::ExtractOp::create(hb, loc, call.getResult(0), ValueRange{c0, c0, c0, c0});
-  MlirValue elemReal = tensor::ExtractOp::create(hb, loc, call.getResult(0), ValueRange{c0, c0, c1, c1});
-  MlirValue sum = arith::AddFOp::create(hb, loc, elemPad, elemReal);
-  func::ReturnOp::create(hb, loc, ValueRange{sum});
-
   // Returns elemPad + elemReal so both are exercised through the single
   // scalar-returning harness convention used throughout this file.
-  float result = runAndGetScalar(module, ctx, "LOW-009b");
+  float result = lowerCallAndRun(
+      types, std::move(graph), "conv2d_pad_test",
+      [](OpBuilder& hb, Location loc, Type f32) -> std::vector<MlirValue> {
+        MlirValue x = constTensor(hb, loc, RankedTensorType::get({1, 1, 2, 2}, f32), {1, 1, 1, 1});
+        MlirValue w = constTensor(hb, loc, RankedTensorType::get({1, 1, 1, 1}, f32), {2.0f});
+        MlirValue bias = constTensor(hb, loc, RankedTensorType::get({1}, f32), {0.0f});
+        return {x, w, bias};
+      },
+      [](OpBuilder& hb, Location loc, MlirValue result) -> MlirValue {
+        MlirValue c0 = arith::ConstantOp::create(hb, loc, hb.getIndexType(), hb.getIndexAttr(0));
+        MlirValue c1 = arith::ConstantOp::create(hb, loc, hb.getIndexType(), hb.getIndexAttr(1));
+        MlirValue elemPad = tensor::ExtractOp::create(hb, loc, result, ValueRange{c0, c0, c0, c0});
+        MlirValue elemReal = tensor::ExtractOp::create(hb, loc, result, ValueRange{c0, c0, c1, c1});
+        return arith::AddFOp::create(hb, loc, elemPad, elemReal);
+      },
+      "LOW-009b");
+
   float expected = 0.0f + 2.0f;
   if (result != expected) {
     fprintf(stderr, "LOW-009b FAIL: expected %f (0 pad + 2 real), got %f\n", expected, result);
@@ -464,30 +363,13 @@ bool testSum() {
   builder.setOutput(yVal);
   tns::TypedGraph graph = builder.finish();
 
-  tns::TypedProgram program(types);
-  program.addGraph(std::move(graph));
+  float result = lowerCallAndRun(
+      types, std::move(graph), "sum_test",
+      [](OpBuilder& hb, Location loc, Type f32) -> std::vector<MlirValue> {
+        return {constTensor(hb, loc, RankedTensorType::get({2, 3}, f32), {1, 2, 3, 4, 5, 6})};
+      },
+      extractAt({1}), "LOW-010");
 
-  DialectRegistry registry = tns::makeTensoraDialectRegistry();
-  MLIRContext ctx(registry);
-  ctx.loadAllAvailableDialects();
-  tns::MlirLowerer lowerer(ctx);
-  ModuleOp module = lowerer.lower(program);
-
-  OpBuilder b(&ctx);
-  Location loc = b.getUnknownLoc();
-  b.setInsertionPointToEnd(module.getBody());
-  auto f32 = b.getF32Type();
-  auto harness = func::FuncOp::create(b, loc, "test_main", b.getFunctionType({}, {f32}));
-  Block* entry = harness.addEntryBlock();
-  OpBuilder hb(entry, entry->begin());
-  MlirValue xConst = constTensor(hb, loc, RankedTensorType::get({2, 3}, f32), {1, 2, 3, 4, 5, 6});
-  auto fn = module.lookupSymbol<func::FuncOp>("sum_test");
-  auto call = func::CallOp::create(hb, loc, fn, ValueRange{xConst});
-  MlirValue c1 = arith::ConstantOp::create(hb, loc, hb.getIndexType(), hb.getIndexAttr(1));
-  MlirValue elem = tensor::ExtractOp::create(hb, loc, call.getResult(0), ValueRange{c1});
-  func::ReturnOp::create(hb, loc, ValueRange{elem});
-
-  float result = runAndGetScalar(module, ctx, "LOW-010");
   if (result != 15.0f) {
     fprintf(stderr, "LOW-010 FAIL: expected 15.0, got %f\n", result);
     return false;
@@ -512,30 +394,13 @@ bool testMean() {
   builder.setOutput(yVal);
   tns::TypedGraph graph = builder.finish();
 
-  tns::TypedProgram program(types);
-  program.addGraph(std::move(graph));
+  float result = lowerCallAndRun(
+      types, std::move(graph), "mean_test",
+      [](OpBuilder& hb, Location loc, Type f32) -> std::vector<MlirValue> {
+        return {constTensor(hb, loc, RankedTensorType::get({2, 3}, f32), {1, 2, 3, 4, 5, 6})};
+      },
+      extractAt({1}), "LOW-011");
 
-  DialectRegistry registry = tns::makeTensoraDialectRegistry();
-  MLIRContext ctx(registry);
-  ctx.loadAllAvailableDialects();
-  tns::MlirLowerer lowerer(ctx);
-  ModuleOp module = lowerer.lower(program);
-
-  OpBuilder b(&ctx);
-  Location loc = b.getUnknownLoc();
-  b.setInsertionPointToEnd(module.getBody());
-  auto f32 = b.getF32Type();
-  auto harness = func::FuncOp::create(b, loc, "test_main", b.getFunctionType({}, {f32}));
-  Block* entry = harness.addEntryBlock();
-  OpBuilder hb(entry, entry->begin());
-  MlirValue xConst = constTensor(hb, loc, RankedTensorType::get({2, 3}, f32), {1, 2, 3, 4, 5, 6});
-  auto fn = module.lookupSymbol<func::FuncOp>("mean_test");
-  auto call = func::CallOp::create(hb, loc, fn, ValueRange{xConst});
-  MlirValue c1 = arith::ConstantOp::create(hb, loc, hb.getIndexType(), hb.getIndexAttr(1));
-  MlirValue elem = tensor::ExtractOp::create(hb, loc, call.getResult(0), ValueRange{c1});
-  func::ReturnOp::create(hb, loc, ValueRange{elem});
-
-  float result = runAndGetScalar(module, ctx, "LOW-011");
   if (result != 5.0f) {
     fprintf(stderr, "LOW-011 FAIL: expected 5.0, got %f\n", result);
     return false;
@@ -568,32 +433,14 @@ bool testMaxPool() {
   builder.setOutput(yVal);
   tns::TypedGraph graph = builder.finish();
 
-  tns::TypedProgram program(types);
-  program.addGraph(std::move(graph));
+  float result = lowerCallAndRun(
+      types, std::move(graph), "maxpool_test",
+      [](OpBuilder& hb, Location loc, Type f32) -> std::vector<MlirValue> {
+        return {constTensor(hb, loc, RankedTensorType::get({1, 1, 4, 4}, f32),
+                             {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16})};
+      },
+      extractAt({0, 0, 1, 1}), "LOW-012");
 
-  DialectRegistry registry = tns::makeTensoraDialectRegistry();
-  MLIRContext ctx(registry);
-  ctx.loadAllAvailableDialects();
-  tns::MlirLowerer lowerer(ctx);
-  ModuleOp module = lowerer.lower(program);
-
-  OpBuilder b(&ctx);
-  Location loc = b.getUnknownLoc();
-  b.setInsertionPointToEnd(module.getBody());
-  auto f32 = b.getF32Type();
-  auto harness = func::FuncOp::create(b, loc, "test_main", b.getFunctionType({}, {f32}));
-  Block* entry = harness.addEntryBlock();
-  OpBuilder hb(entry, entry->begin());
-  MlirValue xConst = constTensor(hb, loc, RankedTensorType::get({1, 1, 4, 4}, f32),
-                                 {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16});
-  auto fn = module.lookupSymbol<func::FuncOp>("maxpool_test");
-  auto call = func::CallOp::create(hb, loc, fn, ValueRange{xConst});
-  MlirValue c0 = arith::ConstantOp::create(hb, loc, hb.getIndexType(), hb.getIndexAttr(0));
-  MlirValue c1 = arith::ConstantOp::create(hb, loc, hb.getIndexType(), hb.getIndexAttr(1));
-  MlirValue elem = tensor::ExtractOp::create(hb, loc, call.getResult(0), ValueRange{c0, c0, c1, c1});
-  func::ReturnOp::create(hb, loc, ValueRange{elem});
-
-  float result = runAndGetScalar(module, ctx, "LOW-012");
   if (result != 16.0f) {
     fprintf(stderr, "LOW-012 FAIL: expected 16.0, got %f\n", result);
     return false;

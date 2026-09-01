@@ -1,0 +1,182 @@
+### PAR-001 | MLP program (whitepaper 10.1) parses to the expected AST
+input  x:  Tensor[batch=B, feat=784]
+weight W1: Tensor[in=784, out=256]
+weight b1: Tensor[out=256]
+weight W2: Tensor[in=256, out=10]
+weight b2: Tensor[out=10]
+
+graph mlp {
+    h = linear(x, W1, b1)
+    h = relu(h)
+    y = linear(h, W2, b2)
+    return y
+}
+
+### PAR-002 | CNN program (whitepaper 10.2) parses to the expected AST
+input  image: Tensor[batch=B, channel=3, height=224, width=224]
+weight Wc1:   Tensor[out_channel=32, in_channel=3, kh=3, kw=3]
+weight bc1:   Tensor[out_channel=32]
+weight Wc2:   Tensor[out_channel=64, in_channel=32, kh=3, kw=3]
+weight bc2:   Tensor[out_channel=64]
+weight Wfc:   Tensor[in=200704, out=10]
+weight bfc:   Tensor[out=10]
+
+graph cnn {
+    x = conv2d(image, Wc1, bc1, stride=1, padding=1)
+    x = relu(x)
+    x = maxpool(x, size=2)
+    x = conv2d(x, Wc2, bc2, stride=1, padding=1)
+    x = relu(x)
+    x = maxpool(x, size=2)
+    f = flatten(x)
+    y = linear(f, Wfc, bfc)
+    return y
+}
+
+### PAR-003 | Transformer FFN program (whitepaper 10.3) parses to the expected AST
+input  x:  Tensor[batch=B, seq=S, model=768]
+weight W1: Tensor[in=768, out=3072]
+weight b1: Tensor[out=3072]
+weight W2: Tensor[in=3072, out=768]
+weight b2: Tensor[out=768]
+
+graph transformer_ffn {
+    h = linear(x, W1, b1)
+    h = relu(h)
+    y = linear(h, W2, b2)
+    return y
+}
+
+### PAR-004 | Attention program (whitepaper 10.4) parses to the expected AST
+input Q: Tensor[batch=B, head=12, qseq=S, dim=64]
+input K: Tensor[batch=B, head=12, kseq=S, dim=64]
+input V: Tensor[batch=B, head=12, kseq=S, dim=64]
+
+graph attention {
+    kt      = transpose(K, perm=[0, 1, 3, 2])
+    scores  = Q @ kt
+    scores  = scores * 0.125
+    weights = softmax(scores, axis=kseq)
+    out     = weights @ V
+    return out
+}
+
+### PAR-005 | tensorType/axis: 1/2/4 axes, concrete and symbolic dimSize
+input a: Tensor[x=1]
+input b: Tensor[x=2, y=3]
+input c: Tensor[n=B, m=4, k=C, j=8]
+graph g { return a }
+
+### PAR-006 | decl: inputDecl and weightDecl, alone and combined, multiple of each
+input a: Tensor[x=1]
+weight w: Tensor[x=1]
+input a2: Tensor[x=1]
+weight w2: Tensor[x=1]
+graph g { return a }
+
+### PAR-007 | program: multiple graphDecls (graphDecl+ repetition)
+graph g1 { return a }
+graph g2 { x = a
+ return x }
+graph g3 { return a }
+
+### PAR-008 | statement: sequential statements with no terminator, incl. bare-identifier rhs
+graph g {
+  a = b
+  c = d
+  return c
+}
+
+### PAR-009 | expression/binop: each of @ + - * / with identifier and float operand
+graph g {
+  a1 = x @ y
+  a2 = x + y
+  a3 = x - 0.5
+  a4 = x * y
+  a5 = x / 0.25
+  return a5
+}
+
+### PAR-010 | callExpr: one positional arg, multiple positional args
+graph g {
+  a = relu(x)
+  b = linear(x, w, bias)
+  return b
+}
+
+### PAR-011 | arg kinds: keyword(int), keyword(identifier), axis-list, all mixed in one call
+graph g {
+  a = f(x, stride=1, axis=nm, [p=1, q=2])
+  return a
+}
+
+### PAR-012 | argValue kinds: intLit (stride=1), identifier (axis=nm), intList (perm=[...])
+graph g {
+  a = f(x, stride=1)
+  b = f(x, axis=nm)
+  c = f(x, perm=[0, 1, 3, 2])
+  return c
+}
+
+### PAR-013 | conv2d-shaped call: multiple positional + multiple keyword args together
+graph g {
+  a = conv2d(image, W, b, stride=1, padding=1)
+  return a
+}
+
+### PAR-020 | negative: graphDecl missing closing '}'
+graph g {
+  return a
+
+### PAR-028 | recovery: two independent syntax errors (one in decls, one in a graph body)
+input good: Tensor[a=1]
+weight bad
+graph g {
+  m = good
+  n p
+  return m
+}
+
+### PAR-029 | recovery: two independent malformed statements in the same graph body
+graph g {
+  a b
+  ok1 = m
+  ok2 = n
+  c d
+  return ok2
+}
+
+### PAR-030 | diagnostics: SourceSpan of a missing-token error points at the offending token
+graph g {
+b c
+return b
+}
+
+### PAR-031 | regression: bare int literal as a binop operand reports a diagnostic, not a crash
+graph g {
+  a = x * 2
+  return a
+}
+
+### PAR-032 | regression: an illegal axis dimSize token reports a diagnostic, not a crash
+input x: Tensor[y=@]
+graph g { return x }
+
+### BND-PAR-001 | graph body that is only return (zero statements) vs a single statement
+graph empty1 { return z }
+graph one1 { w = z
+ return w }
+
+### BND-PAR-002 | minimal legal program: zero decls, exactly one graph, return-only body
+graph onlyreturn { return z }
+
+### BND-PAR-003 | tensorType axis-count extremes: 1 axis (min) vs 4 axes (conv-style)
+input a: Tensor[x=1]
+input b: Tensor[batch=B, channel=3, height=224, width=224]
+graph g { return a }
+
+### BND-PAR-004 | call arg-count extreme: conv2d's 5-arg call (3 positional + 2 keyword)
+graph g {
+  a = conv2d(image, W, b, stride=1, padding=1)
+  return a
+}

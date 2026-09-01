@@ -37,17 +37,15 @@
 
 #include "tensora/codegen/DialectSetup.h"
 #include "tensora/codegen/MlirLowerer.h"
+#include "support/JitHarness.h"
 
 namespace tns = tensora;
 using namespace mlir;
 using MlirValue = mlir::Value;
+using tensora::testing::constTensor;
 
 namespace {
 
-MlirValue constTensor(OpBuilder& b, Location loc, RankedTensorType type, ArrayRef<float> values) {
-  auto attr = DenseElementsAttr::get(type, values);
-  return arith::ConstantOp::create(b, loc, type, attr);
-}
 
 tns::TypedProgram buildAttentionGraph(tns::TypeContext& types) {
   tns::GraphBuilder builder("attention");
@@ -142,45 +140,18 @@ int run_attention_e2e() {
     return 1;
   }
 
-  mlir::PassManager pm(&ctx);
-  bufferization::OneShotBufferizePassOptions bufOpts;
-  bufOpts.bufferizeFunctionBoundaries = true;
-  bufOpts.allowReturnAllocsFromLoops = true;
-  bufOpts.functionBoundaryTypeConversion = bufferization::LayoutMapOption::FullyDynamicLayoutMap;
-  pm.addPass(bufferization::createOneShotBufferizePass(bufOpts));
-  pm.addPass(createConvertLinalgToLoopsPass());
-  pm.addPass(createSCFToControlFlowPass());
-  pm.addPass(createConvertControlFlowToLLVMPass());
-  pm.addPass(memref::createExpandStridedMetadataPass());
-  pm.addPass(createLowerAffinePass());
-  pm.addPass(createConvertMathToLLVMPass());
-  pm.addPass(createArithToLLVMConversionPass());
-  pm.addPass(createFinalizeMemRefToLLVMConversionPass());
-  pm.addPass(createConvertFuncToLLVMPass());
-  pm.addPass(createReconcileUnrealizedCastsPass());
-  if (failed(pm.run(module))) {
-    fprintf(stderr, "E2E-004 FAIL: standard lowering pipeline failed\n");
-    module.dump();
-    return 1;
-  }
+  // Standard MLIR/LLVM lowering pipeline, then JIT execution
+  // (tests/support/JitHarness.h). Same full profile as E2E-002 (CNN):
+  // softmax's math.exp and the reshape/tiled-matmul lowering both need
+  // it (see JitPipelineOptions::full()).
+  auto jitOpts = tensora::testing::JitPipelineOptions::full();
+  if (!tensora::testing::runStandardLoweringPipeline(ctx, module, jitOpts, "E2E-004")) return 1;
 
-  ExecutionEngineOptions engineOpts;
-  static const std::string kRunnerUtils = MLIR_C_RUNNER_UTILS_PATH;
-  static const llvm::SmallVector<llvm::StringRef, 1> kSharedLibs = {kRunnerUtils};
-  engineOpts.sharedLibPaths = kSharedLibs;
-  auto maybeEngine = ExecutionEngine::create(module, engineOpts);
-  if (!maybeEngine) {
-    fprintf(stderr, "E2E-004 FAIL: ExecutionEngine::create failed\n");
-    return 1;
-  }
-  auto engine = std::move(*maybeEngine);
-  auto maybeFn = engine->lookup("test_main");
-  if (!maybeFn) {
-    fprintf(stderr, "E2E-004 FAIL: could not look up 'test_main'\n");
-    return 1;
-  }
-  auto testMain = reinterpret_cast<float (*)()>(*maybeFn);
-  float result = testMain();
+  auto maybeEngine = tensora::testing::createJitEngine(module, jitOpts, "E2E-004");
+  if (!maybeEngine) return 1;
+  auto maybeFn = tensora::testing::lookupJitEntry<float (*)()>(**maybeEngine, "test_main", "E2E-004");
+  if (!maybeFn) return 1;
+  float result = (*maybeFn)();
 
   float expected = 1.660477f;
   if (std::fabs(result - expected) > 1e-4f) {

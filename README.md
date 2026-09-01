@@ -1,6 +1,4 @@
-# Tensora Project Instructions
-
-This repository contains the Tensora compiler project.
+# Tensora
 
 Tensora is a small, standalone declarative language — a teaching
 compiler's DSL, not a production framework — for describing
@@ -22,15 +20,23 @@ input/weight), and load them into a compiled Tensora program with
 Tensora then statically verifies, optimizes, and runs that exact
 computation through MLIR/LLVM, and its result matches the PyTorch
 reference within floating-point tolerance. This is not a synthetic
-claim: all three demos under `demos/` (a tabular MLP, a CNN image
-classifier, a self-attention text classifier) are genuine PyTorch-trained
-models, on real data, running end to end through Tensora this way —
-see [Real-World Inference Demos](#real-world-inference-demos) below. A
+claim: eight demos under `demos/` are genuine, end-to-end, PyTorch-trained
+programs running through Tensora this way — a tabular MLP, a CNN image
+classifier, a fixed-grid CNN object detector (on synthetic shapes, then
+on real annotated photographs), a self-attention text classifier, a
+two-hop relational-reasoning model, and two demos built on one real
+self-attention block extracted from a genuine, third-party pretrained
+Transformer (`google/vit-base-patch16-224[-in21k]`) — checked against
+that model's own output on a real photograph and verified independently
+at all 12 encoder layers, then spliced into a **live** copy of that
+model mid-inference to confirm its real-world prediction survives
+unchanged.
+See
+[Real-World Inference Demos](#real-world-inference-demos) below for the
+full list, in order of difficulty. A
 deeper, compile-time integration (for example registering Tensora as a
 `torch.compile` backend, or converging with PyTorch's own MLIR path) is
-design work, not yet built — see
-[docs/ProjectMgmt/11_OPEN_SOURCE_AND_RESEARCH_ROADMAP.md](docs/ProjectMgmt/11_OPEN_SOURCE_AND_RESEARCH_ROADMAP.md)
-§9.
+design work, not yet built — to be considered in future.
 
 The expected high-level pipeline is:
 
@@ -114,55 +120,41 @@ at a time (`make test-lexer`, `make test-parser`, etc.), and
 for the toolchain policy (platform, compiler, LLVM/MLIR version,
 warnings, debugging, git workflow).
 
-# Tensora Phase Demos
+# Compiler Demos
 
-There are six scripts: one per compiler phase, plus one that runs the
-whole pipeline together. Each is a thin wrapper around the real,
+These demos exercise the **compiler itself** — no real-world trained
+model involved (for that, see [Real-World Inference
+Demos](#real-world-inference-demos) below). Together they make up
+`make compiler-demos`. Each script is a thin wrapper around the real,
 tested artifacts — the `tensora` CLI driver
 ([`src/driver/main.cpp`](src/driver/main.cpp)) and the `test_passes`
 CTest binary
 ([`tests/optimization/test_passes.cpp`](tests/optimization/test_passes.cpp))
-— not a separate copy of any compiler logic.
+— not a separate copy of any compiler logic. Run from the repository
+root after building (`cmake --build build`); each script accepts an
+optional `.tns` file as its first argument (defaults to a sensible
+example under `examples/`) and an optional build-directory path as its
+second argument (defaults to `build`).
 
-**Demo commands** (one per phase; the table below has the full map):
+## One demo per phase
 
-``` bash
-demos/01_lexer_demo.sh          # --emit-tokens
-demos/02_parser_demo.sh         # --emit-parse-tree, --emit-ast, --emit-ast-dot
-demos/03_semantic_demo.sh       # --check, --emit-symbols, --emit-graph, --emit-graph-dot, --explain
-demos/04_optimization_demo.sh   # --emit-optimized-graph, the 6 Level-1 passes
-demos/05_codegen_demo.sh        # --emit-mlir, --emit-llvm
-demos/06_final_compiler_demo.sh # --run and -o across MLP / tiled matmul / CNN / attention
-```
-
-Run from the repository root after building (`cmake --build build`).
-`make example` (alias `make examples`) runs all six in order; each is
-also its own target (`make lexer-example` … `make codegen-example`,
-`make final-example`).
-
-Each script accepts an optional `.tns` file as its first argument
-(defaults to a sensible example under `examples/`) and an optional
-build-directory path as its second argument (defaults to `build`).
+`make example` (alias `make examples`) runs all six below in order;
+each is also its own target (`make lexer-example` … `make
+codegen-example`, `make final-example`).
 
 | Script | Phase | What it runs |
 |---|---|---|
-| `01_lexer_demo.sh` | Lexer | `tensora --emit-tokens` |
-| `02_parser_demo.sh` | Parser | `tensora --emit-parse-tree`, `--emit-ast`, `--emit-ast-dot` |
-| `03_semantic_demo.sh` | Semantic analysis | `tensora --check`, `--emit-symbols`, `--emit-graph`, `--emit-graph-dot`, `--explain` |
-| `04_optimization_demo.sh` | Level-1 graph optimization | `tensora --emit-optimized-graph`; `test_passes` on named pass cases (positive + near-miss) |
-| `05_codegen_demo.sh` | Lowering + Level-2 tiling | `tensora --emit-mlir`, `--emit-llvm` |
-| `06_final_compiler_demo.sh` | Full pipeline | `tensora --run` and `-o` across MLP / tiled matmul / CNN / attention |
+| `demos/01_lexer_demo.sh` | Lexer | `tensora --emit-tokens` |
+| `demos/02_parser_demo.sh` | Parser | `tensora --emit-parse-tree`, `--emit-ast`, `--emit-ast-dot` |
+| `demos/03_semantic_demo.sh` | Semantic analysis | `tensora --check`, `--emit-symbols`, `--emit-graph`, `--emit-graph-dot`, `--explain` |
+| `demos/04_optimization_demo.sh` | Level-1 graph optimization | `tensora --emit-optimized-graph`; `test_passes` on named pass cases (positive + near-miss) |
+| `demos/05_codegen_demo.sh` | Lowering + Level-2 tiling | `tensora --emit-mlir`, `--emit-llvm` |
+| `demos/06_final_compiler_demo.sh` | Full pipeline | `tensora --run` and `-o` across MLP / tiled matmul / CNN / attention |
 
-You can inspect every intermediate form the compiler produces
-directly, one flag per stage: tokens (`--emit-tokens`), the raw ANTLR
-parse tree (`--emit-parse-tree`), the AST (`--emit-ast`/`--emit-ast-dot`),
-the symbol table (`--emit-symbols`, RM 3.6 — global declarations, each
-graph's local scope, and its name-resolution log), the Typed
-Computation Graph before and after optimization
-(`--emit-graph`/`--emit-graph-dot`, `--emit-optimized-graph`), MLIR
-(`--emit-mlir`), and LLVM IR (`--emit-llvm`). This is useful for
-debugging one phase, or for a demo, without running the whole
-pipeline.
+Each `--emit-*` flag above dumps one stage on its own (tokens, parse
+tree, AST, symbol table, TCG before/after optimization, MLIR, LLVM IR)
+— useful for debugging or demoing a single phase without running the
+whole pipeline.
 
 The `--polyhedral` flag is an optional lowering path: it runs `linalg`
 through the MLIR affine dialect and one real polyhedral pass
@@ -172,12 +164,10 @@ same result on every runnable example (see
 it exists to prove Tensora's output can drive polyhedral optimization,
 not to change what any program computes.
 
-# Visualization, Independent Pipeline, and Benchmarks
+## Visualization, Independent Pipeline, and Benchmarks
 
-Three more demos sit alongside the per-phase ones. Each is its own
-`make` target, and `make demo` (alias `make demos`) runs them together
-with the real-world demos below (skipping any whose artifacts or tools
-are absent):
+Three more demos, still part of `make compiler-demos`. Each is its own
+`make` target too, and skips itself if its tools are absent:
 
 ``` bash
 make viz              # demos/08 -- render AST / TCG (before+after opt) / MLIR DAG to PNGs (needs Graphviz `dot`)
@@ -186,46 +176,186 @@ make benchmark        # measure Level-2 matmul-tiling speedup (not a CTest; see 
 ```
 
 `make viz` gives the clearest picture of optimization: the Typed
-Computation Graph *before* and *after* the Level-1 passes, side by side.
-`make demo-independent` is separate from the tests on purpose — the
-CTest suite *asserts* correctness (e.g. `test_passes`, and the gated
-`INT-IR-*-STD` cases that check emitted IR parses under external tools),
-while these demos *visualize* it; both read the same
-`examples/optimizations/*.tns`, and demo 04 ends by running the
-authoritative pass tests rather than re-checking anything itself.
+Computation Graph *before* and *after* the Level-1 passes, side by
+side. `make demo-independent` feeds Tensora's own emitted MLIR/LLVM IR
+to real, external tools (`mlir-opt`, `llc`, `lli`) and checks they
+compute the same result — proof the IR is standards-compliant, not
+just self-consistent inside Tensora.
+
+Both demos are for exploration, not correctness-checking: the CTest
+suite is what actually asserts correctness (`test_passes`, plus the
+gated `INT-IR-*-STD` cases that already do what `demo-independent`
+shows, as an automated check). Demo and test both read the same
+`examples/optimizations/*.tns` files, so they can't silently drift
+apart, and `demos/04_optimization_demo.sh` runs the real `test_passes`
+binary itself at the end rather than re-implementing any of its checks.
 
 # Real-World Inference Demos
 
-Three demos take recognizable real inputs, use genuine PyTorch-trained
-parameters, run the whole computation through Tensora (source → TCG →
-optimization → MLIR → LLVM → native execution), and check the result
-against a PyTorch reference. **Each needs its weights and inputs
-prepared once first**, on a machine with PyTorch
+Eight demos (in order of difficulty, below) take recognizable real
+inputs, use genuine PyTorch-trained parameters, run the whole
+computation through Tensora (source → TCG → optimization → MLIR →
+LLVM → native execution), and check the result against a PyTorch
+reference. **Each needs its weights and inputs prepared once first**,
+on a machine with PyTorch
 ([`tools/models/requirements.txt`](tools/models/requirements.txt)); the
-demo runners themselves need only numpy:
+demo runners themselves need only numpy. `make setup-tensora-demos`
+(alias `make setup-demos`) runs every preparation script below in one
+command (needs internet access and ~350MB of disk, one time, for the
+ViT checkpoint). It's safe to re-run: each script is skipped if its
+`demos/artifacts/<name>/eval/` already exists, so re-running never
+redoes a download/training step that already finished; delete a
+specific demo's `demos/artifacts/<name>/` directory to force it to
+redo that one demo from scratch:
 
 ``` bash
-python3 tools/models/prepare_mlp_demo.py        # trains the tabular MLP, exports weights + held-out students
-python3 tools/models/prepare_stl10_demo.py       # trains the STL-10 CNN, exports weights + held-out images
-python3 tools/models/prepare_text_attn_demo.py   # trains the attention text classifier, exports weights + sentences
+make setup-tensora-demos
 ```
 
-Only once that exists (`demos/artifacts/{mlp,cnn,attn}/`):
+which is equivalent to running these one time, each of which trains
+(or, for the ViT demo, downloads) a model once and exports its
+weights plus held-out inputs as `.npy` files under `demos/artifacts/`:
 
 ``` bash
-make demo-mlp-placement        # student placement-eligibility (tabular MLP)
-make demo-cnn-image-classifier # STL-10 image classification, 10 classes (CNN, native 96x96, shows the image)
-make demo-attn-text-classifier # weather / food / sports topic (self-attention)
+python3 tools/models/prepare_mlp_demo.py            # tabular MLP
+python3 tools/models/prepare_stl10_demo.py          # STL-10 CNN
+python3 tools/models/prepare_grid_detector_demo.py  # fixed-grid CNN detector, synthetic shapes (no download)
+python3 tools/models/prepare_grid_detector_real_demo.py # same detector family, real VOC photographs (needs internet)
+python3 tools/models/prepare_text_attn_demo.py      # single-head attention text classifier
+python3 tools/models/prepare_relational_demo.py     # multi-head-shaped attention, 2-hop relational reasoning (course eligibility)
+python3 tools/models/prepare_vit_attention_demo.py  # downloads real pretrained ViT-Base (google/vit-base-patch16-224-in21k),
+                                                     # extracts one real attention block's weights + hidden state
+                                                     # (needs internet access once; transformers/safetensors/pillow
+                                                     # are already in tools/models/requirements.txt)
 ```
 
-`make demo` runs all three plus the visualization, independent-pipeline,
-and benchmark demos above; it skips (with a message) any real-world demo
-whose artifacts have not been prepared, so it still succeeds on a fresh
-clone.
+`demo-vit-attention-substitution` prepares (and downloads) its own
+separate checkpoint on first run —
+`google/vit-base-patch16-224` (a real ImageNet-1k *classifier*, unlike
+the headless `-in21k` encoder above) — via
+`tools/models/prepare_vit_substitution_demo.py`; it is not part of
+`setup-tensora-demos` because, unlike every other demo here, it also
+needs a built `tensora` binary at prep time (it shells out to it
+directly to recompute one block), not only numpy.
+
+`prepare_vit_attention_demo.py` also accepts two overrides, forwarded
+through `make prep-vit-attention IMAGE=... LAYER=...` or set directly
+as environment variables `TENSORA_VIT_IMAGE` (a local file path or an
+http(s) URL) and `TENSORA_VIT_LAYER` (`0`-`11`), so trying a different
+photo or encoder layer doesn't need editing the script.
+
+## The demos, in order of difficulty
+
+| # | `make` target | Data | Demonstrates |
+|---|---|---|---|
+| 1 | `demo-mlp-placement` | tabular, trained from scratch | simplest case: `linear`→`relu`→`linear` binary classifier (student placement eligibility) |
+| 2 | `demo-cnn-image-classifier` | real photos (STL-10), trained from scratch | whole-image classification, 10 classes — "**what** is in this image" |
+| 3 | `demo-cnn-grid-detector` | synthetic shapes, trained from scratch | fixed-grid object *localization* — "**what and where**" — over a toy 32x32 image; the minimal example this task family needs |
+| 4 | `demo-cnn-grid-detector-real` | real photos (Pascal VOC 2012), trained from scratch | the same fixed-grid localization task, but on real, human-annotated photographs at finer (16x16) resolution — harder data, honestly weaker precision |
+| 5 | `demo-attn-text-classifier` | synthetic sentences, trained from scratch | single-head self-attention, topic classification |
+| 6 | `demo-attn-relational` | synthetic sequences, trained from scratch | two-hop relational reasoning (course eligibility) — the answer is never stated directly, only chainable from two separate facts |
+| 7 | `demo-vit-attention` | real photo, real pretrained weights | one self-attention block (12-head, 768-dim) from a genuine pretrained ViT-Base checkpoint, checked against that model's own output, independently at all 12 encoder layers, plus an optional visualization |
+| 8 | `demo-vit-attention-substitution` | 5 real photos, real pretrained weights | splices Tensora's own recomputation of one block into a **live** real ImageNet-1k classifier mid-inference and shows the real-world prediction survives, on 5 visibly different photographs |
+
+``` bash
+make demo-mlp-placement               # tabular MLP: linear->relu->linear binary classifier
+make demo-cnn-image-classifier        # whole-image "what is it" classification (STL-10 photos)
+make demo-cnn-grid-detector           # toy "what AND where": fixed-grid localization on synthetic shapes
+make demo-cnn-grid-detector-real      # same grid localization, on real annotated VOC photographs
+make demo-attn-text-classifier        # single-head self-attention topic classifier
+make demo-attn-relational             # two-hop relational reasoning, course eligibility
+make demo-vit-attention               # one real ViT-Base attention block vs. the real model's own output, all 12 layers, plus optional viz
+make demo-vit-attention-substitution  # splices Tensora's block into a live pretrained classifier and checks the prediction survives
+```
+
+`make tensora-demos` runs all eight in this order; it skips (with a
+message) any demo whose artifacts have not been prepared (or, for the
+substitution demo, whose `transformers` dependency is not installed),
+so it still succeeds on a fresh clone. `make demo` (alias `make demos`)
+runs `compiler-demos` and `tensora-demos` together — every demo in the
+repository, one command.
 
 Real values reach the compiled graph through `tensora --run --data-dir`
 (one float32 `.npy` per input/weight); see
 [docs/development/BUILD.md](docs/development/BUILD.md).
+
+### 1-2: tabular MLP, whole-image CNN classification
+
+Straightforward feed-forward and convolutional classifiers, trained on
+real (STL-10) or realistic tabular data — the baseline "does Tensora
+run a real trained model correctly" case the harder demos build on.
+
+### 3-4: object detection — "what AND where"
+
+Plain classification (demos 1-2) only answers "what is in this image."
+`demo-cnn-grid-detector` answers "what, **and where**": a 4x4-grid,
+per-cell detector over a toy 32x32 image, YOLO-style but simplified
+(one object per cell, so no duplicate-box cleanup is needed).
+`demo-cnn-grid-detector-real` is the same idea on real Pascal VOC 2012
+photographs at a finer 16x16 grid — Tensora's output still matches
+PyTorch exactly, but the small model itself (trained on only ~1,000
+real photos) is honestly not very accurate (finds a real object only
+about half the time); the printed stats report that plainly rather
+than hiding it.
+
+### 5-6: self-attention — the mechanism behind Transformers
+
+`demo-attn-text-classifier` answers "what topic is this sentence
+about?" (weather / food / sports) using single-head self-attention —
+the same core building block inside every Transformer model (GPT,
+BERT, ViT), just at toy scale.
+
+`demo-attn-relational` is a harder task, and a different *kind* of
+task, not just a bigger one: given real, natural-language sentences
+about which courses a student has already completed and which
+prerequisite each candidate course needs — drawn from a 24-course pool
+with randomized names, phrasing, and distractor facts, not a fixed
+symbol table — say which course the student can now take. The answer
+is never stated in the input; it takes two chained attention/lookup
+steps (read what's completed, then check each candidate's requirement
+against it) to find it. v1 Tensora has no embedding/gather/tokenizer
+op, so every sentence is turned into a float vector by a from-scratch
+word-embedding + mean-pool encoder entirely in PyTorch before Tensora
+ever runs. That's a genuinely harder problem than a single key-value
+lookup, and the trained model is honestly imperfect at it (~55-60%
+accuracy against ground truth, well above the 1/6 ~ 17% chance rate) —
+this demo checks that Tensora reproduces that same, imperfect model
+exactly, not that the task itself is solved perfectly.
+See [docs/development/BUILD.md](docs/development/BUILD.md) for how to
+read this demo's output.
+
+### 7-8: a real pretrained Transformer (ViT-Base)
+
+Demos 1-6 train their own small model from scratch. Demos 7-8 instead
+borrow real, pretrained weights from a genuine, publicly available
+Transformer — Google's ViT-Base image model — and check that Tensora
+computes exactly what that real model computes.
+
+`make demo-vit-attention` recomputes one real self-attention block from
+ViT-Base and checks it against that model's own output on a real
+photograph, repeats that check independently for **all 12 layers**
+(`PASS 12/12`), and, if `matplotlib` is installed, renders pictures of
+what that block is actually looking at in the photo (each panel
+labeled to show whether Tensora computed it or it's reference-only
+PyTorch data) — see
+[docs/development/BUILD.md](docs/development/BUILD.md) for what each
+figure means.
+
+`make demo-vit-attention-substitution` goes further: it takes a full,
+live, pretrained ImageNet classifier, swaps one of its internal
+attention blocks for Tensora's own computation of that block
+mid-inference, and runs 5 real photographs (dog, car, elephant,
+airplane, cat) through it. On all 5, the prediction is unchanged
+(final-logit error ~1e-6) — Tensora's output works as a drop-in
+replacement for that block inside a real model, not only a numerical
+match in isolation. This demo prepares its own checkpoint on first run
+(separate from `setup-tensora-demos`, since it also needs a *built*
+`tensora` binary at prep time, not only numpy) — see the script's
+header for the one-time setup.
+
+For a deeper explanation of each demo's output and design choices, see
+[docs/development/BUILD.md § "Reading the real-world demo output in
+depth"](docs/development/BUILD.md#reading-the-real-world-demo-output-in-depth).
 
 ## Known limitations
 
@@ -233,17 +363,26 @@ Real values reach the compiled graph through `tensora --run --data-dir`
   (non-symbolic) shapes (see `docs/testing/TEST_MATRIX.md` LOW-005).
   Use `examples/mlp_concrete.tns`, not `examples/mlp.tns`, for those
   stages.
-- The Transformer demo is a self-attention **classifier** built from
-  Tensora's existing operators — a full pretrained BERT/DistilBERT QA
-  model needs operators Tensora does not yet have (embedding/gather,
-  layernorm, GELU, integer tensors), tracked in
-  [docs/ProjectMgmt/11_OPEN_SOURCE_AND_RESEARCH_ROADMAP.md](docs/ProjectMgmt/11_OPEN_SOURCE_AND_RESEARCH_ROADMAP.md)
-  §8.9a/§8.9.
+- `--run`/`-o` only execute tensors up to rank 8 (see
+  `MAX_SUPPORTED_RANK` in `src/driver/main.cpp`) — this is a limit of
+  that JIT-execution CLI helper, not of the language or the MLIR/LLVM
+  lowering (which have no rank cap themselves). Some finite,
+  compile-time ceiling is inherent to how that helper marshals data
+  into MLIR's memref ABI, but rank 8 is a generous margin above rank 4,
+  the highest rank any current example/demo needs (ViT-Base's 12-head
+  batched attention); raising it further is a one-line change to that
+  constant, since the dispatch code tries every rank up to it
+  automatically (no per-rank code to add by hand).
+- The Transformer demos are a self-attention **classifier**, a
+  self-attention **relational-reasoning** model, and one real
+  self-attention block from a genuine pretrained ViT-Base, all run
+  through Tensora's existing operators — a full pretrained
+  BERT/DistilBERT QA model needs operators Tensora does not yet have
+  (embedding/gather, layernorm, GELU, integer tensors); to be
+  considered in future.
 - The only way to get data into a compiled Tensora program today is
   `.npy` files (`--data-dir`) — there is no in-memory way to hand
   Tensora a live tensor from another process. Making Tensora a
   first-class interop target (for example, a PyTorch custom op that
   passes tensors directly, no file round-trip) is needed for Tensora to
-  be useful across wider use cases; see
-  [docs/ProjectMgmt/11_OPEN_SOURCE_AND_RESEARCH_ROADMAP.md](docs/ProjectMgmt/11_OPEN_SOURCE_AND_RESEARCH_ROADMAP.md)
-  §9.
+  be useful across wider use cases; to be considered in future.

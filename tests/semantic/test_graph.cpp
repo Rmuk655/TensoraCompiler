@@ -1,4 +1,4 @@
-// Typed Computation Graph tests (IR.md). These check GraphBuilder and
+// Typed Computation Graph tests (INTERFACES.md §3a). These check GraphBuilder and
 // GraphVerifier rules (GR-*), matching docs/testing/TEST_MATRIX.md.
 // Each case has its own name; see tests/support/TestHarness.h.
 #include <string>
@@ -6,6 +6,7 @@
 
 #include "tensora/parser/Parser.h"
 #include "tensora/semantic/SemanticAnalyzer.h"
+#include "support/FixtureLoader.h"
 #include "support/TestHarness.h"
 
 using namespace tensora;
@@ -32,19 +33,7 @@ const TensorType* t1(TypeContext& types, const char* axisName, int64_t size) {
 CASE(GR_001, "GR-001", "MLP program's TypedGraph has the expected structural shape") {
   TypeContext types;
   DiagnosticEngine d;
-  auto r = analyze(
-      "input  x:  Tensor[batch=B, feat=784]\n"
-      "weight W1: Tensor[in=784, out=256]\n"
-      "weight b1: Tensor[out=256]\n"
-      "weight W2: Tensor[in=256, out=10]\n"
-      "weight b2: Tensor[out=10]\n"
-      "graph mlp {\n"
-      "    h = linear(x, W1, b1)\n"
-      "    h = relu(h)\n"
-      "    y = linear(h, W2, b2)\n"
-      "    return y\n"
-      "}\n",
-      types, d);
+  auto r = analyze(tensora::testing::loadFixtureSource(FIXTURE_GRAPH_PATH, "GR-001"), types, d);
   R.check(r.ok(), "MLP analyzes with no diagnostics");
   const TypedGraph& g = r.value().graphs()[0];
   R.check(g.params.size() == 5, "5 params (x, W1, b1, W2, b2)");
@@ -165,8 +154,7 @@ CASE(GR_006, "GR-006", "a hand-built fixture (no sema) is GraphVerifier-clean, d
 CASE(GR_007, "GR-007", "referencing the same global input twice adds exactly one param (lazy dedup)") {
   TypeContext types;
   DiagnosticEngine d;
-  auto r = analyze(
-      "input x: Tensor[a=4]\ngraph g {\n  h1 = relu(x)\n  h2 = relu(x)\n  return h2\n}\n", types, d);
+  auto r = analyze(tensora::testing::loadFixtureSource(FIXTURE_GRAPH_PATH, "GR-007"), types, d);
   R.check(r.ok(), "program analyzes with no diagnostics");
   const TypedGraph& g = r.value().graphs()[0];
   R.check(g.params.size() == 1, "x is added as a param exactly once");

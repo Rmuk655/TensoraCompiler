@@ -34,7 +34,7 @@ Tensora
  -> Native CPU Execution
 ```
 
-The semester backend targets forward computation suitable for inference.
+This academic compiler's backend targets forward computation suitable for inference.
 Training and automatic differentiation are outside the required scope.
 
 ## 1.3 Why a Domain-Specific Language?
@@ -60,7 +60,7 @@ The completed project provides:
 3.  tensor-aware semantic analysis, with symbolic shape propagation and
     a symbol table with observable output
 4.  a typed graph Intermediate Representation (Typed Computation Graph) with a verifier;
-5.  six team-authored graph transformations (shape folding, dead-op
+5.  six project-authored graph transformations (shape folding, dead-op
     elimination, reshape/transpose cancellation, elementwise fusion,
     linear-bias-activation fusion — a seventh, constant folding, was
     built and then retired; see `docs/architecture/DECISIONS.md`
@@ -76,20 +76,20 @@ The completed project provides:
     object file, emitted through `llvm::TargetMachine`, linked by the
     system linker into a standalone executable with zero MLIR/LLVM
     runtime dependency);
-9.  end-to-end numerical validation on five real workloads: an MLP, a
+9.  end-to-end numerical validation on six real workloads: an MLP, a
     tiled matmul-heavy model, a small CNN classifier, a Transformer
-    feed-forward block, and single-head scaled dot-product attention;
+    feed-forward block, and single- and multi-head scaled
+    dot-product attention;
 10. a full passing regression suite (`ctest`), stable across repeated
     runs.
 
 ## 1.5 Scope
 
-The project implements and numerically verifies, end to end, the
-required workloads (MLP and a small CNN) and the two advanced examples
-(a Transformer feed-forward block and attention). Attention is
-demonstrated for a single head. Batched matmul is implemented (Section
-1.7), so a multi-head attention example is possible; the project has
-not yet written one.
+The project implements and numerically verifies, end to end, six
+workloads: the two required ones (an MLP and a small CNN classifier)
+and four others exercising batched matmul, a Transformer
+feed-forward block, and single- and multi-head scaled dot-product
+attention (see Section 1.4, item 9, for the full list).
 
 Required target: CPU through MLIR/LLVM. The project implements both a
 JIT path and an ahead-of-time native-executable path.
@@ -98,23 +98,30 @@ Potential extensions: GPU lowering, layout analysis, memory analysis,
 more fusion, general (non-flatten) reshape, PyTorch interoperability,
 and a larger real-world failure corpus.
 
-## 1.7 Known Limitations
+## 1.6 Known Limitations
 
-One operator remains unlowered by design, not by oversight: general
-`reshape` (arbitrary axis regrouping — `flatten`'s fixed,
-batch-preserving collapse covered every workload attempted). This is
-recorded as a scope boundary in `docs/testing/TEST_MATRIX.md`, not
-silently miscompiled: `MlirLowerer`'s lowering switch hits
-`llvm_unreachable` for any op it does not yet handle. `src/driver/
-main.cpp` is a general-purpose CLI driver: it takes any `.tns` source
-file through the full pipeline to an executable (`--run`/`-o`). Every
-MLIR-lowering and codegen *test*, though, still builds its `TypedGraph`
-directly in C++ (the same parallel-development pattern the project's
-own instructions call for — a downstream phase uses hand-built
-fixtures instead of waiting on the frontend), and exercises the real
-`MlirLowerer`, optimization passes, and backend from that point on.
+Two are worth calling out explicitly (the full list of what v1
+deliberately excludes is the whitepaper's
+[Section 12](../language/00_WHITEPAPER.md#12-core-language-v1-versus-future-extensions),
+not repeated here):
 
-## 1.6 Positioning
+- **General `reshape`** (arbitrary axis regrouping, as opposed to
+  `flatten`'s fixed batch-preserving collapse) is not lowered — a
+  documented scope boundary
+  ([TEST_MATRIX.md](../testing/TEST_MATRIX.md#lowering-rm-322)),
+  not a silent miscompilation (`MlirLowerer`'s lowering switch hits
+  `llvm_unreachable` for any op it does not yet handle). It was never
+  needed: `flatten`'s collapse covered every workload attempted.
+
+The more consequential gap, in practice, is symbolic-dimension
+lowering: a program with any symbolic axis passes semantic analysis
+but cannot yet be lowered to MLIR (`tensor.empty()` and similar
+allocation-introducing lowering steps do not thread through a dynamic
+size). The driver detects this and rejects such a program before
+lowering, with a clear message, rather than crashing or miscompiling —
+see `docs/testing/TEST_MATRIX.md`'s LOW-005 entry.
+
+## 1.7 Positioning
 
 Tensora does not claim that tensor shape inference or ML graph
 compilation is new. Existing frameworks and languages already hold

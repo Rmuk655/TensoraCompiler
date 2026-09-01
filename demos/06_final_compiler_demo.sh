@@ -31,8 +31,12 @@ echo "=== Single-head scaled dot-product attention ==="
 run_one examples/attention.tns 1
 
 echo
+echo "=== Transformer feed-forward block (linear -> relu -> linear) ==="
+run_one examples/transformer_ffn_concrete.tns 289
+
+echo
 echo "=== Ahead-of-time native object files (no JIT, no MLIR/LLVM at link time) ==="
-for f in mlp_concrete matmul_large cnn attention; do
+for f in mlp_concrete matmul_large cnn attention transformer_ffn_concrete; do
   "$BUILD/tensora" -o "$OUT/$f.o" "examples/$f.tns"
   file "$OUT/$f.o"
 done

@@ -5,6 +5,26 @@
 > whitepaper. A change to one file requires a matching change to the
 > other. See the change-control policy in `05_LANGUAGE_EVOLUTION.md`.
 
+## 3.0 Operator Quick Reference
+
+This table is a lookup index, not a substitute for the normative
+sections it points to — every static requirement below is stated
+precisely, and completely, only in the linked section.
+
+| Operator | Input -> output (rank) | Main static requirement |
+|---|---|---|
+| [`@` (3.7)](#37-matrix-multiplication-) | `[...,M,K] x [...,K,N] -> [...,M,N]` | contracted sizes equal/unifiable; leading axes match in name and size |
+| [`+ - * /` (3.8)](#38-elementwise-arithmetic-and-broadcasting) | `T x T -> T` (broadcast) | aligned axes equal/unifiable/size-1 in size, **and** matching in name unless broadcasting from size 1 |
+| [`linear` (3.9)](#39-linear) | `[...,K], W[K,N], b[N] -> [...,N]` | `x`'s last axis == `W`'s input axis; `b`'s axis == `W`'s output axis |
+| [`relu` (3.10)](#310-relu) | `T -> T` | none (shape-preserving) |
+| [`softmax` (3.11)](#311-softmax) | `T -> T` | named axis must exist in the input |
+| [`reshape` (3.12)](#312-reshape) | `T -> T'` (any rank) | product of target sizes == product of source sizes |
+| [`flatten` (3.13)](#313-flatten) | rank N -> rank 2 | trailing dimensions being merged must be concrete |
+| [`transpose` (3.14)](#314-transpose) | `T -> T'` (same rank) | `perm` names every axis position exactly once |
+| [`sum` / `mean` (3.15)](#315-sum--mean) | rank N -> rank N-1 | named axis must exist in the input |
+| [`conv2d` (3.16)](#316-conv2d) | NCHW -> NCHW | channel counts compatible; spatial output arithmetic must resolve concretely |
+| [`maxpool` (3.17)](#317-maxpool) | NCHW -> NCHW | window/stride produce a valid, concrete output size |
+
 ## 3.1 Lexical Structure
 
 ### Identifiers
@@ -222,7 +242,10 @@ flatten(Tensor[a0=d0, a1=d1, ..., an=dn]) -> Tensor[a0=d0, flat=(d1*...*dn)]
 ```
 
 Axes `a1..an` must all have concrete sizes. `a0` may be symbolic. It
-keeps its name. The flattened trailing axis is named `flat`.
+keeps its name. The flattened trailing axis is named `flat`. `flatten`
+requires an input of rank 2 or higher — there is no trailing axis to
+flatten out of a rank-1 tensor, since a rank-0 (scalar) result is not
+a representable `TensorType` (Section 3.3).
 
 ## 3.14 `transpose`
 
@@ -242,7 +265,10 @@ mean(Tensor[...], axis=name) -> Tensor[...]   (axis removed)
 ```
 
 `axis` names an existing axis, by identifier. The result is the input
-type with that axis deleted. There is no `keepdim` option in v1.
+type with that axis deleted. There is no `keepdim` option in v1. The
+input must have rank 2 or higher: reducing a rank-1 tensor's only axis
+would produce a rank-0 result, and `TensorType` (Section 3.3) cannot
+represent one.
 
 ## 3.16 `conv2d`
 
@@ -258,8 +284,11 @@ conv2d(
 The layout is fixed to NCHW. The weight layout is fixed to
 `[out_channel, in_channel, kh, kw]`. `x`'s `channel` axis size must
 unify with the weight's `in_channel` axis size. `stride` (`s`) and
-`padding` (`p`) are non-negative integer literals. Dilation is fixed at
-1, and groups is fixed at 1.
+`padding` (`p`) are integer literals, but the two are not symmetric:
+`padding` may be zero or positive (the grammar alone guarantees
+non-negative, since integer literals have no unary minus), while
+`stride` must be strictly positive — `stride <= 0` is a static error.
+Dilation is fixed at 1, and groups is fixed at 1.
 
 ``` text
 Hout = (H  + 2*p - kH) / s + 1
@@ -283,7 +312,10 @@ maxpool(Tensor[batch=B, channel=C, height=H, width=Wd], size=k, stride=t)
 ```
 
 This uses `conv2d`'s spatial formula, with kernel `k`, padding `0`,
-and stride `t` (default `t = k`). It has the same requirement that `H`
+and stride `t` (default `t = k`). `k` and `t` must each be strictly
+positive — a zero or negative pooling window or stride is a static
+error (`SemaConvArithmetic`), the same rule `conv2d`'s `stride` follows
+(Section 3.16). It has the same requirement that `H`
 and `Wd` must be concrete (Section 3.16). v1 defines only max-pooling.
 Average pooling is a future extension.
 
@@ -299,15 +331,25 @@ control flow — no conditionals, and no loops.
 
 Compilation of a graph fails when any of the following holds: the
 program uses an undefined name; the program illegally redeclares a
-name; an operator call has the wrong argument count, the wrong rank, or
+name; a declared or inferred axis size is not a positive integer
+(`SemaNonPositiveDimension`) or a `tensorType`/reshape target list
+repeats an axis name (`SemaDuplicateAxisName`, Section 3.3); an
+operator call has the wrong argument count, the wrong rank, or
 a type that breaks its contract (Sections 3.7–3.17); an elementwise
 operation breaks broadcasting size or axis-name compatibility (Section
 3.8); a `reshape` does not keep the element count; a `transpose`
 permutation is invalid; a `sum`/`mean`/`softmax` axis name does not
 exist on its operand; or a `conv2d`/`maxpool` configuration has
-mismatched channels or spatial arithmetic that does not divide evenly.
-The compiler reports every failure in the diagnostic form of whitepaper
-Section 4.7.
+mismatched channels, a non-positive `stride`/pooling `size`, or spatial
+arithmetic that does not divide evenly. A distinct, separately named
+failure, `SemaUnresolvableShape`, covers cases the compiler cannot
+decide either way from the bounded symbolic-dimension subset (Section
+3.4) — an unrelated symbolic reshape factor (Section 3.12) or a
+symbolic spatial/kernel size reaching `conv2d`/`maxpool` (Sections
+3.16–3.17) — as opposed to the failures above, all of which the
+compiler does decide, and rejects because the decision came out
+negative. The compiler reports every failure in the diagnostic form of
+whitepaper Section 4.7.
 
 ## 3.20 Typed Computation Graph
 
@@ -328,12 +370,12 @@ frozen v1 pass set is exactly the six passes of whitepaper Section 6.2
 (shape folding, dead-operation elimination, reshape cancellation,
 transpose cancellation, elementwise fusion, linear-bias-activation
 fusion). A pass beyond this set is a future extension. It is not part
-of the graded v1 language.
+of the frozen v1 language.
 
-The team considered a constant-folding pass for v1. This pass would
+A constant-folding pass was considered for v1. This pass would
 combine a chain of same-kind scalar-attribute elementwise ops (for
-example, `(x * 2.0) * 3.0` -> `x * 6.0`) into one node. The team
-rejected this pass for v1. Combining the two scalars at compile time,
+example, `(x * 2.0) * 3.0` -> `x * 6.0`) into one node. v1
+rejects this pass. Combining the two scalars at compile time,
 then applying the result in one run-time multiply, is not guaranteed
 to equal the unfolded two-step computation. IEEE-754 f32 multiplication
 is not associative: the unfolded path rounds the intermediate tensor
@@ -347,7 +389,7 @@ not part of v1 with a documented exception.
 The required path is exactly:
 
 ``` text
-Tensora source -> Typed Computation Graph -> MLIR (linalg/tensor/arith/func/scf) -> LLVM -> native CPU executable
+Tensora source -> Typed Computation Graph -> MLIR (linalg/tensor/arith/math/func/scf) -> LLVM -> native CPU executable
 ```
 
 v1 defines no custom Tensora MLIR dialect (whitepaper Section 12).

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Level-1 + Level-2 optimization demo. It SHOWS each team-authored
+# Level-1 + Level-2 optimization demo. It SHOWS each project-authored
 # optimization actually firing on a small program (before -> after),
 # then runs the real CTest pass binaries (tests/optimization/
 # test_passes.cpp) which are the authoritative correctness checks.
