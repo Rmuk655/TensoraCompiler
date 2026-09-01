@@ -9513,4 +9513,4 @@ they are read directly from disk, not from git history. Generation
 date: 2026-08-26. The 183 CTest cases passing at generation time are
 the authoritative record of what this listing implements; see
 [docs/testing/TEST_MATRIX.md](../testing/TEST_MATRIX.md) and
-[docs/development/CHANGELOG.md](CHANGELOG.md).
+[docs/architecture/DECISIONS.md](../architecture/DECISIONS.md#implementation-timeline).
