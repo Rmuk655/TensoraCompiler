@@ -57,7 +57,7 @@ DiagnosticList GraphVerifier::verify(const TypedGraph& g) const {
 
   // Every value's producer must match its origin: a param has no
   // producer, and every other value is produced by exactly the node
-  // that records it as an output (SSA, IR.md §1.1/§1.2).
+  // that records it as an output (SSA, INTERFACES.md §3a.1).
   for (size_t vid = 0; vid < numValues; ++vid) {
     const Value& v = g.values()[vid];
     if (v.origin != Value::Origin::Internal) {
@@ -77,7 +77,7 @@ DiagnosticList GraphVerifier::verify(const TypedGraph& g) const {
 
   // Checks that the graph is closed, acyclic, and in topological
   // order: every node's operands are either a parameter, or produced
-  // by a strictly earlier node (IR.md §1.3/§1.4).
+  // by a strictly earlier node (INTERFACES.md §3a.1).
   for (size_t i = 0; i < numNodes; ++i) {
     const GraphNode& node = g.nodes()[i];
     for (ValueId in : node.inputs) {
@@ -102,7 +102,7 @@ DiagnosticList GraphVerifier::verify(const TypedGraph& g) const {
     }
   }
 
-  // Checks for a single, valid output (IR.md §1.5). Reachability from
+  // Checks for a single, valid output (INTERFACES.md §3a.1). Reachability from
   // params already follows from the closed and topological checks
   // above: every node's operands trace back to a param or an earlier
   // node, transitively. So only a bounds check is needed here.

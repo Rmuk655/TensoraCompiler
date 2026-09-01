@@ -65,13 +65,38 @@ class Reporter {
     }
   }
 
+  // Same as check(), but on failure also prints what the case actually
+  // got vs. what it expected. Use this instead of a bare check() when a
+  // mismatch is more useful to see than to guess at (a diagnostic code,
+  // a rendered type, an emitted line) -- this is the "what did it
+  // generate vs. what did I expect" case a plain pass/fail hides.
+  void checkEqual(bool cond, const std::string& what, const std::string& actual, const std::string& expected) {
+    total_++;
+    if (!cond) {
+      failed_++;
+      std::cout << "  [FAIL] " << caseId_ << ": " << what << "\n"
+                 << "    expected: " << expected << "\n"
+                 << "    actual:   " << actual << "\n";
+    }
+  }
+
   int total() const { return total_; }
   int failed() const { return failed_; }
+
+  // True when the case is running under `--verbose` (see
+  // runRegisteredCases). A case body may use this to print extra
+  // detail -- the token stream, the AST, the typed graph, the emitted
+  // MLIR -- that would be too noisy to print on every run but is
+  // exactly what you want when debugging one case by hand:
+  //   ./test_semantic SEM-DECL-001 --verbose
+  bool verbose() const { return verbose_; }
+  void setVerbose(bool v) { verbose_ = v; }
 
  private:
   std::string caseId_;
   int total_ = 0;
   int failed_ = 0;
+  bool verbose_ = false;
 };
 
 struct Case {
@@ -101,15 +126,31 @@ struct Register {
   void case_##idSuffix(::tensora::testing::Reporter& R)
 
 // Runs every registered case, or one case by ID, or every case in one
-// category (`--category=BOUNDARY`, matching Category above). Prints a
-// PASS/FAIL line for each case (with its category), then a summary
-// line. Returns the total failed-check count as the process exit code
-// (0 means every check passed).
+// category (`--category=BOUNDARY`, matching Category above). A trailing
+// `--verbose` flag (in any position) sets Reporter::verbose() for every
+// case that runs, so a case can print extra debug detail -- this is
+// meant for a single-case debug run
+// (`./test_semantic SEM-DECL-001 --verbose`), not routine CI runs, so
+// it is off by default and never changes what is checked, only what is
+// printed. Prints a PASS/FAIL line for each case (with its category),
+// then a summary line. Returns the total failed-check count as the
+// process exit code (0 means every check passed).
 inline int runRegisteredCases(int argc, char** argv) {
   std::vector<Case*> toRun;
   std::string wantCategory;
-  if (argc > 1) {
-    std::string arg = argv[1];
+  bool verbose = false;
+  std::vector<std::string> args;
+  for (int i = 1; i < argc; ++i) {
+    std::string arg = argv[i];
+    if (arg == "--verbose" || arg == "-v") {
+      verbose = true;
+    } else {
+      args.push_back(arg);
+    }
+  }
+
+  if (!args.empty()) {
+    const std::string& arg = args.front();
     if (arg == "--list") {
       // Print every registered case ID, one per line. This is the
       // authoritative case list (the registry itself); CMake validates
@@ -144,6 +185,7 @@ inline int runRegisteredCases(int argc, char** argv) {
   int casesFailed = 0;
   for (Case* c : toRun) {
     Reporter r(c->id);
+    r.setVerbose(verbose);
     c->run(r);
     totalChecks += r.total();
     totalFailedChecks += r.failed();

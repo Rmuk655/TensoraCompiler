@@ -19,10 +19,13 @@ not a real placement or grading system.
 
 Run once, on a machine with PyTorch (see tools/models/requirements.txt):
     python3 tools/models/prepare_mlp_demo.py
+Safe to re-run: skips everything if demos/artifacts/mlp/eval/ already
+exists (pass --force to redo).
 """
 import io
 import json
 import os
+import sys
 import urllib.request
 import zipfile
 
@@ -67,6 +70,11 @@ def load_dataset():
 
 
 def main():
+    marker = os.path.join(OUT_DIR, "eval", "meta.json")
+    if os.path.exists(marker) and "--force" not in sys.argv:
+        print(f"Already prepared: {os.path.normpath(marker)} exists "
+              "(delete demos/artifacts/mlp/, or pass --force, to redo)")
+        return
     torch.manual_seed(SEED)
     np.random.seed(SEED)
     rows = load_dataset()

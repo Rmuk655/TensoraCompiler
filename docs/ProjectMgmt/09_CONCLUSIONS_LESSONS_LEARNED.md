@@ -77,7 +77,7 @@ untiled, consistently across the 16x16x16, 32x32x32, and 64x64x64 tile
 sizes tried (`docs/testing/TEST_MATRIX.md`'s "Measured tile-size
 evidence" has the exact numbers). The lesson is not "tiling is always
 worth it" or "tiling is never worth it" — it is that a correctly-applied
-optimization's payoff depends on problem size, so a course project
+optimization's payoff depends on problem size, so an academic compiler
 should measure at the size that matters instead of asserting a speedup
 from structure alone, and should report a measured loss just as
 plainly as a measured win.
@@ -89,7 +89,7 @@ Standard MLIR/LLVM infrastructure reused, unmodified: the `func`,
 Bufferize; the generic linalg-to-loops, control-flow-to-LLVM,
 arith-to-LLVM, memref-to-LLVM, and func-to-LLVM conversion passes;
 `ExpandStridedMetadata` and `LowerAffine`; and `llvm::TargetMachine` for
-object-code emission. Team-authored: `MlirLowerer` (TCG -> MLIR for
+object-code emission. project-authored: `MlirLowerer` (TCG -> MLIR for
 every implemented operator), the `GraphPass`/`PassManager`
 infrastructure and its six passes, `TilingDecision` (the shape-guided
 tiling *decision*, pure C++), and `MatmulTilingPass` (the MLIR pass that
@@ -159,7 +159,7 @@ add once the JIT path was already numerically correct — the two paths
 share the same MLIR-to-LLVM-IR lowering; only the final codegen step
 differs.
 
-## 9.6 Team Engineering
+## 9.6 Role-Discipline Engineering
 
 The role-boundary discipline in this project's own instructions (Language
 Guru / System Architect / System Integrator / Tester / Developer, each
@@ -178,8 +178,8 @@ One item stays deferred deliberately, recorded as such rather than
 silently skipped: general (non-flatten) `reshape`. `tensor.reshape`'s
 runtime shape-operand form has weaker bufferization support than
 `tensor.collapse_shape`, and `flatten`'s fixed, batch-preserving
-collapse covered every workload actually attempted, so the team did
-not build the more general, riskier form speculatively. This was not
+collapse covered every workload actually attempted, so
+the more general, riskier form was not built speculatively. This was not
 discovered late — it is a documented scope boundary
 (`MlirLowerer`'s unhandled-op case is `llvm_unreachable`, not a silent
 fallthrough) recorded in `docs/testing/TEST_MATRIX.md` alongside the
@@ -243,13 +243,14 @@ benchmark tool does not yet run, not new infrastructure.
 ## 9.11 Final Conclusion
 
 What was built: a complete Tensora pipeline from a hand-built (not yet
-source-text-driven) typed computation graph through team-authored
+source-text-driven) typed computation graph through project-authored
 Level-1 optimization, a project-authored Level-2 MLIR tiling pass, and
 MLIR/LLVM lowering to both JIT execution and a genuine ahead-of-time
 native executable — covering 14 of the 15 operators in
 `docs/testing/TEST_MATRIX.md`'s coverage roll-up (every one except
-general reshape), validated end to end on five real workloads (MLP,
-tiled matmul, CNN, Transformer FFN, single-head attention). What was
+general reshape), validated end to end on six real workloads (MLP,
+tiled matmul, CNN, Transformer FFN, single-head attention, multi-head
+attention). What was
 measured: exact numeric correctness against hand- or reference-computed
 values for every workload, and honest (not cherry-picked) timing
 showing tiling overhead losing at small problem sizes. What worked:

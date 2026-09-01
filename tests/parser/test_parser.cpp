@@ -4,12 +4,22 @@
 // BND-PAR-*), matching the stable IDs in docs/testing/TEST_MATRIX.md.
 // See tests/support/TestHarness.h for the harness (shared with
 // test_lexer.cpp).
+//
+// Cases that only check ok/reject-plus-DiagCode (no AST structure
+// inspection) live in tests/fixtures/parser.tns instead, one real .tns
+// program per case, loaded and registered at runtime
+// (support/FixtureLoader.h; see cmake/Tests.cmake). Cases that need a
+// real C++ assertion on the parsed AST's shape stay here, hand-written
+// -- but their .tns source still lives in
+// tests/fixtures/parser_structural.tns (loaded via FixtureLoader.h's
+// loadFixtureSource), not as an escaped C++ string literal.
 #include <cstdint>
 #include <deque>
 #include <string>
 #include <vector>
 
 #include "tensora/parser/Parser.h"
+#include "support/FixtureLoader.h"
 #include "support/TestHarness.h"
 
 using namespace tensora;
@@ -44,18 +54,7 @@ bool isSymbolAxis(const ast::AxisSyntax& a, const std::string& name, const std::
 // --- PAR-001: MLP program (whitepaper 10.1) -> AST golden. ---
 CASE(PAR_001, "PAR-001", "MLP program (whitepaper 10.1) parses to the expected AST") {
   const std::string src =
-      "input  x:  Tensor[batch=B, feat=784]\n"
-      "weight W1: Tensor[in=784, out=256]\n"
-      "weight b1: Tensor[out=256]\n"
-      "weight W2: Tensor[in=256, out=10]\n"
-      "weight b2: Tensor[out=10]\n"
-      "\n"
-      "graph mlp {\n"
-      "    h = linear(x, W1, b1)\n"
-      "    h = relu(h)\n"
-      "    y = linear(h, W2, b2)\n"
-      "    return y\n"
-      "}\n";
+      tensora::testing::loadFixtureSource(FIXTURE_PARSER_STRUCTURAL_PATH, "PAR-001");
   DiagnosticEngine d;
   auto result = parse(src, d);
   R.check(result.ok(), "MLP program parses with no diagnostics");
@@ -90,25 +89,7 @@ CASE(PAR_001, "PAR-001", "MLP program (whitepaper 10.1) parses to the expected A
 // --- PAR-002: CNN program (whitepaper 10.2) -> AST golden. ---
 CASE(PAR_002, "PAR-002", "CNN program (whitepaper 10.2) parses to the expected AST") {
   const std::string src =
-      "input  image: Tensor[batch=B, channel=3, height=224, width=224]\n"
-      "weight Wc1:   Tensor[out_channel=32, in_channel=3, kh=3, kw=3]\n"
-      "weight bc1:   Tensor[out_channel=32]\n"
-      "weight Wc2:   Tensor[out_channel=64, in_channel=32, kh=3, kw=3]\n"
-      "weight bc2:   Tensor[out_channel=64]\n"
-      "weight Wfc:   Tensor[in=200704, out=10]\n"
-      "weight bfc:   Tensor[out=10]\n"
-      "\n"
-      "graph cnn {\n"
-      "    x = conv2d(image, Wc1, bc1, stride=1, padding=1)\n"
-      "    x = relu(x)\n"
-      "    x = maxpool(x, size=2)\n"
-      "    x = conv2d(x, Wc2, bc2, stride=1, padding=1)\n"
-      "    x = relu(x)\n"
-      "    x = maxpool(x, size=2)\n"
-      "    f = flatten(x)\n"
-      "    y = linear(f, Wfc, bfc)\n"
-      "    return y\n"
-      "}\n";
+      tensora::testing::loadFixtureSource(FIXTURE_PARSER_STRUCTURAL_PATH, "PAR-002");
   DiagnosticEngine d;
   auto result = parse(src, d);
   R.check(result.ok(), "CNN program parses with no diagnostics");
@@ -145,18 +126,7 @@ CASE(PAR_002, "PAR-002", "CNN program (whitepaper 10.2) parses to the expected A
 // --- PAR-003: Transformer FFN program (whitepaper 10.3) -> AST golden. ---
 CASE(PAR_003, "PAR-003", "Transformer FFN program (whitepaper 10.3) parses to the expected AST") {
   const std::string src =
-      "input  x:  Tensor[batch=B, seq=S, model=768]\n"
-      "weight W1: Tensor[in=768, out=3072]\n"
-      "weight b1: Tensor[out=3072]\n"
-      "weight W2: Tensor[in=3072, out=768]\n"
-      "weight b2: Tensor[out=768]\n"
-      "\n"
-      "graph transformer_ffn {\n"
-      "    h = linear(x, W1, b1)\n"
-      "    h = relu(h)\n"
-      "    y = linear(h, W2, b2)\n"
-      "    return y\n"
-      "}\n";
+      tensora::testing::loadFixtureSource(FIXTURE_PARSER_STRUCTURAL_PATH, "PAR-003");
   DiagnosticEngine d;
   auto result = parse(src, d);
   R.check(result.ok(), "FFN program parses with no diagnostics");
@@ -174,18 +144,7 @@ CASE(PAR_003, "PAR-003", "Transformer FFN program (whitepaper 10.3) parses to th
 // --- PAR-004: multi-head attention program (whitepaper 10.4) -> AST golden. ---
 CASE(PAR_004, "PAR-004", "Attention program (whitepaper 10.4) parses to the expected AST") {
   const std::string src =
-      "input Q: Tensor[batch=B, head=12, qseq=S, dim=64]\n"
-      "input K: Tensor[batch=B, head=12, kseq=S, dim=64]\n"
-      "input V: Tensor[batch=B, head=12, kseq=S, dim=64]\n"
-      "\n"
-      "graph attention {\n"
-      "    kt      = transpose(K, perm=[0, 1, 3, 2])\n"
-      "    scores  = Q @ kt\n"
-      "    scores  = scores * 0.125\n"
-      "    weights = softmax(scores, axis=kseq)\n"
-      "    out     = weights @ V\n"
-      "    return out\n"
-      "}\n";
+      tensora::testing::loadFixtureSource(FIXTURE_PARSER_STRUCTURAL_PATH, "PAR-004");
   DiagnosticEngine d;
   auto result = parse(src, d);
   R.check(result.ok(), "attention program parses with no diagnostics");
@@ -223,10 +182,7 @@ CASE(PAR_004, "PAR-004", "Attention program (whitepaper 10.4) parses to the expe
 // --- PAR-005: tensorType/axis -- 1, 2, and 4 axes; concrete and symbolic dimSize. ---
 CASE(PAR_005, "PAR-005", "tensorType/axis: 1/2/4 axes, concrete and symbolic dimSize") {
   const std::string src =
-      "input a: Tensor[x=1]\n"
-      "input b: Tensor[x=2, y=3]\n"
-      "input c: Tensor[n=B, m=4, k=C, j=8]\n"
-      "graph g { return a }\n";
+      tensora::testing::loadFixtureSource(FIXTURE_PARSER_STRUCTURAL_PATH, "PAR-005");
   DiagnosticEngine d;
   auto result = parse(src, d);
   R.check(result.ok(), "program parses with no diagnostics");
@@ -249,11 +205,7 @@ CASE(PAR_005, "PAR-005", "tensorType/axis: 1/2/4 axes, concrete and symbolic dim
 // --- PAR-006: decl kinds -- inputDecl alone, weightDecl alone, both, multiple of each. ---
 CASE(PAR_006, "PAR-006", "decl: inputDecl and weightDecl, alone and combined, multiple of each") {
   const std::string src =
-      "input a: Tensor[x=1]\n"
-      "weight w: Tensor[x=1]\n"
-      "input a2: Tensor[x=1]\n"
-      "weight w2: Tensor[x=1]\n"
-      "graph g { return a }\n";
+      tensora::testing::loadFixtureSource(FIXTURE_PARSER_STRUCTURAL_PATH, "PAR-006");
   DiagnosticEngine d;
   auto result = parse(src, d);
   R.check(result.ok(), "program parses with no diagnostics");
@@ -270,9 +222,7 @@ CASE(PAR_006, "PAR-006", "decl: inputDecl and weightDecl, alone and combined, mu
 // --- PAR-007: program -- multiple graphDecls (graphDecl+ repetition). ---
 CASE(PAR_007, "PAR-007", "program: multiple graphDecls (graphDecl+ repetition)") {
   const std::string src =
-      "graph g1 { return a }\n"
-      "graph g2 { x = a\n return x }\n"
-      "graph g3 { return a }\n";
+      tensora::testing::loadFixtureSource(FIXTURE_PARSER_STRUCTURAL_PATH, "PAR-007");
   DiagnosticEngine d;
   auto result = parse(src, d);
   R.check(result.ok(), "program with three graphs parses with no diagnostics");
@@ -289,11 +239,7 @@ CASE(PAR_007, "PAR-007", "program: multiple graphDecls (graphDecl+ repetition)")
 // --- PAR-008: statement -- two statements no terminator; a bare-identifier statement. ---
 CASE(PAR_008, "PAR-008", "statement: sequential statements with no terminator, incl. bare-identifier rhs") {
   const std::string src =
-      "graph g {\n"
-      "  a = b\n"
-      "  c = d\n"
-      "  return c\n"
-      "}\n";
+      tensora::testing::loadFixtureSource(FIXTURE_PARSER_STRUCTURAL_PATH, "PAR-008");
   DiagnosticEngine d;
   auto result = parse(src, d);
   R.check(result.ok(), "program parses with no diagnostics");
@@ -312,14 +258,7 @@ CASE(PAR_008, "PAR-008", "statement: sequential statements with no terminator, i
 // --- PAR-009: expression/binop -- each of @ + - * / with identifier and float operand. ---
 CASE(PAR_009, "PAR-009", "expression/binop: each of @ + - * / with identifier and float operand") {
   const std::string src =
-      "graph g {\n"
-      "  a1 = x @ y\n"
-      "  a2 = x + y\n"
-      "  a3 = x - 0.5\n"
-      "  a4 = x * y\n"
-      "  a5 = x / 0.25\n"
-      "  return a5\n"
-      "}\n";
+      tensora::testing::loadFixtureSource(FIXTURE_PARSER_STRUCTURAL_PATH, "PAR-009");
   DiagnosticEngine d;
   auto result = parse(src, d);
   R.check(result.ok(), "program parses with no diagnostics");
@@ -346,11 +285,7 @@ CASE(PAR_009, "PAR-009", "expression/binop: each of @ + - * / with identifier an
 // --- PAR-010: callExpr -- one positional arg, multiple positional args. ---
 CASE(PAR_010, "PAR-010", "callExpr: one positional arg, multiple positional args") {
   const std::string src =
-      "graph g {\n"
-      "  a = relu(x)\n"
-      "  b = linear(x, w, bias)\n"
-      "  return b\n"
-      "}\n";
+      tensora::testing::loadFixtureSource(FIXTURE_PARSER_STRUCTURAL_PATH, "PAR-010");
   DiagnosticEngine d;
   auto result = parse(src, d);
   R.check(result.ok(), "program parses with no diagnostics");
@@ -367,10 +302,7 @@ CASE(PAR_010, "PAR-010", "callExpr: one positional arg, multiple positional args
 // --- PAR-011: arg kinds -- keyword(int), keyword(identifier), reshape axis-list, all mixed. ---
 CASE(PAR_011, "PAR-011", "arg kinds: keyword(int), keyword(identifier), axis-list, all mixed in one call") {
   const std::string src =
-      "graph g {\n"
-      "  a = f(x, stride=1, axis=nm, [p=1, q=2])\n"
-      "  return a\n"
-      "}\n";
+      tensora::testing::loadFixtureSource(FIXTURE_PARSER_STRUCTURAL_PATH, "PAR-011");
   DiagnosticEngine d;
   auto result = parse(src, d);
   R.check(result.ok(), "program parses with no diagnostics");
@@ -400,12 +332,7 @@ CASE(PAR_011, "PAR-011", "arg kinds: keyword(int), keyword(identifier), axis-lis
 // --- PAR-012: argValue kinds -- intLit, identifier, intList. ---
 CASE(PAR_012, "PAR-012", "argValue kinds: intLit (stride=1), identifier (axis=nm), intList (perm=[...])") {
   const std::string src =
-      "graph g {\n"
-      "  a = f(x, stride=1)\n"
-      "  b = f(x, axis=nm)\n"
-      "  c = f(x, perm=[0, 1, 3, 2])\n"
-      "  return c\n"
-      "}\n";
+      tensora::testing::loadFixtureSource(FIXTURE_PARSER_STRUCTURAL_PATH, "PAR-012");
   DiagnosticEngine d;
   auto result = parse(src, d);
   R.check(result.ok(), "program parses with no diagnostics");
@@ -426,10 +353,7 @@ CASE(PAR_012, "PAR-012", "argValue kinds: intLit (stride=1), identifier (axis=nm
 // --- PAR-013: conv2d-shaped call -- multiple positional + multiple keyword args together. ---
 CASE(PAR_013, "PAR-013", "conv2d-shaped call: multiple positional + multiple keyword args together") {
   const std::string src =
-      "graph g {\n"
-      "  a = conv2d(image, W, b, stride=1, padding=1)\n"
-      "  return a\n"
-      "}\n";
+      tensora::testing::loadFixtureSource(FIXTURE_PARSER_STRUCTURAL_PATH, "PAR-013");
   DiagnosticEngine d;
   auto result = parse(src, d);
   R.check(result.ok(), "program parses with no diagnostics");
@@ -441,69 +365,9 @@ CASE(PAR_013, "PAR-013", "conv2d-shaped call: multiple positional + multiple key
   }
 }
 
-// --- PAR-014: negative -- missing '=' in a statement. ---
-CASE(PAR_014, "PAR-014", "negative: missing '=' in a statement") {
-  const std::string src = "graph g {\n  a b\n  return a\n}\n";
-  DiagnosticEngine d;
-  auto result = parse(src, d);
-  R.check(!result.ok(), "malformed statement is rejected");
-  R.check(d.all().size() >= 1 && d.all()[0].code == DiagCode::ParseExpected,
-          "reports ParseExpected for the missing '='");
-}
-
-// --- PAR-015: negative -- missing ']' closing a tensorType. ---
-CASE(PAR_015, "PAR-015", "negative: missing ']' closing a tensorType") {
-  const std::string src = "input x: Tensor[a=1\ngraph g { return x }\n";
-  DiagnosticEngine d;
-  auto result = parse(src, d);
-  R.check(!result.ok(), "unterminated tensorType is rejected");
-  R.check(!d.all().empty() && d.all()[0].code == DiagCode::ParseExpected,
-          "reports ParseExpected for the missing ']'");
-}
-
-// --- PAR-016: negative -- missing '[' opening a tensorType. ---
-CASE(PAR_016, "PAR-016", "negative: missing '[' opening a tensorType") {
-  const std::string src = "input x: Tensor a=1]\ngraph g { return x }\n";
-  DiagnosticEngine d;
-  auto result = parse(src, d);
-  R.check(!result.ok(), "tensorType missing '[' is rejected");
-  R.check(!d.all().empty() && d.all()[0].code == DiagCode::ParseExpected,
-          "reports ParseExpected for the missing '['");
-}
-
-// --- PAR-017: negative -- empty tensorType (axis list requires >= 1). ---
-CASE(PAR_017, "PAR-017", "negative: empty tensorType Tensor[] (axis list requires >= 1)") {
-  const std::string src = "input x: Tensor[]\ngraph g { return x }\n";
-  DiagnosticEngine d;
-  auto result = parse(src, d);
-  R.check(!result.ok(), "Tensor[] is rejected");
-  R.check(!d.all().empty() && d.all()[0].code == DiagCode::ParseExpected,
-          "reports ParseExpected for the missing first axis");
-}
-
-// --- PAR-018: negative -- missing '=' in an axis. ---
-CASE(PAR_018, "PAR-018", "negative: missing '=' in an axis") {
-  const std::string src = "input x: Tensor[a 1]\ngraph g { return x }\n";
-  DiagnosticEngine d;
-  auto result = parse(src, d);
-  R.check(!result.ok(), "axis missing '=' is rejected");
-  R.check(!d.all().empty() && d.all()[0].code == DiagCode::ParseExpected,
-          "reports ParseExpected for the missing '='");
-}
-
-// --- PAR-019: negative -- graphDecl missing returnStmt before '}'. ---
-CASE(PAR_019, "PAR-019", "negative: graphDecl missing returnStmt before '}'") {
-  const std::string src = "graph g {\n  a = b\n}\n";
-  DiagnosticEngine d;
-  auto result = parse(src, d);
-  R.check(!result.ok(), "graph without return is rejected");
-  R.check(!d.all().empty() && d.all()[0].code == DiagCode::ParseExpected,
-          "reports ParseExpected for the missing return");
-}
-
 // --- PAR-020: negative -- graphDecl missing closing '}'. ---
 CASE(PAR_020, "PAR-020", "negative: graphDecl missing closing '}'") {
-  const std::string src = "graph g {\n  return a\n";
+  const std::string src = tensora::testing::loadFixtureSource(FIXTURE_PARSER_STRUCTURAL_PATH, "PAR-020");
   DiagnosticEngine d;
   auto result = parse(src, d);
   R.check(!result.ok(), "graph missing '}' is rejected");
@@ -511,86 +375,10 @@ CASE(PAR_020, "PAR-020", "negative: graphDecl missing closing '}'") {
           "reports ParseExpected for the missing '}'");
 }
 
-// --- PAR-021: negative -- returnStmt missing its identifier. ---
-CASE(PAR_021, "PAR-021", "negative: returnStmt missing its identifier") {
-  const std::string src = "graph g {\n  return\n}\n";
-  DiagnosticEngine d;
-  auto result = parse(src, d);
-  R.check(!result.ok(), "return without a name is rejected");
-  R.check(!d.all().empty() && d.all()[0].code == DiagCode::ParseExpected,
-          "reports ParseExpected for the missing return identifier");
-}
-
-// --- PAR-022: negative -- zero-arg call (arg list requires >= 1). ---
-CASE(PAR_022, "PAR-022", "negative: zero-arg call relu() (arg list requires >= 1)") {
-  const std::string src = "graph g {\n  a = relu()\n  return a\n}\n";
-  DiagnosticEngine d;
-  auto result = parse(src, d);
-  R.check(!result.ok(), "relu() is rejected");
-  R.check(!d.all().empty() && d.all()[0].code == DiagCode::ParseExpected,
-          "reports ParseExpected for the missing first arg");
-}
-
-// --- PAR-023: negative -- missing closing ')' on a call. ---
-CASE(PAR_023, "PAR-023", "negative: missing closing ')' on a call") {
-  const std::string src = "graph g {\n  a = relu(x\n  return a\n}\n";
-  DiagnosticEngine d;
-  auto result = parse(src, d);
-  R.check(!result.ok(), "unterminated call is rejected");
-  R.check(!d.all().empty() && d.all()[0].code == DiagCode::ParseExpected,
-          "reports ParseExpected for the missing ')'");
-}
-
-// --- PAR-024: negative -- trailing comma in an arg list. ---
-CASE(PAR_024, "PAR-024", "negative: trailing comma in an arg list relu(h,)") {
-  const std::string src = "graph g {\n  a = relu(x,)\n  return a\n}\n";
-  DiagnosticEngine d;
-  auto result = parse(src, d);
-  R.check(!result.ok(), "trailing comma is rejected");
-  R.check(!d.all().empty() && d.all()[0].code == DiagCode::ParseExpected,
-          "reports ParseExpected after the trailing comma");
-}
-
-// --- PAR-025: negative -- keyword arg with no value. ---
-CASE(PAR_025, "PAR-025", "negative: keyword arg with no value (stride=))") {
-  const std::string src = "graph g {\n  a = f(stride=)\n  return a\n}\n";
-  DiagnosticEngine d;
-  auto result = parse(src, d);
-  R.check(!result.ok(), "stride= with no value is rejected");
-  R.check(!d.all().empty() && d.all()[0].code == DiagCode::ParseExpected,
-          "reports ParseExpected for the missing arg value");
-}
-
-// --- PAR-026: negative -- a decl after a graphDecl (violates decl* graphDecl+ ordering). ---
-CASE(PAR_026, "PAR-026", "negative: a decl after a graphDecl violates decl* graphDecl+ ordering") {
-  const std::string src = "graph g { return a }\ninput x: Tensor[b=1]\n";
-  DiagnosticEngine d;
-  auto result = parse(src, d);
-  R.check(!result.ok(), "a decl following a graph is rejected");
-  R.check(!d.all().empty() && d.all()[0].code == DiagCode::ParseExpected,
-          "reports ParseExpected (\"expecting end of file or KW_GRAPH\")");
-}
-
-// --- PAR-027: negative -- a program with zero graphDecls (graphDecl+ requires >= 1). ---
-CASE(PAR_027, "PAR-027", "negative: a program with zero graphDecls (graphDecl+ requires >= 1)") {
-  const std::string src = "input x: Tensor[a=1]\n";
-  DiagnosticEngine d;
-  auto result = parse(src, d);
-  R.check(!result.ok(), "a program with no graph at all is rejected");
-  R.check(!d.all().empty() && d.all()[0].code == DiagCode::ParseExpected,
-          "reports ParseExpected (\"expecting KW_INPUT or KW_WEIGHT or KW_GRAPH\")");
-}
-
 // --- PAR-028: recovery -- two independent errors in different sections. ---
 CASE(PAR_028, "PAR-028", "recovery: two independent syntax errors (one in decls, one in a graph body)") {
   const std::string src =
-      "input good: Tensor[a=1]\n"
-      "weight bad\n"
-      "graph g {\n"
-      "  m = good\n"
-      "  n p\n"
-      "  return m\n"
-      "}\n";
+      tensora::testing::loadFixtureSource(FIXTURE_PARSER_STRUCTURAL_PATH, "PAR-028");
   DiagnosticEngine d;
   auto result = parse(src, d);
   R.check(!result.ok(), "the program overall is rejected");
@@ -614,7 +402,7 @@ CASE(PAR_028, "PAR-028", "recovery: two independent syntax errors (one in decls,
 // spaced to demonstrate genuine two-error recovery instead of exercising
 // the suppression window.
 CASE(PAR_029, "PAR-029", "recovery: two independent malformed statements in the same graph body") {
-  const std::string src = "graph g {\n  a b\n  ok1 = m\n  ok2 = n\n  c d\n  return ok2\n}\n";
+  const std::string src = tensora::testing::loadFixtureSource(FIXTURE_PARSER_STRUCTURAL_PATH, "PAR-029");
   DiagnosticEngine d;
   auto result = parse(src, d);
   R.check(!result.ok(), "the program overall is rejected");
@@ -626,7 +414,7 @@ CASE(PAR_029, "PAR-029", "recovery: two independent malformed statements in the 
 
 // --- PAR-030: diagnostics -- a missing-token diagnostic's SourceSpan points at the offending token. ---
 CASE(PAR_030, "PAR-030", "diagnostics: SourceSpan of a missing-token error points at the offending token") {
-  const std::string src = "graph g {\nb c\nreturn b\n}\n";
+  const std::string src = tensora::testing::loadFixtureSource(FIXTURE_PARSER_STRUCTURAL_PATH, "PAR-030");
   DiagnosticEngine d;
   auto result = parse(src, d);
   R.check(!result.ok(), "malformed statement is rejected");
@@ -645,7 +433,7 @@ CASE(PAR_030, "PAR-030", "diagnostics: SourceSpan of a missing-token error point
 // broken (exception) OperandContext. Must report a clean diagnostic, not
 // crash. ---
 CASE(PAR_031, "PAR-031", "regression: bare int literal as a binop operand reports a diagnostic, not a crash") {
-  const std::string src = "graph g {\n  a = x * 2\n  return a\n}\n";
+  const std::string src = tensora::testing::loadFixtureSource(FIXTURE_PARSER_STRUCTURAL_PATH, "PAR-031");
   DiagnosticEngine d;
   auto result = parse(src, d);
   R.check(!result.ok(), "a bare int literal operand (float literal required) is rejected");
@@ -657,7 +445,7 @@ CASE(PAR_031, "PAR-031", "regression: bare int literal as a binop operand report
 // used to segfault AstBuilder::buildDimSize the same way PAR-031 did.
 // Must report a clean diagnostic, not crash. ---
 CASE(PAR_032, "PAR-032", "regression: an illegal axis dimSize token reports a diagnostic, not a crash") {
-  const std::string src = "input x: Tensor[y=@]\ngraph g { return x }\n";
+  const std::string src = tensora::testing::loadFixtureSource(FIXTURE_PARSER_STRUCTURAL_PATH, "PAR-032");
   DiagnosticEngine d;
   auto result = parse(src, d);
   R.check(!result.ok(), "an illegal dimSize token is rejected");
@@ -666,7 +454,7 @@ CASE(PAR_032, "PAR-032", "regression: an illegal axis dimSize token reports a di
 
 // --- BND-PAR-001: graph body that is only return (zero statements) vs a single statement. ---
 CASE(BND_PAR_001, "BND-PAR-001", "graph body that is only return (zero statements) vs a single statement") {
-  const std::string src = "graph empty1 { return z }\ngraph one1 { w = z\n return w }\n";
+  const std::string src = tensora::testing::loadFixtureSource(FIXTURE_PARSER_STRUCTURAL_PATH, "BND-PAR-001");
   DiagnosticEngine d;
   auto result = parse(src, d);
   R.check(result.ok(), "program parses with no diagnostics");
@@ -682,7 +470,7 @@ CASE(BND_PAR_001, "BND-PAR-001", "graph body that is only return (zero statement
 
 // --- BND-PAR-002: minimal legal program -- zero decls, one graph, return-only body. ---
 CASE(BND_PAR_002, "BND-PAR-002", "minimal legal program: zero decls, exactly one graph, return-only body") {
-  const std::string src = "graph onlyreturn { return z }\n";
+  const std::string src = tensora::testing::loadFixtureSource(FIXTURE_PARSER_STRUCTURAL_PATH, "BND-PAR-002");
   DiagnosticEngine d;
   auto result = parse(src, d);
   R.check(result.ok(), "minimal program parses with no diagnostics");
@@ -695,9 +483,7 @@ CASE(BND_PAR_002, "BND-PAR-002", "minimal legal program: zero decls, exactly one
 // --- BND-PAR-003: tensorType axis-count extremes -- 1 axis (min) vs 4 axes (conv-style). ---
 CASE(BND_PAR_003, "BND-PAR-003", "tensorType axis-count extremes: 1 axis (min) vs 4 axes (conv-style)") {
   const std::string src =
-      "input a: Tensor[x=1]\n"
-      "input b: Tensor[batch=B, channel=3, height=224, width=224]\n"
-      "graph g { return a }\n";
+      tensora::testing::loadFixtureSource(FIXTURE_PARSER_STRUCTURAL_PATH, "BND-PAR-003");
   DiagnosticEngine d;
   auto result = parse(src, d);
   R.check(result.ok(), "program parses with no diagnostics");
@@ -715,7 +501,7 @@ CASE(BND_PAR_003, "BND-PAR-003", "tensorType axis-count extremes: 1 axis (min) v
 
 // --- BND-PAR-004: call arg-count extreme -- conv2d's 5-arg call. ---
 CASE(BND_PAR_004, "BND-PAR-004", "call arg-count extreme: conv2d's 5-arg call (3 positional + 2 keyword)") {
-  const std::string src = "graph g {\n  a = conv2d(image, W, b, stride=1, padding=1)\n  return a\n}\n";
+  const std::string src = tensora::testing::loadFixtureSource(FIXTURE_PARSER_STRUCTURAL_PATH, "BND-PAR-004");
   DiagnosticEngine d;
   auto result = parse(src, d);
   R.check(result.ok(), "program parses with no diagnostics");
@@ -731,4 +517,12 @@ CASE(BND_PAR_004, "BND-PAR-004", "call arg-count extreme: conv2d's 5-arg call (3
 
 }  // namespace
 
-int main(int argc, char** argv) { return tensora::testing::runRegisteredCases(argc, argv); }
+int main(int argc, char** argv) {
+  tensora::testing::registerFixtureCases(FIXTURE_PARSER_PATH, [](const std::string& src) {
+    DiagnosticEngine d;
+    auto r = parse(src, d);
+    std::string diag = d.all().empty() ? std::string() : tensora::testing::diagCodeName(d.all()[0].code);
+    return std::make_pair(r.ok(), diag);
+  });
+  return tensora::testing::runRegisteredCases(argc, argv);
+}

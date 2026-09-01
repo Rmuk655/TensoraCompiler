@@ -13,6 +13,8 @@
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <type_traits>
+#include <utility>
 #include <vector>
 
 #include "tensora/lexer/Lexer.h"
@@ -32,6 +34,7 @@
 #include "mlir/IR/Verifier.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Target/LLVMIR/Export.h"
+#include "mlir/Transforms/Passes.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/Error.h"
@@ -387,69 +390,59 @@ struct MemRefBuffer {
   void* ptr() { return bytes.data(); }
 };
 
-// One function per rank (1-4), instead of a template. StridedMemRefType
-// itself needs a compile-time rank, since its `sizes` and `strides`
-// arrays are fixed-size C arrays. So the rank must be a literal
-// number somewhere. Writing it out four times here keeps this
-// CLI-only helper readable, with no template code.
-MemRefBuffer makeMemRefBuffer1(float* data, const std::vector<int64_t>& sizes) {
-  StridedMemRefType<float, 1> m;
-  m.basePtr = data;
-  m.data = data;
-  m.offset = 0;
-  m.sizes[0] = sizes[0];
-  m.strides[0] = 1;
-  MemRefBuffer buf;
-  buf.bytes.resize(sizeof(m));
-  std::memcpy(buf.bytes.data(), &m, sizeof(m));
-  return buf;
+// `--run`/`-o` support tensors up to this rank. Some finite,
+// compile-time upper bound is inherent to this approach -- C++
+// templates (and MLIR's own memref ABI) fix a tensor's rank at compile
+// time, so the marshaling code below cannot literally handle "any
+// rank" without a hard ceiling baked in somewhere. But *which* ceiling
+// is a free choice, not a property of the language or the MLIR/LLVM
+// lowering (neither caps rank): 4 was the previous value here only
+// because rank-4 (4-head batched attention) is the highest rank any
+// current example/demo happens to use. Set generously higher, to 8,
+// so realistic future needs (e.g. a 5D video tensor, or a 6D
+// grouped/multi-batch layout) already fit; the dispatch helpers below
+// try every rank up to this one automatically (recursion, not a
+// hand-written `case` per rank), so raising it further is a one-line
+// change here, nothing else to touch.
+constexpr int MAX_SUPPORTED_RANK = 8;
+
+// Tries compile-time rank N against the requested runtime `rank`; on a
+// miss, recurses to N+1 until Max is exceeded. This is the one place
+// that turns "a runtime rank" into "a compile-time template argument"
+// for all three marshaling helpers below, so MAX_SUPPORTED_RANK is the
+// only thing to change to raise the ceiling -- no per-rank `case` line
+// needed anywhere.
+template <int N, int Max, typename F>
+auto dispatchByRank(int rank, bool& ok, F&& makeAtRank) -> decltype(makeAtRank(std::integral_constant<int, N>{})) {
+  if constexpr (N > Max) {
+    ok = false;
+    return {};
+  } else if (rank == N) {
+    ok = true;
+    return makeAtRank(std::integral_constant<int, N>{});
+  } else {
+    return dispatchByRank<N + 1, Max>(rank, ok, std::forward<F>(makeAtRank));
+  }
 }
 
-MemRefBuffer makeMemRefBuffer2(float* data, const std::vector<int64_t>& sizes) {
-  StridedMemRefType<float, 2> m;
+// This CLI-only helper needs a compile-time rank N to build
+// StridedMemRefType<float, N> -- its `sizes`/`strides` are fixed-size
+// C arrays, so N must be a literal somewhere. A single template body
+// does the shared work (fill the row-major sizes/strides, copy the
+// bytes); dispatchByRank above supplies the literal N for whatever
+// rank is actually requested, at runtime.
+template <int N>
+MemRefBuffer makeMemRefBufferN(float* data, const std::vector<int64_t>& sizes) {
+  StridedMemRefType<float, N> m;
   m.basePtr = data;
   m.data = data;
   m.offset = 0;
-  m.sizes[0] = sizes[0];
-  m.sizes[1] = sizes[1];
-  m.strides[1] = 1;
-  m.strides[0] = sizes[1];
-  MemRefBuffer buf;
-  buf.bytes.resize(sizeof(m));
-  std::memcpy(buf.bytes.data(), &m, sizeof(m));
-  return buf;
-}
-
-MemRefBuffer makeMemRefBuffer3(float* data, const std::vector<int64_t>& sizes) {
-  StridedMemRefType<float, 3> m;
-  m.basePtr = data;
-  m.data = data;
-  m.offset = 0;
-  m.sizes[0] = sizes[0];
-  m.sizes[1] = sizes[1];
-  m.sizes[2] = sizes[2];
-  m.strides[2] = 1;
-  m.strides[1] = sizes[2];
-  m.strides[0] = sizes[1] * sizes[2];
-  MemRefBuffer buf;
-  buf.bytes.resize(sizeof(m));
-  std::memcpy(buf.bytes.data(), &m, sizeof(m));
-  return buf;
-}
-
-MemRefBuffer makeMemRefBuffer4(float* data, const std::vector<int64_t>& sizes) {
-  StridedMemRefType<float, 4> m;
-  m.basePtr = data;
-  m.data = data;
-  m.offset = 0;
-  m.sizes[0] = sizes[0];
-  m.sizes[1] = sizes[1];
-  m.sizes[2] = sizes[2];
-  m.sizes[3] = sizes[3];
-  m.strides[3] = 1;
-  m.strides[2] = sizes[3];
-  m.strides[1] = sizes[2] * sizes[3];
-  m.strides[0] = sizes[1] * sizes[2] * sizes[3];
+  int64_t stride = 1;
+  for (int i = N - 1; i >= 0; --i) {
+    m.sizes[i] = sizes[static_cast<size_t>(i)];
+    m.strides[i] = stride;
+    stride *= sizes[static_cast<size_t>(i)];
+  }
   MemRefBuffer buf;
   buf.bytes.resize(sizeof(m));
   std::memcpy(buf.bytes.data(), &m, sizeof(m));
@@ -457,16 +450,9 @@ MemRefBuffer makeMemRefBuffer4(float* data, const std::vector<int64_t>& sizes) {
 }
 
 MemRefBuffer makeMemRefBuffer(float* data, const std::vector<int64_t>& sizes, bool& ok) {
-  ok = true;
-  switch (sizes.size()) {
-    case 1: return makeMemRefBuffer1(data, sizes);
-    case 2: return makeMemRefBuffer2(data, sizes);
-    case 3: return makeMemRefBuffer3(data, sizes);
-    case 4: return makeMemRefBuffer4(data, sizes);
-    default:
-      ok = false;
-      return {};
-  }
+  return dispatchByRank<1, MAX_SUPPORTED_RANK>(
+      static_cast<int>(sizes.size()), ok,
+      [&](auto rankConst) { return makeMemRefBufferN<decltype(rankConst)::value>(data, sizes); });
 }
 
 // Reads back element 0, and reports the total count, from a result
@@ -476,14 +462,16 @@ MemRefBuffer makeMemRefBuffer(float* data, const std::vector<int64_t>& sizes, bo
 // stores the callee's new pointer into the descriptor the caller
 // passed in. So the descriptor's *fields*, not the original buffer,
 // hold the real answer.
+template <int N>
+float readMemRefElement0N(const MemRefBuffer& buf) {
+  return reinterpret_cast<const StridedMemRefType<float, N>*>(buf.bytes.data())->data[0];
+}
+
 float readMemRefElement0(const MemRefBuffer& buf, int rank) {
-  switch (rank) {
-    case 1: return reinterpret_cast<const StridedMemRefType<float, 1>*>(buf.bytes.data())->data[0];
-    case 2: return reinterpret_cast<const StridedMemRefType<float, 2>*>(buf.bytes.data())->data[0];
-    case 3: return reinterpret_cast<const StridedMemRefType<float, 3>*>(buf.bytes.data())->data[0];
-    case 4: return reinterpret_cast<const StridedMemRefType<float, 4>*>(buf.bytes.data())->data[0];
-    default: return NAN;
-  }
+  bool ok = false;
+  float result = dispatchByRank<1, MAX_SUPPORTED_RANK>(
+      rank, ok, [&](auto rankConst) { return readMemRefElement0N<decltype(rankConst)::value>(buf); });
+  return ok ? result : NAN;
 }
 
 // Copies all `total` result elements out of a result descriptor, for
@@ -491,15 +479,16 @@ float readMemRefElement0(const MemRefBuffer& buf, int rank) {
 // pointer (not the caller's original buffer). The result of these
 // graphs is a fresh C-contiguous allocation, so reading data[0..total)
 // gives the values in row-major order.
+template <int N>
+const float* memRefDataPtrN(const MemRefBuffer& buf) {
+  return reinterpret_cast<const StridedMemRefType<float, N>*>(buf.bytes.data())->data;
+}
+
 void readMemRefData(const MemRefBuffer& buf, int rank, int64_t total, float* out) {
-  const float* data = nullptr;
-  switch (rank) {
-    case 1: data = reinterpret_cast<const StridedMemRefType<float, 1>*>(buf.bytes.data())->data; break;
-    case 2: data = reinterpret_cast<const StridedMemRefType<float, 2>*>(buf.bytes.data())->data; break;
-    case 3: data = reinterpret_cast<const StridedMemRefType<float, 3>*>(buf.bytes.data())->data; break;
-    case 4: data = reinterpret_cast<const StridedMemRefType<float, 4>*>(buf.bytes.data())->data; break;
-    default: return;
-  }
+  bool ok = false;
+  const float* data = dispatchByRank<1, MAX_SUPPORTED_RANK>(
+      rank, ok, [&](auto rankConst) { return memRefDataPtrN<decltype(rankConst)::value>(buf); });
+  if (!ok) return;
   for (int64_t i = 0; i < total; ++i) out[static_cast<size_t>(i)] = data[i];
 }
 
@@ -516,7 +505,7 @@ std::string shapeStr(const std::vector<int64_t>& shape) {
   return s + "]";
 }
 
-// Runs the Level-1, team-authored graph optimization passes on every
+// Runs the Level-1, project-authored graph optimization passes on every
 // graph in the program, in place. This is a separate function from
 // lowerToModule below, so the CLI can show the optimization phase's
 // own output (--emit-optimized-graph) before lowering ever runs.
@@ -776,6 +765,21 @@ int main(int argc, char** argv) {
   bufOpts.allowReturnAllocsFromLoops = true;
   bufOpts.functionBoundaryTypeConversion = mlir::bufferization::LayoutMapOption::FullyDynamicLayoutMap;
   pm.addPass(mlir::bufferization::createOneShotBufferizePass(bufOpts));
+  // Free every intermediate allocation bufferization introduced (see
+  // tests/support/JitHarness.h's runStandardLoweringPipeline for the
+  // full rationale): without this, an ahead-of-time executable or a
+  // JIT function called repeatedly leaks one buffer per intermediate
+  // tensor value on every call.
+  pm.addPass(mlir::bufferization::createOwnershipBasedBufferDeallocationPass());
+  pm.addPass(mlir::createCanonicalizerPass());
+  pm.addPass(mlir::bufferization::createBufferDeallocationSimplificationPass());
+  pm.addPass(mlir::bufferization::createLowerDeallocationsPass());
+  // Needed once any returned value (e.g. the tiled-matmul result) gets a
+  // runtime alias check -- that check is expressed as bufferization.clone,
+  // which has no LLVM equivalent (see JitHarness.h's matching comment).
+  pm.addPass(mlir::createConvertBufferizationToMemRefPass());
+  pm.addPass(mlir::createCSEPass());
+  pm.addPass(mlir::createCanonicalizerPass());
   if (polyhedral) {
     // ARCH-018: lower linalg into the MLIR affine dialect, then run one
     // polyhedral pass, instead of the default convert-linalg-to-loops.
@@ -898,7 +902,8 @@ int main(int argc, char** argv) {
     bool rankOk = false;
     MemRefBuffer resultBuf = makeMemRefBuffer(outStorage.data(), outShape, rankOk);
     if (!rankOk) {
-      std::cerr << "error: --run only supports rank 1-4 tensors; output has rank " << outShape.size() << "\n";
+      std::cerr << "error: --run only supports rank 1-" << MAX_SUPPORTED_RANK
+                 << " tensors; output has rank " << outShape.size() << "\n";
       return 1;
     }
     packedArgs.push_back(resultBuf.ptr());
@@ -928,8 +933,8 @@ int main(int argc, char** argv) {
       }
       MemRefBuffer buf = makeMemRefBuffer(storage.back().data(), pShape, rankOk);
       if (!rankOk) {
-        std::cerr << "error: --run only supports rank 1-4 tensors; '" << pName << "' has rank " << pShape.size()
-                   << "\n";
+        std::cerr << "error: --run only supports rank 1-" << MAX_SUPPORTED_RANK << " tensors; '" << pName
+                   << "' has rank " << pShape.size() << "\n";
         return 1;
       }
       argBufs.push_back(std::move(buf));

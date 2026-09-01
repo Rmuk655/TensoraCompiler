@@ -17,6 +17,8 @@ the trained weights and several real held-out test images:
 --data-dir demos/artifacts/cnn/eval`. Run once, on a machine with PyTorch + torchvision
 (see tools/models/requirements.txt):
     python3 tools/models/prepare_stl10_demo.py
+Safe to re-run: skips everything if demos/artifacts/cnn/eval/ already
+exists (pass --force to redo).
 
 STL-10 images are natively 96x96 -- unlike CIFAR-10/100 (32x32), no
 upscaling is needed, so the displayed picture is genuinely that
@@ -26,6 +28,7 @@ tradeoff for native resolution.
 """
 import json
 import os
+import sys
 
 import numpy as np
 
@@ -75,6 +78,11 @@ class CNN(nn.Module):
 
 
 def main():
+    marker = os.path.join(OUT_DIR, "eval", "meta.json")
+    if os.path.exists(marker) and "--force" not in sys.argv:
+        print(f"Already prepared: {os.path.normpath(marker)} exists "
+              "(delete demos/artifacts/cnn/, or pass --force, to redo)")
+        return
     torch.manual_seed(SEED)
     np.random.seed(SEED)
     # STL-10's labeled train split is small (5000 images), so the model

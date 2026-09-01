@@ -15,13 +15,13 @@ backend?
 (c) a typed, SSA computation graph.
 
 **Decision.** (c) A typed, SSA computation graph with named-axis types
-(see [IR.md](IR.md)).
+(see [INTERFACES.md §3a](INTERFACES.md#3a-typed-computation-graph-tcg)).
 
 **Rationale.** The backend must not re-check semantics. Graph passes
-need verified types and producer/consumer structure. Team members need
-a serializable, arena-owned IR they can build by hand for mocks.
+need verified types and producer/consumer structure. Development needs
+a serializable, arena-owned IR that can be built by hand for mocks.
 Lowering straight to MLIR would push the MLIR dependency upstream and
-lose axis names before the team's passes run.
+lose axis names before the project's own passes run.
 
 **Affected.** `ir/`, `sema/`, `passes/`, `lowering/`.
 
@@ -127,15 +127,15 @@ sema-produced ones.
 
 **Affected.** `ir/`, all downstream tests.
 
-**Consequences.** Real parallel work (ARCHITECTURE.md §8), at a small
-cost: the team must keep the builder and verifier authoritative.
+**Consequences.** Real parallel work (06_COMPILER_ARCHITECTURE.md §8), at a small
+cost: the builder and verifier must be kept authoritative together.
 
 ---
 
 ## ARCH-009 — Two optimization levels + one data-flow analysis
 
 **Problem.** What optimization/analysis does V0.1 need to be a strong
-*compilers-course* project, given the syllabus (SSA, data-flow analysis,
+academic compiler (SSA, data-flow analysis,
 loop transformations, polyhedral)?
 
 **Decision.** V0.1 implements: (1) Level-1 pattern/graph passes over the
@@ -145,16 +145,17 @@ which yields a peak-memory estimate that a decision or report uses; and
 Tensora picks tile sizes from verified shapes and MLIR applies the
 rewrite.
 
-**Rationale.** The course grades SSA, data-flow analysis, and loop
+**Rationale.** As an academic compiler, this project's value rests on
+demonstrating SSA, data-flow analysis, and loop
 transformation. Pattern rewrites alone do not cover this well. An
 analysis that feeds a decision, plus a shape-driven loop
-transformation, connects the project directly to the graded material.
+transformation, connects the project directly to that material.
 Trading operator breadth for this depth is the core of the rescope
 (V0.1 scope decision, roadmap §8).
 
-**Boundary.** The team owns the analysis and the tiling *decision*.
+**Boundary.** This project owns the analysis and the tiling *decision*.
 MLIR performs the mechanical tiling. The report must state this split.
-The team does not claim MLIR/LLVM's standard passes as its own work.
+This project does not claim MLIR/LLVM's standard passes as its own work.
 
 **Affected.** `analysis/`, `passes/`, `lowering/` (`TilingDecision`), tests.
 
@@ -173,9 +174,9 @@ analysis (attribute grammar), SSA graph, MLIR `linalg.matmul`, `scf`
 loops, tiled loops, LLVM, CPU — as the project's flagship example
 (whitepaper §8.3).
 
-**Rationale.** One computation, traced end to end, teaches and shows
-more than many shallow operators. It anchors the viva and lines up with
-the course's SSA, data-flow, and loop-transformation units.
+**Rationale.** One computation, traced end to end, demonstrates and shows
+more than many shallow operators. It anchors demos and design reviews and lines up with
+the SSA, data-flow, and loop-transformation material this project draws on.
 
 **Affected.** Tutorial, whitepaper §8, tests (the matmul E2E and tiling
 cases), demos.
@@ -189,7 +190,7 @@ as deeply.
 ## ARCH-011 — ANTLR4-based frontend
 
 **Problem.** How should the lexer and parser be implemented, to keep
-the frontend easy for a new student to read while preserving the
+the frontend easy to read while preserving the
 approved lexical and syntactic grammar (RM 3.1-3.3, 3.24)?
 
 **Options.** (a) a handwritten recursive-descent lexer and parser; (b)
@@ -243,8 +244,8 @@ generated headers). `Parser`'s public interface exposes only
 Tensora rename task) found three places where the Reference Manual and
 the implementation disagreed, or where the RM said nothing and the
 implementation's actual behavior was arbitrary rather than designed.
-The team presented each one to the project owner, with the current
-behavior, the RM, the whitepaper, and a recommendation, before making
+Each one was weighed against the current
+behavior, the RM, and the whitepaper before making
 any change.
 
 **Decisions.**
@@ -267,7 +268,7 @@ any change.
 **Rationale.** (1) and (2) make the implementation match language
 rules that already existed (2), or fill an unstated gap in a way that
 fits the language's "be explicit and statically checked" design (1).
-(3) keeps the team-authored optimization's arithmetic precision
+(3) keeps the project-authored optimization's arithmetic precision
 consistent with the backend it targets. This is what RM 3.21's
 "preserve the observable output" rule really asks for, at the level of
 individual scalar constants.
@@ -295,8 +296,8 @@ name in a `reshape` target). Full suite verified green after the change
 constant folding, TilingDecision wiring
 
 **Problem.** An external review, comparing the source listing against
-the Reference Manual, found five confirmed defects. The team checked
-each one independently against the source before making any change:
+the Reference Manual, found five confirmed defects. Each one was checked
+independently against the source before making any change:
 
 1. `resolveOperand` (`SemanticAnalyzer.cpp`) always ran
    `static_cast<const TensorType*>` on a global symbol's type. That
@@ -314,8 +315,8 @@ each one independently against the source before making any change:
    (`(x*s1)*s2 -> x*(s1*s2)`) at compile time. No one can prove this
    keeps `return`'s observable output the same under IEEE-754 f32
    non-associativity — a real breach of RM 3.21's preservation rule.
-   Both the code and the RM already noted this as a caveat, but the
-   team had not fixed it.
+   Both the code and the RM already noted this as a caveat, but it
+   had not yet been fixed.
 5. `TilingDecision::decide()` (`LoopTiling.cpp`) had zero call sites.
    `MatmulTilingPass` computed its own tile sizes from raw MLIR shapes
    and its own `TilingPolicy`. The two stayed "consistent" only because
@@ -338,7 +339,7 @@ each one independently against the source before making any change:
    that is the one path `MatmulTilingPass` tiles. The new paths give
    correctness only; v1 sets no performance requirement for them
    (project decision: only the rank-2 reference computation gets
-   team-authored tiling).
+   project-authored tiling).
 3. `@`'s rank >= 2 case (any batch rank on either operand, including
    size-1 broadcasting, matching `checkMatMul`'s `broadcastAxes` rule
    exactly) now lowers through `lowerBatchedMatMul`, a `linalg.generic`
@@ -346,7 +347,7 @@ each one independently against the source before making any change:
    through a broadcast-aware affine map that mirrors
    `broadcastOperandMap`'s elementwise rule. Rank 2 again keeps the
    dedicated tiled path.
-4. The team retired `ConstantFoldingPass` instead of fixing it: no
+4. `ConstantFoldingPass` was retired instead of fixed: no
    scalar-chain reassociation over an arbitrary runtime tensor can be
    proven bit-exact in general, so this transformation can never meet
    RM 3.21's "exactly, not merely up to rounding" rule. The frozen v1
@@ -443,7 +444,7 @@ progress) fails safe, instead of hanging the compiler.
 (`PassStats::iterations`, `PassManager::runAll`),
 `src/optimization/GraphPasses.cpp` (`hasFactPrefix`,
 `ElementwiseFusionPass`, `LinearBiasActivationFusionPass`),
-`docs/architecture/06_COMPILER_ARCHITECTURE.md` §6.10,
+`docs/architecture/06_COMPILER_ARCHITECTURE.md` §6a,
 `docs/testing/TEST_MATRIX.md`.
 
 **Consequences.** No existing test's expected final graph changed —
@@ -619,3 +620,71 @@ path, on every example that runs today, not only that it runs without
 error. The generated LLVM IR does differ under the flag (more branches,
 more lines), so this is a real transform, not a silent no-op. Without
 the flag, behavior and output are unchanged (`INT-FULL-*` still pass).
+
+---
+
+## Implementation Timeline
+
+A condensed build history: what shipped in each milestone, and why a
+few now-fixed bugs mattered enough to leave a trace. The `ARCH-*`
+records above already carry the *design* rationale for the durable
+pieces below (linked inline); this section does not repeat that
+reasoning, and it deliberately omits point-in-time test counts, which
+go stale as the suite grows (`docs/testing/TEST_MATRIX.md` has the
+current, authoritative count).
+
+**Phase 1 — Lexer.** The ANTLR4 lexer (`grammar/Tensora.g4`), `Token`/
+`TokenKind`, `SourceSpan`/`SourceBuffer`, and the shared `Diagnostic`/
+`DiagnosticEngine` (see [ARCH-011](DECISIONS.md#arch-011-antlr4-based-frontend)).
+`tensora --emit-tokens` was the driver's first stage.
+
+**Phase 2 — Parser.** The ANTLR4 parser plus `AstBuilder`
+(`src/parser/AstBuilder.cpp`), which walks the generated parse tree in
+project-owned C++ with no grammar actions
+(see [ARCH-011](DECISIONS.md#arch-011-antlr4-based-frontend)). The AST node set
+(`include/tensora/shared/Ast.h`) carries syntax only, per RM 3.7-3.17's
+split between parsing and semantic checking.
+
+**Phase 3 — Semantic Analysis.** `SemanticAnalyzer`, the per-operator
+contracts (`semantic/Contracts.h`), the Typed Computation Graph itself
+(`shared/Ir.h`), `GraphBuilder`/`GraphVerifier`
+(see [ARCH-008](DECISIONS.md#arch-008-graphbuilder--graphverifier-as-the-mock-enablers)),
+`DimSolver` (see [ARCH-006](DECISIONS.md#arch-006-bounded-dimension-solver-no-smt)),
+and `SymbolTable` (RM 3.6 name/scope rules). One early gap: `emit()`'s
+per-operator call sites all passed an empty `debugName`, so
+`--emit-graph`/`--explain` (added the next phase) had nothing readable
+to print; fixed with an additive `GraphBuilder::setDebugName(ValueId,
+string)` called once per statement, instead of threading a name
+parameter through every operator-specific analyze helper.
+
+**Phase 4 — Optimization and Code Generation.** The six frozen Level-1
+graph passes (see [ARCH-009](DECISIONS.md#arch-009-two-optimization-levels-one-data-flow-analysis)),
+tensor liveness analysis, MLIR lowering for every `OpKind` except
+general reshape (`MlirLowerer`'s lowering switch hits
+`llvm_unreachable`, not a silent fallthrough, for anything it does not
+handle), the project-authored `MatmulTilingPass` (see
+[ARCH-009](DECISIONS.md#arch-009-two-optimization-levels-one-data-flow-analysis)),
+JIT execution via `mlir::ExecutionEngine`, an ahead-of-time-compiled
+native path (`tools/codegen_mlp_native.cpp`) producing a real x86-64
+ELF object with zero MLIR/LLVM runtime dependency, and the CLI driver's
+growth from a 71-line `--emit-tokens`-only stub into the full
+multi-phase tool `docs/language/02_LANGUAGE_TUTORIAL.md` §2.12
+documents. This phase found several MLIR pipeline bugs whose fixes are
+now load-bearing, written up where the code they fix lives
+([06_COMPILER_ARCHITECTURE.md §7.1](06_COMPILER_ARCHITECTURE.md) and
+[§7.2](06_COMPILER_ARCHITECTURE.md)): the `scf` bufferizable-op-interface
+registration gap, `linalg.matmul`/`conv_2d`/`pooling_nchw_max`'s
+accumulate-into-`outs` semantics needing an explicit `linalg.fill`,
+`ExpandStridedMetadataPass`/`LowerAffinePass`'s required ordering
+relative to `ArithToLLVM`, and `ExecutionEngine::invokePacked`'s
+undecorated-name requirement (see
+[ARCH-016](DECISIONS.md#arch-016-runtime-data-io-for---run-npy-loadstore)).
+Batched matmul and rank-1/rank>=3 `linear` were a gap at this phase's
+end (sema accepted these ranks per RM 3.7/3.9, but lowering only
+handled rank 2); [ARCH-014](DECISIONS.md#arch-014-semabackend-rank-gap-closed-unsafe-cast-retired)
+closed it in a later review pass. The one remaining, still-open gap is
+general reshape (arbitrary regrouping beyond `flatten`'s fixed
+collapse — no workload attempted has needed it); symbolic-dimension
+lowering also still fails MLIR verification (`LOW-005`, see
+`docs/testing/TEST_MATRIX.md`) and is rejected by the driver before
+lowering rather than crashing.

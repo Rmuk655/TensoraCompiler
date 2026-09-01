@@ -59,16 +59,21 @@ below) is parallel automatically. `make`'s targets already pass
 Or use the convenience wrapper (same thing, less typing):
 
 ```bash
-make build     # configure + build everything
-make test      # build + run the full ctest suite
-make example   # build + run every per-phase demo in order (demos/01..06)
-make demo      # build + run every showcase demo (viz, independent, benchmark, real-world)
+make build          # configure + build everything
+make test           # build + run the full ctest suite
+make example        # build + run every per-phase demo in order (demos/01..06)
+make compiler-demos # example, plus viz/independent/benchmark -- every demo about the compiler itself
+make tensora-demos  # every real-world inference demo (genuine PyTorch-trained models through Tensora)
+make demo           # compiler-demos + tensora-demos together, one command
 make clean
 ```
 
-`make example` is the per-phase walkthrough; `make demo` is the
-showcase/real-world set. Both, and every individual target, are listed
-in "Make target reference" at the end of this file.
+`make example` is the per-phase walkthrough; `make compiler-demos`
+widens that to every demo exercising the compiler itself (adding
+visualization/independent-pipeline/benchmark); `make tensora-demos` is
+the real-world set; `make demo` (alias `make demos`) runs both groups.
+Every individual target is listed in "Make target reference" at the
+end of this file.
 
 ## Build one phase at a time
 
@@ -143,6 +148,32 @@ make test-optimization  # build + ctest -L optimization
 make test-codegen       # build + ctest -L codegen
 ```
 
+## Documentation link checks
+
+This project has no CI configured — nothing here runs automatically on
+push or pull request; you run these yourself. Every `[label](target)`
+cross-reference in `docs/*.md` is checked two different ways:
+
+- **Does the link resolve at all** (file exists, `#anchor` exists)?
+  Run by hand with `make docs` (below); it needs Node/npm (already on
+  most dev machines) but no permanent global install, since it runs
+  the tool (`markdown-link-check`) through `npx`.
+- **Does the link land on the section its own label claims** (for
+  example, does `[RM 3.6](...)` actually land on RM section 3.6, and
+  not on 3.7 by a copy-paste mistake)? Checked automatically as the
+  `INT-DOCLINKS-SYNC` test that `ctest`/`make test` already runs
+  (`tools/check_doc_link_targets.py`). The only requirement is
+  `python3` on `PATH` -- already the same optional dependency
+  `./tools/check-deps.sh` reports for the real-world demos. If
+  `python3` is missing, CMake skips just this one test instead of
+  failing the whole suite.
+
+Run both checks together, without a full compiler build first, with:
+
+```bash
+make docs
+```
+
 ## Run the lexer on an example
 
 ```bash
@@ -157,7 +188,7 @@ on stderr and sets a non-zero exit code.
 
 `make example` runs every per-phase demo (01…06) in order. For a single
 phase's demo (source in, phase output out — the same `demos/*.sh`
-scripts README.md's Phase Demos section describes), use the matching
+scripts README.md's Compiler Demos section describes), use the matching
 `-example` target instead:
 
 ```bash
@@ -210,42 +241,193 @@ finding.
 
 ## Run the real-world inference demos
 
-Three demos take recognizable real inputs through the full pipeline and
-check the result against a PyTorch reference (see README.md and
-`tools/models/`). **Each needs its artifacts prepared once first, using
-PyTorch** -- running `make demo-*` before this step fails with "demo
-artifacts not found," telling you to do this. Modern Debian/Ubuntu
-block `pip install` against the system Python (PEP 668), so the demo
-dependencies go in a project-local virtual environment, not the system
-Python and never `pip --break-system-packages`. `./tools/setup-dev.sh
---demos` creates `.venv/` and installs `tools/models/requirements.txt`
-into it:
+Eleven demos take recognizable real inputs through the full pipeline and
+check the result against a PyTorch reference; **README.md's
+[Real-World Inference Demos](../../README.md#real-world-inference-demos)
+section is the single canonical listing** of all eleven (in order of
+difficulty, with what each one demonstrates) -- not repeated here.
+**Each needs its artifacts prepared once first, using PyTorch** --
+running `make demo-*` before this step fails with "demo artifacts not
+found," telling you to do this. Modern Debian/Ubuntu block `pip
+install` against the system Python (PEP 668), so the demo dependencies
+go in a project-local virtual environment, not the system Python and
+never `pip --break-system-packages`. `./tools/setup-dev.sh --demos`
+creates `.venv/` and installs `tools/models/requirements.txt` into it:
 
 ```bash
 ./tools/setup-dev.sh --demos     # one time: creates .venv, installs torch etc.
 source .venv/bin/activate        # 'which python' -> .venv/bin/python
-python tools/models/prepare_mlp_demo.py
-python tools/models/prepare_stl10_demo.py
-python tools/models/prepare_text_attn_demo.py
+make setup-tensora-demos          # runs every tools/models/prepare_*.py script once (alias: setup-demos)
 deactivate                       # when finished
 ```
 
-Only once that has produced `demos/artifacts/{mlp,cnn,attn}/`:
-
-```bash
-make demo-mlp-placement        # student placement-eligibility (tabular MLP)
-make demo-cnn-image-classifier # STL-10 image classification, 10 classes (CNN, native 96x96)
-make demo-attn-text-classifier # topic classification (self-attention)
-```
+Safe to re-run: each prepare script is skipped (no re-download,
+re-training, or other network/compute work) if its
+`demos/artifacts/<name>/eval/` already exists -- both when run via
+`make setup-tensora-demos` and when run directly (e.g.
+`python3 tools/models/prepare_stl10_demo.py`). Delete one demo's
+`demos/artifacts/<name>/` directory, or pass `--force` to that
+script directly, to redo just that one demo's preparation from
+scratch.
 
 Artifacts land in `demos/artifacts/`
 (git-ignored, reproduced on demand). The demo runners themselves need
 only numpy, so `make demo-*` works without the venv active once the
 artifacts exist. Each demo classifies a whole held-out batch in one run
-(100 students / 40 images / 30 sentences) and reports Tensora-vs-PyTorch
-agreement over the whole batch, showing a few examples in detail. The
-CNN prep caches its trained model at `demos/artifacts/cnn-model.pt` (the
-slow step); delete that file to retrain from scratch.
+and reports Tensora-vs-PyTorch agreement over the whole batch, showing
+a few examples in detail. The CNN prep caches its trained model at
+`demos/artifacts/cnn-model.pt` (the slow step); delete that file to
+retrain from scratch.
+
+## Reading the real-world demo output in depth
+
+README.md's [Real-World Inference
+Demos](../../README.md#real-world-inference-demos) section is the
+concise, canonical overview -- what problem each demo solves and what
+technique it uses. This section is the deeper reference for readers
+who want to interpret one demo's *output* in more detail once it's
+running: design choices, exact provenance of every figure, and what
+each printed/rendered artifact means.
+
+**`demo-cnn-grid-detector` / `demo-cnn-grid-detector-real`.** Both
+predict one object class per grid cell (no continuous box regression,
+and no duplicate-box cleanup since each cell holds at most one
+object), so detected boxes sit at the cell's fixed pixel boundary, not
+a tightly-fit box. `demo-cnn-grid-detector-real`'s printed stats report
+every raw per-cell prediction, unfiltered (recall ~49% on cluttered
+real backgrounds); the annotated PNG draws only the single
+highest-confidence region per photo so it stays readable -- the honest
+numbers are always in the printed stats, never hidden by the picture.
+
+**`demo-attn-relational`.** A two-hop relational-reasoning task, not a
+single lookup, over real natural-language sentences, not a symbol
+table: given up to 3 completed-course sentences and, for each of 6
+candidate courses (drawn per example from a 24-course pool, with
+randomized student names, phrasing, and distractor facts), a sentence
+stating its single prerequisite, the model must find the one course
+the student is now eligible for -- a course that is never named as
+"eligible" anywhere in the input. Every sentence is turned into a
+float vector by a from-scratch word-embedding + mean-pool encoder,
+shared across all sentence roles, trained entirely in PyTorch (v1
+Tensora has no embedding/gather/tokenizer op, so it never sees a
+token, only the resulting vectors). That takes two chained steps: hop
+1 is ordinary single-head softmax attention (Q@Kt/softmax/A@V, with a
+fixed *learned* query rather than a per-example one) reading the
+completed-course sentences into one "profile" vector; hop 2 has no
+attention op at all -- it projects that profile two ways and matmuls
+each projection against every candidate course's prerequisite-sentence
+encoding and its own identity-sentence encoding, producing one "is the
+prerequisite covered?" and one "is this course already done?" score
+per course, combined with two learned scalars (plain elementwise
+`*`/`+`, since v1 Tensora has no stack/concat op to feed a combining
+MLP instead). The printed output reports two different numbers, and
+they mean different things: "Tensora vs PyTorch" is the usual
+exact-agreement check (this demo's whole point, same as every other
+demo here); "Eligibility accuracy" is a *separate* number -- how often
+the trained PyTorch model itself gets the right answer, honestly
+around 55-60% (well above the 1/6 ~ 17% chance rate, so real two-hop
+fact-chaining over real sentences is happening, but clearly short of a
+clean answer, since this is a genuinely harder task than a single
+lookup, and mean-pooled sentence encodings dilute the signal further).
+A less-than-perfect eligibility accuracy is not a bug in Tensora, or in
+this demo -- it is what running an imperfect model correctly looks
+like; run `tools/models/prepare_relational_demo.py` to see the exact
+current figure.
+
+**`demo-vit-attention`.** One combined demo, three parts, all against
+one real pretrained ViT-Base checkpoint. Part 1 checks Tensora's
+compiled output for one self-attention block against that same real
+model's own output for the same block, on a real photograph. Part 2
+repeats that check independently at all 12 encoder layers: for each
+layer it feeds that layer's own real input hidden state and real
+pretrained weights through the real `tensora` CLI and compares against
+that layer's own real output, printing a per-layer max-error table and
+`PASS 12/12`. Part 3 (optional, needs `matplotlib`) runs
+`examples/vit_attention_weights.tns` -- the same block, stopped right
+after `softmax` -- through the real `tensora` CLI, checks Tensora's own
+attention weights against the real model's, and renders six PNGs under
+`demos/artifacts/vit_attn/`. Every panel is bordered to show its
+provenance: a solid green "TENSORA-VERIFIED" frame means the data came
+from Tensora's own compiled/checked output; a dashed gray "reference
+only" frame means it is real-model PyTorch data that Tensora did not
+compute.
+
+- `attention_heatmap.png` — one panel per head, showing which patches
+  of the real input photograph the [CLS] token attends to most **per
+  head** — the concrete, visual reason multi-head attention exists,
+  since different heads visibly attend to different parts of the same
+  image — using Tensora's own compiled computation rather than a hand
+  re-derivation.
+- `attention_rollout.png` — a head-averaged view of the
+  Tensora-verified layer next to a full **attention-rollout** trace
+  across all 12 encoder layers (Abnar & Zuidema, 2020; computed
+  directly from the real model's own per-layer attention, since Tensora
+  compiles one block, not the whole chain — hence its dashed
+  "reference only" frame). A single early layer's attention is
+  genuinely noisy (it captures local texture, not semantics); the
+  rollout is the standard technique for a legible summary of where the
+  model's attention concentrates, and cleanly highlights the
+  photographed subject.
+- `attention_microscope.png` — the [CLS] row is only one slice of the
+  full, Tensora-verified `[197, 197]` attention matrix. This figure
+  inspects three patches at once — one on the dog's face, one on its
+  body, one on the background, picked ahead of time from the image's
+  own patch-grid colors, not cherry-picked after seeing the results —
+  and for each patch shows the mean-over-heads "attends to" map next
+  to three **individual heads'** "attends to" maps (the head with the
+  lowest, middle, and highest [CLS]-attention entropy), plus the
+  mean "attended back" column. The per-head columns matter: the
+  mean-over-heads maps for all three patches look similar (a couple of
+  globally-salient background patches dominate every average), but at
+  least one individual head attends very differently depending on the
+  query patch — a structure the mean alone hides. Pass a `"row,col"`
+  argument (each `0`-`13`, since the image is a 14×14 grid of patches)
+  to inspect one specific patch instead, e.g.
+  `python3 tools/models/visualize_vit_attention.py build 6,7`.
+- `attention_asymmetry.png` — attention is directional:
+  `Attention(A → B) ≠ Attention(B → A)` in general. This figure finds
+  the top-3 most asymmetric patch pairs in the Tensora-verified layer
+  and draws each as a distinctly colored arrow with both directions'
+  weights labeled directly on the image (thick = the stronger
+  direction, thin = the weaker), rather than crowding the photo with
+  every candidate pair.
+- `attention_diagnostics.png` — two quantitative checks that don't
+  depend on a human judging a picture: (a) per-head attention entropy,
+  labeled `head 0`-`head 11` with each bar's numeric value (a focused
+  head has low entropy, a diffuse one has high entropy — both computed
+  straight from Tensora's own output), and (b) a
+  real-model-vs-Tensora attention error map at a dramatically enlarged
+  scale, so the "these match" claim is a picture (near-black, i.e. the
+  two are numerically indistinguishable) rather than only the printed
+  max-error number.
+- `attention_topk_boxes.png` — the same "attends to" row from Figures 1
+  and 3, but drawn without a heatmap: a colormap overlay with bilinear
+  interpolation between 14x14 cells adds visual information the model
+  didn't produce. This figure instead draws a box around exactly the
+  top-5 attended patches, each labeled with its printed attention
+  weight and nothing else — a literal picture of what the
+  Tensora-verified matrix contains, not an interpolated impression of
+  it. Pass a `"row,col"` argument for a different query patch, same as
+  Figure 3.
+
+**`demo-vit-attention-substitution`**
+(`demos/vit_attention_substitution_demo.sh`,
+`tools/models/prepare_vit_substitution_demo.py`) loads
+`google/vit-base-patch16-224` — a real, pretrained 1000-way ImageNet
+classifier, not the headless `-in21k` encoder the other ViT demos use
+— runs each of five visibly different real photographs (dog, car,
+elephant, airplane, cat) through it once unmodified to get a baseline
+prediction, then splices Tensora's own recomputation of the last
+encoder layer's attention block into the live model (via a
+forward-hook monkey-patch) and runs the same photograph through the
+same model again. Everything except that one block — the
+patch-embedding convolution, the other 11 attention blocks, every MLP
+block and layernorm, and the classifier head — is the real, unmodified
+HuggingFace model. Also renders a visual dashboard (input photo, top-5
+probability bars baseline-vs-substituted, a layer-substitution
+schematic, and a numeric-error meter) per photograph plus a one-row
+summary gallery, under `demos/artifacts/vit_substitution/*.png`, if
+`matplotlib` is installed.
 
 ## Visualization, independent pipeline, and benchmark
 
@@ -334,12 +516,16 @@ authoritative equivalents.
 | `test-lexer` … `test-codegen` | build a phase, then `ctest -L <phase>` |
 | `example` (`examples`) | run all per-phase demos (01…06) in order |
 | `lexer-example` … `codegen-example`, `final-example` | one phase demo (01…06) |
-| `demo` (`demos`) | run all showcase demos (skips unprepared/absent-tool ones) |
-| `demo-mlp-placement` / `demo-cnn-image-classifier` / `demo-attn-text-classifier` | one real-world inference demo |
+| `compiler-demos` | `example`, plus `viz`/`demo-independent`/`benchmark` -- every demo about the compiler itself |
+| `tensora-demos` | run all 10 real-world inference demos (skips unprepared/absent-tool ones) |
+| `demo` (`demos`) | `compiler-demos` + `tensora-demos` together -- every demo, one command |
+| `demo-mlp-placement`, `demo-cnn-image-classifier`, ... `demo-vit-attention-substitution` | one real-world inference demo (10 total; README.md's Real-World Inference Demos section lists all of them in order) |
+| `setup-tensora-demos` (`setup-demos`) | prepare every real-world demo's weights/inputs in one command |
 | `viz` | render AST/TCG/MLIR graphs to PNGs (needs Graphviz) |
 | `demo-independent` | run emitted IR through upstream mlir-opt/llc/lli |
 | `benchmark` | measure matmul-tiling speedup |
 | `appendix` | regenerate the source-listing appendix |
+| `docs` | check every `docs/*.md` cross-reference: link existence (`npx markdown-link-check`) + landing on the right section (`tools/check_doc_link_targets.py`) |
 
 ## Regenerate the source-listing appendix
 

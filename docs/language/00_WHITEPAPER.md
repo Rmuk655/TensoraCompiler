@@ -2,7 +2,7 @@
 
 ## Abstract
 
-Tensora is a small, strongly typed tensor language. It lets a team
+Tensora is a small, strongly typed tensor language, built to
 experiment with semantic tensor types, static reasoning, and ML
 compiler transformations. The central idea is this: the language makes
 high-level semantic information about tensors explicit. Static
@@ -20,7 +20,7 @@ A Tensora program declares the tensors that enter a computation and
 the operators that transform them. The compiler decides whether the
 resulting graph is semantically valid. It infers the type of every
 intermediate tensor by symbolic reasoning, and records these facts in
-a typed computation graph. It applies team-authored graph-level
+a typed computation graph. It applies graph-level
 transformations, informed by that semantic information (including a
 real data-flow analysis and a shape-guided loop transformation). It
 lowers valid programs through MLIR and LLVM to native CPU code.
@@ -31,9 +31,9 @@ execution, and production model serving are explicitly out of scope.
 This boundary keeps the language small. It still exposes real compiler
 problems: symbolic shape reasoning, semantic-axis contracts, dataflow
 graph construction, optimization legality, lowering, and native code
-generation. The project bounds this scope to what one semester can
-build, test, and defend end to end. The scope is not wider than this
-just to make the project look more original.
+generation. The project bounds its scope to what one academic compiler
+effort can build, test, and defend end to end. The scope is not wider
+than this just to make the project look more original.
 
 Tensora does not claim that tensors, shape types, symbolic dimensions,
 named axes, computation graphs, static shape inference, SSA, operator
@@ -43,10 +43,10 @@ and in research languages such as Dex. Symbolic and dynamic shapes
 appear in TensorFlow, ONNX, and PyTorch's dynamic-shape tracing.
 SSA-form IRs and loop tiling are standard compiler techniques. MLIR
 and LLVM are existing infrastructure; this project builds on them, and
-does not reinvent them. Tensora's course-level contribution is this: a
-coherent, complete, end-to-end compiler, in which an original
-declarative source language is checked by a from-scratch semantic
-analyzer. The compiler explains the semantic information it
+does not reinvent them. As an academic compiler, Tensora's contribution
+is this: a coherent, complete, end-to-end compiler, in which an
+original declarative source language is checked by a from-scratch
+semantic analyzer. The compiler explains the semantic information it
 establishes. It keeps that information in a typed IR through a real
 data-flow analysis and a shape-guided structured-loop transformation.
 It lowers the result to executable code through standard compiler
@@ -95,8 +95,8 @@ erases the information only at the point where a lower representation
 (MLIR, then LLVM) has no use for it.
 
 Tensora does not aim to replace production ML frameworks. It is a
-small language, built on purpose, where a student team can see and
-build these compiler ideas end to end in one semester.
+small language, built on purpose, to explore these compiler ideas end
+to end in one academic compiler.
 
 ## 1.2 The Problem: Programming ML Computation Graphs
 
@@ -156,7 +156,7 @@ keeps enough verified information to run explicit, testable
 graph-level transformations before lowering.
 
 **Extensible.** Signatures and semantic rules describe each operator.
-A team can add a new operator without redesigning the compiler.
+A new operator can be added without redesigning the compiler.
 
 **Architecture neutral.** The source encodes no target instruction
 set. The required implementation lowers through MLIR and LLVM to
@@ -170,22 +170,23 @@ Tensora source
    -> Abstract Syntax Tree
    -> Semantic Analysis (named-axis symbolic shape + operator contracts)
    -> Typed Computation Graph
-   -> Graph Optimization (team-authored passes)
+   -> Graph Optimization (verified-graph passes)
    -> MLIR (linalg / tensor / arith / func / scf)
    -> LLVM
    -> Native CPU executable
 ```
 
 The command line can show every intermediate form (Section 11). This
-supports both grading demonstrations and debugging.
+supports both learning-oriented demonstrations and day-to-day
+debugging.
 
 ## 1.5 Scope and Non-Goals
 
 Version 1 describes forward ML computation only. It does **not**
 provide automatic differentiation, backpropagation, optimizer updates,
 training loops, dataset loaders, checkpointing, distributed execution,
-production serving, or mandatory GPU support. The team excludes these
-on purpose. They keep the semester compiler *complete*, instead of
+production serving, or mandatory GPU support. These are excluded
+on purpose, to keep the academic compiler *complete*, instead of
 turning it into an incomplete ML framework. Section 12 lists what is
 core and what is a future extension.
 
@@ -342,8 +343,8 @@ and the operator's semantics. The core has no side effects and no
 mutation. So two graphs with the same dataflow compute the same
 result. A transformation is legal exactly when it keeps the value that
 returns for every valid input the same. This property is what makes
-the optimization phase (Section 6) possible, and lets the team check
-it.
+the optimization phase (Section 6) possible, and lets each pass be
+checked against it.
 
 ## 3.3 Why Explicit Graph Structure Matters
 
@@ -368,76 +369,26 @@ Every identifier a graph uses must be a declared `input`, a declared
 Redeclaring a top-level name is an error. Using a name before the
 program binds it is an error.
 
-The compiler implements this rule; it is not only specified.
-`SymbolTable` (`include/tensora/semantic/Symbol.h`,
-`src/semantic/Symbol.cpp`) is the compiler's environment. It maps
-every identifier to its declared or inferred semantic information: its
-kind (`Input`/`Weight`/a graph-local `Value`), its resolved tensor
-type, and its declaration span. Every check in this section is exactly
-an operation on this table, not a separate mechanism:
+The compiler implements this rule; it is not only specified. Name
+resolution has two scopes: one flat **global** scope, shared by every
+graph (`input`/`weight` declarations), and one flat **local** scope
+per graph (value bindings from that graph's statements). A local value
+from one graph is never visible in another. A rebind of an existing
+local value shadows it: later statements in that graph resolve to the
+new value, not the old one. Every reference resolves the local scope
+first, then the global scope; an identifier that resolves in neither
+is unbound. Every resolved name carries the type semantic analysis has
+already established for it, so name resolution and type information
+can never disagree.
 
--   **Scopes.** There are two levels, matching the grammar exactly:
-    one flat **global** scope (`input`/`weight` declarations, shared
-    by every graph, filled once before the compiler analyzes any
-    graph) and one flat **local** scope per graph (value bindings from
-    that graph's statements, reset at the start of each graph through
-    `enterGraph()`). A local value from one graph is never visible in
-    another.
--   **Insertion.** `declareGlobal` inserts a global declaration. It
-    rejects, and does not overwrite, a duplicate name — RM 3.6's
-    redeclaration error. `bindLocal` inserts or updates a graph-local
-    binding: the compiler accepts a rebind of an existing *local*
-    value, and this rebind shadows the value (later statements in that
-    graph can no longer resolve the prior binding). The compiler
-    rejects a rebind of a name that is already a *global* input or
-    weight, as a kind conflict — also an RM 3.6 redeclaration error.
--   **Lookup.** `resolve` is the one path every operand reference in
-    the language actually calls: it checks the local scope first, then
-    the global scope, and returns `nullptr` for an unresolved
-    identifier — RM 3.6's "using a name before it is bound" error.
--   **Type association.** Every `Symbol` carries the type semantic
-    analysis has already established for it — the verified declaration
-    type for a global, or the operator contract's inferred result type
-    for a local value. So name resolution and type information come
-    from the same lookup, not from two passes that could disagree.
--   **Relationship to the typed graph.** The symbol table exists only
-    during semantic analysis. It resolves source-level names to the
-    `ValueId`s the Typed Computation Graph actually stores. The table
-    is not itself part of the TCG, and no later phase — optimization,
-    lowering, or anything after — consults it. By the time the TCG
-    exists, the compiler has already resolved every name into it.
-
-`tensora --emit-symbols file.tns` renders this table directly from the
-same `SemanticAnalyzer` state that did the resolution. It does not
-build a second, separate table. The output includes a per-graph
-resolution log. This log shows what each referenced name actually
-resolved to:
-
-``` text
-=== Symbol Table ===
-
-GLOBAL
-  x   input   Tensor[batch=B, feat=784]  (2:1)
-  W1  weight  Tensor[in=784, out=256]    (3:1)
-  b1  weight  Tensor[out=256]            (4:1)
-
-GRAPH mlp
-  h   local   Tensor[batch=B, out=256]   (10:5)
-  y   local   Tensor[batch=B, out=10]    (11:5)
-  RESOLVED
-    x -> global::x
-    W1 -> global::W1
-    h -> local::h
-    y -> local::y
-
-=== End Symbol Table ===
-```
-
-Section 8's test suite exercises the table directly (`SYM-001`..
-`008`). It covers declaration-order output, per-graph scope isolation,
-shadowing that collapses to one entry, and both error cases (an
-unresolved identifier, a rejected redeclaration) that leave no invalid
-state behind.
+`tensora --emit-symbols file.tns` shows this resolution directly: the
+global declarations, each graph's local bindings, and a per-graph log
+of what each referenced name actually resolved to. See
+[docs/architecture/06_COMPILER_ARCHITECTURE.md](../architecture/06_COMPILER_ARCHITECTURE.md)
+and [docs/architecture/INTERFACES.md](../architecture/INTERFACES.md)
+for the symbol-table implementation, and Section 8's `SYM-001`..`008`
+tests for its coverage (declaration-order output, per-graph scope
+isolation, shadowing, and both error cases).
 
 ## 4.2 Rank and Operator-Domain Checking
 
@@ -457,15 +408,12 @@ decidable grammar:
 -   a symbolic dimension variable;
 -   a product of a dimension expression with an integer constant.
 
-So v1 reasons about sizes that are **affine in a single symbolic
-variable with integer coefficients**, together with fully concrete
-integer arithmetic. The compiler solves equalities between sizes by
-unification (a union-find over dimension variables), plus constant
-arithmetic. Tensora v1 does **not** attempt general nonlinear
-constraint solving or SMT solving. The compiler rejects any program
-that would need this, with an explicit "cannot statically resolve
-shape" diagnostic. This bound is what keeps the checker honest and
-implementable.
+So v1 only reasons about sizes that are a symbolic variable times an
+integer constant, plus plain integer arithmetic. It does **not**
+attempt general nonlinear constraint solving or SMT solving. If a
+program needs more than this, the compiler rejects it with an explicit
+"cannot statically resolve shape" diagnostic, rather than guessing.
+This bound is what keeps the checker decidable.
 
 Shape inference assigns a full type (names and sizes) to every
 intermediate value. It does this by applying the operator contracts of
@@ -613,19 +561,27 @@ constraints it proved. So the compiler can show this information
 directly:
 
 ``` text
-$ tensora explain classifier.tns
-
-graph classifier
-  x : Tensor[batch=B, feat=784]     (input)
-  h : Tensor[batch=B, out=256]      linear(x, W1, b1)   feat=784 unifies with W1.in
-  h : Tensor[batch=B, out=256]      relu(h)             type preserved
-  y : Tensor[batch=B, out=10]       linear(h, W2, b2)   size 256 unifies with W2.in
-  return y : Tensor[batch=B, out=10]
+$ tensora --explain examples/mlp.tns
+graph mlp {
+  param x : Tensor[batch=B, feat=784]
+  param W1 : Tensor[in=784, out=256]
+  param b1 : Tensor[out=256]
+  param W2 : Tensor[in=256, out=10]
+  param b2 : Tensor[out=10]
+  h = linear(x, W1, b1) : Tensor[batch=B, out=256]   # RM linear
+  h = relu(h) : Tensor[batch=B, out=256]   # RM relu
+  y = linear(h, W2, b2) : Tensor[batch=B, out=10]   # RM linear
+  return y
+}
 ```
 
-`explain` mode needs no separate analysis engine. It reuses the facts
-the checker already produced. For a rejected program, it prints the
-failed contract instead. This is the honest answer to "why write this
+`--explain` reuses the exact type-printing the rest of the compiler
+already uses (see `describeType` in `docs/architecture/INTERFACES.md`),
+and it needs no separate analysis engine: each line is one graph node,
+its verified output type, and a trailing `# RM <operator>` tag naming
+the Reference Manual section that governs the contract which produced
+it. For a rejected program, the compiler prints the failed contract
+instead (Section 4). This is the honest answer to "why write this
 instead of PyTorch?": Tensora verifies the graph, checks axis meaning,
 and *explains* the reasoning before anything runs. It is a tool for
 learning and for compiler experimentation, not a production framework
@@ -643,31 +599,26 @@ each value has exactly one producing operation, so def-use
 relationships are explicit. Each node carries its operator kind, its
 operands, its verified output type (named axes and sizes), its
 symbolic dimensions, and its source location. This graph — not the
-AST, and not MLIR — is the object the team's optimizations and
+AST, and not MLIR — is the object the graph passes and
 analyses operate on. A convenient source name (`h = relu(h)`) becomes
 a distinct SSA value internally. SSA is the standard substrate for the
 data-flow analyses below; the project does not claim SSA as novel.
 
-## 6.2 Team-Authored Graph Passes
+## 6.2 Graph Passes
 
-The team implements the following passes. They run on the typed graph:
+The compiler runs several rewrite passes over the typed graph:
+dead-operation elimination, shape folding, cancellation of an
+operation immediately undone by its inverse (a `reshape` or
+`transpose` pair), and fusion of adjacent operations into a single
+region for lowering. See
+[docs/architecture/06_COMPILER_ARCHITECTURE.md](../architecture/06_COMPILER_ARCHITECTURE.md)
+for the exact pass list and order.
 
-1.  shape folding (replace computed-but-constant sizes with literals);
-2.  dead-operation elimination (drop nodes that do not reach
-    `return`);
-3.  reshape cancellation (a `reshape` immediately undone);
-4.  transpose cancellation (a permutation followed by its inverse);
-5.  elementwise fusion (merge a chain of elementwise ops into one
-    region);
-6.  linear-bias-activation fusion (recognize the `linear` then `relu`
-    pattern as a single fused region for lowering).
-
-The team also implemented a constant-folding pass (combining a chain
-of same-kind scalar ops, for example, `(x * 2.0) * 3.0` -> `x * 6.0`),
-then retired it. The team could not prove that this pass keeps
-`return`'s observable output the same under IEEE-754 f32
-non-associativity. Section 3.21 of the Reference Manual requires that
-guarantee from every enabled v1 pass.
+A constant-folding pass (combining a chain of same-kind scalar ops, for
+example, `(x * 2.0) * 3.0` -> `x * 6.0`) was implemented, then retired:
+it could not be proven to keep `return`'s observable output the same
+under IEEE-754 f32 non-associativity. Section 3.21 of the Reference
+Manual requires that guarantee from every enabled v1 pass.
 
 Each pass has a stated legality condition. Before/after graph tests
 validate each one (Section 8).
@@ -675,7 +626,7 @@ validate each one (Section 8).
 ## 6.3 Tensor-Liveness Analysis
 
 Beyond pattern rewrites, v1 implements one genuine **data-flow
-analysis**, the way the compilers course teaches it. Over the SSA
+analysis**. Over the SSA
 graph, tensor **liveness** computes the live interval of every value
 (from its definition to its last use). Every value's byte size is
 known from its verified shape (`bytes = product(dims) * 4` for f32).
@@ -690,19 +641,18 @@ verified tensor semantics and classical compiler analysis.
 
 Tensora optimizes at two levels:
 
-- **Level 1 — ML graph.** The team-authored passes above run over the
+- **Level 1 — ML graph.** The passes above run over the
   SSA typed graph. They use ML-level structure (fusion, dead-op
   elimination, reshape/transpose cancellation) and the liveness
   analysis.
-- **Level 2 — structured loops.** After lowering `@` to
-  `linalg.matmul`, and then to `scf` loops, Tensora applies a
-  team-driven loop transformation (**tiling**, Section 8.4). Tensora's
-  contribution is the *decision*: it selects the transformation and
-  its tile sizes from verified shape properties, and requests the
-  transformation. MLIR performs the mechanical rewrite. The team does
-  **not** claim MLIR's or LLVM's built-in optimizations (bufferization,
-  standard scalar passes, instruction selection, register allocation)
-  as its own work.
+- **Level 2 — structured loops.** After lowering `@` to a structured
+  loop nest, Tensora applies a loop transformation (**tiling**, Section
+  8.4). Tensora's contribution is the *decision*: it selects the
+  transformation and its tile sizes from verified shape properties, and
+  requests the transformation. MLIR performs the mechanical rewrite.
+  This project does **not** claim MLIR's or LLVM's built-in
+  optimizations (bufferization, standard scalar passes, instruction
+  selection, register allocation) as its own work.
 
 ## 6.5 Measuring Optimization
 
@@ -723,24 +673,15 @@ The same program lowers to whatever target the backend supports.
 
 ## 7.2 Lowering to MLIR
 
-Tensora lowers its typed graph into standard MLIR dialects:
+Tensora lowers its typed graph into standard MLIR dialects, using an
+existing structured-op dialect (`linalg`) for the tensor operators, and
+`arith`/`tensor` for elementwise and shape operations. See
+[docs/architecture/06_COMPILER_ARCHITECTURE.md](../architecture/06_COMPILER_ARCHITECTURE.md)
+for the exact operator-to-dialect-op mapping.
 
--   A graph becomes a `func.func` that operates on `tensor` values.
--   `@` becomes `linalg.matmul` (batched, via `linalg.generic`, when
-    leading axes are present).
--   `conv2d` becomes `linalg.conv_2d_nchw_fchw`.
--   Elementwise operators, `relu`, and bias addition become
-    `linalg.generic` bodies over `arith` operations.
--   The compiler emits `softmax` as its standard numerically stable
-    sequence (subtract the axis max, exponentiate, sum, divide),
-    expressed with `linalg` and `arith`.
--   `reshape`, `flatten`, and `transpose` become `tensor` reshape and
-    transpose operations.
--   `sum`/`mean` become `linalg.reduce`.
-
-Lowering `@` (matmul) to `linalg.matmul`, and then to `scf` loops, is
-the entry point for v1's structured-loop optimization (Section 8.4):
-the team-authored tiling transformation applies to the loops
+Lowering `@` (matmul) to a structured loop nest is the entry point for
+v1's structured-loop optimization (Section 8.4): the tiling
+transformation applies to the loops
 `for i, j, k: C[i,j] += A[i,k] * B[k,j]`.
 
 Axis names are a source-level and typed-graph concept. The compiler
@@ -749,11 +690,13 @@ erases axis names; dimensions become positional there.
 
 ## 7.3 From MLIR to Native Code
 
-The compiler bufferizes the tensor-level module to `memref`, converts
-it to loops (`scf`), and lowers it through the standard MLIR
-conversion passes to the LLVM dialect. `mlir-translate` produces LLVM
-IR, and the LLVM backend produces a native CPU object. CPU execution
-is the required end-to-end target.
+The compiler bufferizes the tensor-level module, converts it to
+structured loops, and lowers it through the standard MLIR conversion
+passes to the LLVM dialect, then to LLVM IR and a native CPU object.
+See
+[docs/architecture/06_COMPILER_ARCHITECTURE.md](../architecture/06_COMPILER_ARCHITECTURE.md)
+for the exact pass pipeline. CPU execution is the required end-to-end
+target.
 
 ## 7.4 Future GPU Execution
 
@@ -772,21 +715,22 @@ source -> AST -> typed SSA graph -> (graph passes + liveness) -> MLIR
 ```
 
 The frontend establishes structure. The semantic phase establishes
-legality and types. The team's Level-1 passes and liveness analysis
+legality and types. The Level-1 passes and liveness analysis
 transform and measure the verified graph. MLIR lowers the graph to
-structured loops, where the team's Level-2 tiling decision applies.
+structured loops, where the Level-2 tiling decision applies.
 MLIR and LLVM generate code. The project reports structural measures
-and execution time. It draws a clear line between transformations the
-team implemented and optimization the underlying infrastructure
+and execution time. It draws a clear line between transformations this
+project implemented and optimization the underlying infrastructure
 performed.
 
 ## 8.2 Frontend and Semantic Framing
 
-One ANTLR4 grammar (`grammar/Tensora.g4`) generates the lexer and
-parser. So the frontend phase directly shows grammar-driven code
-generation: lexical rules, a syntactic grammar, and generator-produced
-recognizers. AST construction stays in project-owned C++
-(`src/parser/AstBuilder.cpp`), not in embedded grammar actions.
+One grammar generates the lexer and parser. So the frontend phase
+directly shows grammar-driven code generation: lexical rules, a
+syntactic grammar, and generator-produced recognizers. AST construction
+stays in project-owned code, not in embedded grammar actions (see
+[docs/architecture/DECISIONS.md](../architecture/DECISIONS.md) for
+that decision).
 Semantic analysis is organized as an **attribute grammar**: each AST
 node synthesizes its tensor type from its children. For `A @ B`, the
 children synthesize `A.shape` and `B.shape`; the node checks
@@ -823,14 +767,14 @@ for ii: for jj: for kk:                     # tile loops
         C[i,j] += A[i,k]*B[k,j]
 ```
 
-The team's contribution is explicit, and separate from the
+The contribution here is explicit, and separate from the
 infrastructure: Tensora's pass **decides whether to tile, and picks
 tile sizes from the verified shapes** (the concrete or symbolic `M`,
 `N`, `K`), then requests the transformation. MLIR's transform
 infrastructure performs the mechanical rewrite. The project benchmarks
 the tiled and untiled versions, to report the effect. This connects
-Tensora directly to the course's loop-transformation and polyhedral
-material, without claiming to reimplement MLIR's tiling mechanics.
+Tensora directly to the loop-transformation and polyhedral material it
+draws on, without claiming to reimplement MLIR's tiling mechanics.
 
 ## 8.5 Performance Evaluation
 
@@ -880,18 +824,18 @@ Tensors; shape types; symbolic dimensions; named axes; computation
 graphs; static shape inference; operator fusion; MLIR or LLVM
 lowering. The project does not claim any of these as novel.
 
-## 9.5 The Course-Level Contribution
+## 9.5 The Academic Compiler's Contribution
 
 Tensora's contribution is the **coherent path from verified ML
-semantics to downstream compiler analysis and optimization**. The team
-built this path end to end, and made it real on a small operator set:
+semantics to downstream compiler analysis and optimization**, built end
+to end and made real on a small operator set:
 an original declarative graph language with named axes; a semantic
 analyzer (framed as an attribute grammar) that performs symbolic shape
 reasoning, axis-name checking, and operator-contract checking, with
 precise diagnostics; a typed **SSA** graph; a
 tensor-**liveness/peak-memory analysis** that a transformation
-consumes; team-authored graph passes, distinct from the
-infrastructure's own; a team-driven **structured-loop tiling** decision
+consumes; graph passes distinct from the
+infrastructure's own; a **structured-loop tiling** decision
 on matmul; native code generation through MLIR and LLVM; and a curated
 corpus of real ML shape/graph failures. In one sentence: *Tensora is a
 statically verified ML computation language whose typed SSA graph
@@ -1062,15 +1006,15 @@ The compiler exposes each phase from the command line:
 tensora --emit-tokens file.tns     # lexer output
 tensora --emit-ast    file.tns     # parser output
 tensora --check       file.tns     # semantic analysis (errors or OK)
-tensora explain       file.tns     # inferred types and constraints
+tensora --explain     file.tns     # inferred types and constraints
 tensora --emit-graph  file.tns     # typed computation graph
 tensora --emit-mlir   file.tns     # generated MLIR
 tensora --emit-llvm   file.tns     # generated LLVM IR
 tensora file.tns -o program        # native executable
 ```
 
-These commands support both course demonstrations and compiler
-debugging.
+These commands support both learning-oriented demonstrations of the academic compiler and
+day-to-day compiler debugging.
 
 --------------------------------------------------------------------------
 
@@ -1085,7 +1029,7 @@ integer arithmetic), together with axis-name checking; semantic
 checking with diagnostics (framed as an attribute grammar); `explain`
 mode; a typed **SSA** graph; the graph passes of Section 6.2; a
 **tensor-liveness / peak-memory analysis** that a transformation
-consumes; lowering to MLIR and a team-driven structured-loop
+consumes; lowering to MLIR and a structured-loop
 transformation (**tiling** on matmul, Section 8.4); LLVM/native CPU
 execution; a real ML failure corpus for testing.
 
@@ -1104,9 +1048,9 @@ integer element type (a dtype system), an integer-indexed `gather`
 (token and positional **embedding lookup**), and `sin`/`cos` (for
 rotary positional encodings). With this tier, the embedding front end
 of an LLM (and recommender embedding tables) becomes expressible;
-everything downstream of the embedding is already covered by v1. The
-team plans this tier as open-source future scope. It is not part of
-the graded v1 language. See the roadmap for details.
+everything downstream of the embedding is already covered by v1. This
+tier is planned as open-source future scope. It is not part of
+the frozen v1 language. See the roadmap for details.
 
 --------------------------------------------------------------------------
 
@@ -1114,12 +1058,12 @@ the graded v1 language. See the roadmap for details.
 
 Tensora is a small declarative language for forward ML computation.
 Its static semantics, named axes, and explicit graph structure feed
-directly into team-authored optimization, and into MLIR/LLVM lowering.
-The required semester result is a complete compiler: from source,
+directly into graph-level optimization, and into MLIR/LLVM lowering.
+As an academic compiler, the required result is a complete pipeline: from source,
 through a symbolic shape-and-contract checker, an explain facility,
 graph-level optimizations, and MLIR/LLVM, to native CPU execution — all
 exercised by a corpus of valid and invalid ML programs. Tensora claims
 no new ideas in tensor typing or ML compilation. Its value is a
-coherent, complete, readable, and extensible compiler. A five-person
-team can build, test, explain, and defend it. It leaves a clean path
+coherent, complete, readable, and extensible compiler that can be
+built, tested, explained, and defended end to end. It leaves a clean path
 toward later work on layout, fusion, memory, and accelerator lowering.

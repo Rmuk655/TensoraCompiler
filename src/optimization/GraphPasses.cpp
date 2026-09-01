@@ -305,7 +305,7 @@ class ShapeFoldingPass : public GraphPass {
 // the chain, since this pass only records a fact; it does not change
 // the graph's structure or result. Lowering time decides whether it is
 // legal to actually fuse a tagged chain's codegen into one
-// linalg.generic, and lowering is where it reads the tag (IR.md §4:
+// linalg.generic, and lowering is where it reads the tag (INTERFACES.md §3a.4:
 // facts let a later phase use a proven property "without re-deriving
 // them").
 class ElementwiseFusionPass : public GraphPass {

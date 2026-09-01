@@ -1,0 +1,235 @@
+### SEM-SCOPE-001 | rebinding h = relu(h) shadows the prior binding (accept)
+input x: Tensor[a=1]
+graph g {
+  h = relu(x)
+  h = relu(h)
+  return h
+}
+
+### SEM-POISON-001 | one bad statement does not cascade into spurious follow-on errors
+input x: Tensor[a=1,b=2]
+graph g {
+  bad = undefined_name
+  ok1 = relu(x)
+  ok2 = relu(ok1)
+  return ok2
+}
+
+### SEM-POISON-002 | two independent errors in different graphs are both reported
+graph a { return undefined1 }
+graph b { return undefined2 }
+
+### SEM-MM-001 | matmul: [batch=B,feat=784] @ [in=784,out=256] -> [batch=B,out=256]
+input x: Tensor[batch=B,feat=784]
+weight w: Tensor[in=784,out=256]
+graph g {
+  y = x @ w
+  return y
+}
+
+### SEM-LIN-001 | linear with a matching bias is accepted
+input x: Tensor[batch=B,in=784]
+weight w: Tensor[in=784,out=256]
+weight b: Tensor[out=256]
+graph g {
+  y = linear(x, w, b)
+  return y
+}
+
+### SEM-EW-002 | elementwise: size-1 broadcast is accepted
+input a: Tensor[batch=B,feat=4]
+input b: Tensor[batch=B,feat=1]
+graph g {
+  y = a + b
+  return y
+}
+
+### SEM-EW-005 | elementwise: tensor-scalar x * 0.125 imposes no constraint
+input x: Tensor[a=1,b=2]
+graph g {
+  y = x * 0.125
+  return y
+}
+
+### SEM-RS-001 | reshape: 768 -> [head=12,dim=64] is accepted
+input x: Tensor[feat=768]
+graph g {
+  y = reshape(x, [head=12,dim=64])
+  return y
+}
+
+### SEM-FL-001 | flatten: concrete tail flattens to flat=200704
+input x: Tensor[batch=B,channel=64,height=56,width=56]
+graph g {
+  y = flatten(x)
+  return y
+}
+
+### SEM-TR-001 | transpose: a valid perm on rank-4 is accepted
+input x: Tensor[a=1,b=2,c=3,d=4]
+graph g {
+  y = transpose(x, perm=[0,1,3,2])
+  return y
+}
+
+### SEM-RD-001 | sum(x, axis=feat): an existing axis is removed
+input x: Tensor[batch=B,feat=4]
+graph g {
+  y = sum(x, axis=feat)
+  return y
+}
+
+### SEM-SM-001 | softmax(scores, axis=kseq) is accepted, shape unchanged
+input scores: Tensor[batch=B,qseq=S,kseq=S]
+graph g {
+  y = softmax(scores, axis=kseq)
+  return y
+}
+
+### SEM-CV-001 | conv2d stride=1,padding=1 preserves HxW
+input x: Tensor[batch=B,channel=3,height=224,width=224]
+weight w: Tensor[out_channel=32,in_channel=3,kh=3,kw=3]
+weight b: Tensor[out_channel=32]
+graph g {
+  y = conv2d(x, w, b, stride=1, padding=1)
+  return y
+}
+
+### SEM-CV-005 | conv2d: stride=2 at 224x224 exactly halves H and W when the division is exact
+input x: Tensor[batch=B,channel=3,height=224,width=224]
+weight w: Tensor[out_channel=64,in_channel=3,kh=4,kw=4]
+weight b: Tensor[out_channel=64]
+graph g {
+  y = conv2d(x, w, b, stride=2, padding=1)
+  return y
+}
+
+### SEM-PL-001 | maxpool size=2 halves HxW
+input x: Tensor[batch=B,channel=32,height=112,width=112]
+graph g {
+  y = maxpool(x, size=2)
+  return y
+}
+
+### ATT-001 | the full attention program (whitepaper 10.4) type-checks end to end
+input Q: Tensor[batch=B, head=12, qseq=S, dim=64]
+input K: Tensor[batch=B, head=12, kseq=S, dim=64]
+input V: Tensor[batch=B, head=12, kseq=S, dim=64]
+
+graph attention {
+    kt      = transpose(K, perm=[0, 1, 3, 2])
+    scores  = Q @ kt
+    scores  = scores * 0.125
+    weights = softmax(scores, axis=kseq)
+    out     = weights @ V
+    return out
+}
+
+### BND-MM-002 | matmul boundary: M=1 or N=1
+input a: Tensor[m=1,k=4]
+input b: Tensor[k=4,n=4]
+graph g {
+  y = a @ b
+  return y
+}
+
+### BND-BC-001 | broadcast boundary: size-1 on each side (of different axes)
+input a: Tensor[batch=1,feat=4]
+input b: Tensor[batch=8,feat=1]
+graph g {
+  y = a + b
+  return y
+}
+
+### BND-CV-001 | conv2d boundary: output exact-divide vs remainder
+input x: Tensor[batch=B,channel=1,height=4,width=4]
+weight w: Tensor[out_channel=1,in_channel=1,kh=2,kw=2]
+weight b: Tensor[out_channel=1]
+graph g {
+  y = conv2d(x, w, b, stride=2, padding=0)
+  return y
+}
+
+### BND-CV-002 | conv2d boundary: kernel size == input size (output spatial size 1)
+input x: Tensor[batch=B,channel=1,height=5,width=5]
+weight w: Tensor[out_channel=1,in_channel=1,kh=5,kw=5]
+weight b: Tensor[out_channel=1]
+graph g {
+  y = conv2d(x, w, b, stride=1, padding=0)
+  return y
+}
+
+### BND-RD-001 | reduce boundary: axis 0, last axis, and the only axis
+input x: Tensor[a=1,b=2,c=3]
+graph g {
+  y = sum(x, axis=a)
+  return y
+}
+
+### BND-TR-001 | transpose boundary: identity perm and full-reverse perm
+input x: Tensor[a=1,b=2,c=3]
+graph g {
+  y = transpose(x, perm=[0,1,2])
+  return y
+}
+
+### BND-DIM-001 | bounded solver boundary: just inside vs just outside the affine subset
+input x: Tensor[batch=B,feat=768]
+graph g {
+  y = reshape(x, [batch=B,head=12,dim=64])
+  return y
+}
+
+### SYM-001 | globals appear in declaration order with correct kind and type
+input x: Tensor[batch=4, feat=8]
+weight W: Tensor[in=8, out=2]
+graph g { y = linear(x, W, W)
+ return y }
+
+### SYM-002 | graph-local symbols are recorded with the resolved (inferred) type, per graph
+input x: Tensor[batch=4, feat=8]
+graph g {
+  h = relu(x)
+  return h
+}
+
+### SYM-003 | shadowing (h = relu(h)) collapses to one recorded local entry, not two
+input x: Tensor[batch=4, feat=8]
+graph g {
+  h = relu(x)
+  h = relu(h)
+  return h
+}
+
+### SYM-004 | the resolution log records global::/local::/undefined, deduped per name
+input x: Tensor[batch=4, feat=8]
+graph g {
+  h = relu(x)
+  y = relu(h)
+  return y
+}
+
+### SYM-005 | an undefined reference logs 'undefined' and is not silently absent
+graph g {
+  y = relu(does_not_exist)
+  return y
+}
+
+### SYM-006 | a rejected redeclaration never enters the recorded global scope
+input x: Tensor[a=1]
+weight x: Tensor[a=1]
+graph g { return x }
+
+### SYM-007 | a rejected local rebind of a global name never enters the recorded local scope
+input x: Tensor[a=1]
+graph g {
+  x = relu(x)
+  return x
+}
+
+### SYM-008 | multiple graphs each get their own recorded scope, in program order
+input x: Tensor[a=1]
+graph first { p = relu(x)
+ return p }
+graph second { q = relu(x)
+ return q }

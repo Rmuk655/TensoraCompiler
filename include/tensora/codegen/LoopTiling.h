@@ -6,7 +6,7 @@
 #include "tensora/shared/Ir.h"
 
 // Level-2 loop optimization (ARCH-009; INTERFACES.md §4a). This file
-// holds the team's tiling *decision*. It runs on verified shapes, plus
+// holds the tiling *decision*. It runs on verified shapes, plus
 // optional tensor liveness data, at the Typed Computation Graph level,
 // before any MLIR exists. MlirLowerer calls this decision and stamps
 // the result onto the lowered `linalg.matmul` op as an attribute.

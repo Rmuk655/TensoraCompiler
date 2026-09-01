@@ -27,17 +27,15 @@
 
 #include "tensora/codegen/DialectSetup.h"
 #include "tensora/codegen/MlirLowerer.h"
+#include "support/JitHarness.h"
 
 namespace tns = tensora;
 using namespace mlir;
 using MlirValue = mlir::Value;
+using tensora::testing::constTensor;
 
 namespace {
 
-MlirValue constTensor(OpBuilder& b, Location loc, RankedTensorType type, ArrayRef<float> values) {
-  auto attr = DenseElementsAttr::get(type, values);
-  return arith::ConstantOp::create(b, loc, type, attr);
-}
 
 // Row-major unravel of `linearIdx` into `shape`'s index attrs.
 std::vector<MlirValue> unravelIndex(OpBuilder& b, Location loc, ArrayRef<int64_t> shape, size_t linearIdx) {
@@ -137,30 +135,13 @@ bool runAndCheck(const char* caseId, tns::OpKind op, const tns::TensorType* xT, 
     return false;
   }
 
-  mlir::PassManager mlirPm(&ctx);
-  bufferization::OneShotBufferizePassOptions bufOpts;
-  bufOpts.bufferizeFunctionBoundaries = true;
-  mlirPm.addPass(bufferization::createOneShotBufferizePass(bufOpts));
-  mlirPm.addPass(createConvertLinalgToLoopsPass());
-  mlirPm.addPass(createSCFToControlFlowPass());
-  mlirPm.addPass(createConvertControlFlowToLLVMPass());
-  mlirPm.addPass(createArithToLLVMConversionPass());
-  mlirPm.addPass(createFinalizeMemRefToLLVMConversionPass());
-  mlirPm.addPass(createConvertFuncToLLVMPass());
-  mlirPm.addPass(createReconcileUnrealizedCastsPass());
-  if (failed(mlirPm.run(module))) {
-    fprintf(stderr, "%s FAIL: standard lowering pipeline failed\n", caseId);
-    module.dump();
-    return false;
-  }
+  // --- Standard MLIR/LLVM lowering pipeline, then JIT execution
+  // (tests/support/JitHarness.h). Minimal profile: bufferizeFunctionBoundaries only.
+  tensora::testing::JitPipelineOptions jitOpts;
+  if (!tensora::testing::runStandardLoweringPipeline(ctx, module, jitOpts, caseId)) return false;
 
-  llvm::InitializeNativeTarget();
-  llvm::InitializeNativeTargetAsmPrinter();
-  auto maybeEngine = ExecutionEngine::create(module);
-  if (!maybeEngine) {
-    fprintf(stderr, "%s FAIL: ExecutionEngine::create failed\n", caseId);
-    return false;
-  }
+  auto maybeEngine = tensora::testing::createJitEngine(module, jitOpts, caseId);
+  if (!maybeEngine) return false;
   auto engine = std::move(*maybeEngine);
 
   std::vector<float> results(n, 0.0f);
