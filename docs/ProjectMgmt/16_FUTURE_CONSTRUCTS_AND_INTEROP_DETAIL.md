@@ -709,8 +709,8 @@ uses less memory than padded PyTorch, on the same development machine,
 is a compiler-side result. It is not yet an edge-device result. To
 claim an edge-device advantage, measure the same compiled model on a
 real constrained device, and report peak RAM, model size on flash,
-latency, and energy use. See [13_V0.2_PLAN.md](13_V0.2_PLAN.md) for
-this plan.
+latency, and energy use. Those four numbers have to come from the
+device itself; they cannot be extrapolated from a laptop run.
 
 **Net sequencing this implies:** §8.9a first (it is cheap, and shared
 by both later items). Then §9.3/1a (interop, for usability), and, in
