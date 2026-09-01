@@ -77,11 +77,27 @@ def lang_for(path: str) -> str:
 
 
 def find_sorted(*dirs: str) -> list[str]:
+    """Source files under `dirs`, in sorted order.
+
+    Anything .gitignore excludes is dropped. The listing describes the
+    source tree as committed, so a file git does not keep is not part
+    of it -- a downloaded model weight (tools/models/*.pt) or a build
+    by-product sitting in a listed directory would otherwise be
+    reported as a source file missing its dump, on that machine only.
+    """
     out = subprocess.run(
         ["find", *dirs, "-type", "f", "-not", "-path", "*/__pycache__/*"],
         cwd=REPO, check=True, capture_output=True, text=True,
     ).stdout
-    return sorted(out.splitlines())
+    paths = sorted(out.splitlines())
+    if not paths:
+        return paths
+    # check-ignore exits 1 when it matches nothing, which is not an error here.
+    ignored = set(subprocess.run(
+        ["git", "check-ignore", "--stdin"],
+        cwd=REPO, input="\n".join(paths), capture_output=True, text=True,
+    ).stdout.splitlines())
+    return [p for p in paths if p not in ignored]
 
 
 _CLOSE_FENCE_RE = re.compile(r"^`{3,}[ \t]*$", re.MULTILINE)
