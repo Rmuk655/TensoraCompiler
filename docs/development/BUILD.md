@@ -532,8 +532,8 @@ authoritative equivalents.
 `docs/development/10_APPENDIX_SOURCE_LISTING.md` is a mechanical
 concatenation of the real source tree, not a hand-maintained document
 (see its own Section 10.10). It is generated rather than committed, so
-it is absent from a fresh clone. After changing a
-file it already lists, run:
+it is absent from a fresh clone. To build it, or to refresh it after
+changing a file it lists, run:
 
 ```bash
 make appendix
@@ -541,14 +541,25 @@ make appendix
 
 (or [`./tools/regen_appendix.py`](../../tools/regen_appendix.py)
 directly). This is a doc-maintenance step, run by hand when needed --
-it is not part of `make build`/`make test`, since it rewrites a
-committed file and should not fire on every build.
+it is not part of `make build`/`make test`, since the appendix has no
+bearing on the compiler binary.
 
-The script only refreshes dumps of files it already has an entry for;
-it does not decide where a *new* file's dump goes. Sections 10.3-10.8
-group files by compiler phase (a curated breakdown, not something a
-manifest diff can infer), so if you add a new source file, add its
-`### \`path\`` entry to the right section by hand once, then re-run
-the script -- it will keep that entry's content in sync from then on.
-The script's own output tells you exactly which files still need this
-(a new file with no entry yet, or an entry whose file was deleted).
+The committed input is
+[`docs/development/appendix_template.md`](appendix_template.md): the
+same document with every code fence left empty. It carries what cannot
+be derived from the source tree -- the prose, the section grouping, and
+the `### \`path\`` headers naming which file belongs where. The script
+fills the fences from disk. Because it always starts from the
+template, never from its own previous output, the appendix can be
+rebuilt from a fresh clone and is safe to delete at any time.
+
+The script fills dumps for files that already have an entry; it does
+not decide where a *new* file's dump goes. Sections 10.3-10.8 group
+files by compiler phase (a curated breakdown, not something a manifest
+diff can infer), so if you add a new source file, add its
+`### \`path\`` entry to the right section **of the template** once,
+then re-run the script -- it will keep that entry's content in sync
+from then on. Edit the template, not the generated appendix: changes
+to the appendix are discarded on the next run. The script's own output
+tells you exactly which files still need this (a new file with no
+entry yet, or an entry whose file was deleted).
