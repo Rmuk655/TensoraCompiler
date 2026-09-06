@@ -11,5 +11,7 @@ echo "--- MLIR (tensora --emit-mlir; Level-1 passes + Level-2 tiling already app
 "$BUILD/tensora" --emit-mlir "$FILE"
 echo
 echo "--- LLVM IR (tensora --emit-llvm) ---"
+set +o pipefail
 "$BUILD/tensora" --emit-llvm "$FILE" | head -20
+set -o pipefail
 echo "... (truncated; run 'tensora --emit-llvm $FILE' directly for the full module)"
