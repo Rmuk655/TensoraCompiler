@@ -33,3 +33,8 @@ docs/roles/
 # needed to build/run/test, and churns every source change -- never
 # committed.
 docs/development/10_APPENDIX_SOURCE_LISTING.md
+.claude/
+.graphify/
+graphify-out/
+.vscode/
+.tools/
