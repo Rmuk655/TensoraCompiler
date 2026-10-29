@@ -23,7 +23,10 @@ namespace {
 class MatmulTilingPass : public PassWrapper<MatmulTilingPass, OperationPass<func::FuncOp>> {
  public:
   MatmulTilingPass() = default;
-  explicit MatmulTilingPass(TilingPolicy policy) : policy_(policy) {}
+  // The tile sizes come from the "tensora.tile_sizes" attribute, so the policy is not needed here;
+  // the parameter only keeps the factory signature the same as MlirLowerer's.
+  explicit MatmulTilingPass(TilingPolicy) {}
+  MatmulTilingPass(const MatmulTilingPass& other) : PassWrapper(other) {}
 
   StringRef getArgument() const override { return "tensora-tile-matmul"; }
   StringRef getDescription() const override {
@@ -33,9 +36,7 @@ class MatmulTilingPass : public PassWrapper<MatmulTilingPass, OperationPass<func
   // Applies exactly the tile sizes TilingDecision::decide()
   // (LoopTiling.cpp) already chose at the TCG level. MlirLowerer stamps
   // those sizes onto the op as "tensora.tile_sizes". This pass does not
-  // compute its own policy from raw MLIR shapes. `policy_` exists only
-  // so a caller can build this pass with the same TilingPolicy
-  // MlirLowerer used; this pass does not otherwise use it.
+  // compute its own policy from raw MLIR shapes.
   void runOnOperation() override {
     func::FuncOp func = getOperation();
     SmallVector<linalg::MatmulOp> candidates;
@@ -53,15 +54,17 @@ class MatmulTilingPass : public PassWrapper<MatmulTilingPass, OperationPass<func
 
       auto tilingOp = cast<TilingInterface>(op.getOperation());
       FailureOr<scf::SCFTilingResult> result = scf::tileUsingSCF(rewriter, tilingOp, options);
-      if (failed(result)) continue;  // leave unchanged: not a pass failure (see header's "Failure behavior")
+      if (failed(result)) {  // leave unchanged: not a pass failure (see header's "Failure behavior")
+        op.emitRemark("tensora-tile-matmul: tiling skipped, tileUsingSCF failed");
+        continue;
+      }
       rewriter.replaceOp(op, result->replacements);
-      ++numTiled_;
+      ++numTiled;
     }
   }
 
  private:
-  TilingPolicy policy_;
-  int64_t numTiled_ = 0;
+  Statistic numTiled{this, "num-tiled", "Number of linalg.matmul ops tiled"};
 };
 
 }  // namespace

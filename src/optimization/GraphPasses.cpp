@@ -129,7 +129,7 @@ class ReshapeCancellationPass : public GraphPass {
 
     for (size_t i = 0; i < numNodes; ++i) {
       const GraphNode& outer = graph.node(i);
-      if (outer.op != OpKind::Reshape) continue;
+      if (outer.op != OpKind::Reshape || outer.inputs.empty()) continue;
       NodeId innerId = graph.producerOf(outer.inputs[0]);
       if (innerId == kNoProducer) continue;
       const GraphNode& inner = graph.node(innerId);
@@ -186,19 +186,26 @@ class TransposeCancellationPass : public GraphPass {
 
     for (size_t i = 0; i < numNodes; ++i) {
       const GraphNode& outer = graph.node(i);
-      if (outer.op != OpKind::Transpose) continue;
+      if (outer.op != OpKind::Transpose || outer.inputs.empty()) continue;
       NodeId innerId = graph.producerOf(outer.inputs[0]);
       if (innerId == kNoProducer) continue;
       const GraphNode& inner = graph.node(innerId);
       if (inner.op != OpKind::Transpose) continue;
       if (graph.consumersOf(inner.output).size() != 1) continue;
-      if (inner.attrs.perm.size() != outer.attrs.perm.size()) continue;  // defensive; sema guarantees this anyway
+      // inner was already dropped as an identity (outer of an earlier pair): its result is its
+      // own source, so this transpose just keeps its own perm.
+      if (skip.count(innerId)) continue;
+      // inner may itself have absorbed an earlier transpose in a chain of three or more.
+      auto innerOverride = overridePerm.find(innerId);
+      const std::vector<uint32_t>& innerPerm =
+          innerOverride != overridePerm.end() ? innerOverride->second : inner.attrs.perm;
+      if (innerPerm.size() != outer.attrs.perm.size()) continue;  // defensive; sema guarantees this anyway
 
-      // z[i] = y[P2[i]] = x[P1[P2[i]]]  (P1 = inner.perm, P2 = outer.perm)
+      // z[i] = y[P2[i]] = x[P1[P2[i]]]  (P1 = innerPerm, P2 = outer.perm)
       std::vector<uint32_t> composed(outer.attrs.perm.size());
       bool isIdentity = true;
       for (size_t k = 0; k < composed.size(); ++k) {
-        composed[k] = inner.attrs.perm[outer.attrs.perm[k]];
+        composed[k] = innerPerm[outer.attrs.perm[k]];
         if (composed[k] != k) isIdentity = false;
       }
 
@@ -264,6 +271,7 @@ class ShapeFoldingPass : public GraphPass {
     for (size_t i = 0; i < numNodes; ++i) {
       const GraphNode& node = graph.node(i);
       if (node.op != OpKind::Reshape && node.op != OpKind::Flatten) continue;
+      if (node.inputs.empty()) continue;
       const Type* inType = graph.value(node.inputs[0]).type;
       const Type* outType = graph.value(node.output).type;
       if (!typesEqual(inType, outType)) continue;
@@ -315,11 +323,10 @@ class ElementwiseFusionPass : public GraphPass {
   PassResult run(TypedGraph& graph, PassContext&) override {
     PassResult result;
     const size_t numNodes = graph.nodes().size();
-    size_t groupCounter = 0;
 
     for (size_t i = 0; i < numNodes; ++i) {
       const GraphNode& node = graph.node(i);
-      if (!isElementwise(node.op)) continue;
+      if (!isElementwise(node.op) || node.inputs.empty()) continue;
       if (hasFactPrefix(node, "fusion_group_")) continue;  // already tagged in an earlier sweep
 
       NodeId pred = graph.producerOf(node.inputs[0]);
@@ -332,12 +339,14 @@ class ElementwiseFusionPass : public GraphPass {
       while (graph.consumersOf(graph.node(cur).output).size() == 1) {
         NodeId next = graph.consumersOf(graph.node(cur).output)[0];
         if (!isElementwise(graph.node(next).op)) break;
+        // already in another chain (it also reads a second chain through its other operand)
+        if (hasFactPrefix(graph.node(next), "fusion_group_")) break;
         chain.push_back(next);
         cur = next;
       }
       if (chain.size() < 2) continue;
 
-      std::string tag = "fusion_group_" + std::to_string(groupCounter++);
+      std::string tag = "fusion_group_" + std::to_string(i);
       for (NodeId n : chain) graph.addFact(n, tag);
       result.changed = true;
       ++result.stats.numChanges;
@@ -360,11 +369,10 @@ class LinearBiasActivationFusionPass : public GraphPass {
   PassResult run(TypedGraph& graph, PassContext&) override {
     PassResult result;
     const size_t numNodes = graph.nodes().size();
-    size_t groupCounter = 0;
 
     for (size_t i = 0; i < numNodes; ++i) {
       const GraphNode& relu = graph.node(i);
-      if (relu.op != OpKind::Relu) continue;
+      if (relu.op != OpKind::Relu || relu.inputs.empty()) continue;
       NodeId pred = graph.producerOf(relu.inputs[0]);
       if (pred == kNoProducer) continue;
       const GraphNode& linear = graph.node(pred);
@@ -372,7 +380,7 @@ class LinearBiasActivationFusionPass : public GraphPass {
       if (graph.consumersOf(linear.output).size() != 1) continue;
       if (hasFactPrefix(linear, "fused_linear_relu_")) continue;  // already tagged in an earlier sweep
 
-      std::string tag = "fused_linear_relu_" + std::to_string(groupCounter++);
+      std::string tag = "fused_linear_relu_" + std::to_string(pred);
       graph.addFact(pred, tag);
       graph.addFact(static_cast<NodeId>(i), tag);
       result.changed = true;

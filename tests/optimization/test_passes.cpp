@@ -329,6 +329,61 @@ CASE(OPT_TC_003, "OPT-TC-003", "TransposeCancellation near-miss: inner transpose
   R.check(g.nodes().size() == 4, "all four nodes remain");
 }
 
+CASE(OPT_TC_004, "OPT-TC-004", "TransposeCancellation: a chain of three composes all three perms") {
+  TypeContext types;
+  const TensorType* tt = types.tensor(
+      {Axis{"a", Dimension::makeConst(1)}, Axis{"b", Dimension::makeConst(2)}, Axis{"c", Dimension::makeConst(3)}});
+  GraphBuilder b("g");
+  ValueId x = b.addInput("x", tt, {});
+  NodeAttrs p1, p2, p3;
+  p1.perm = {1, 0, 2};
+  p2.perm = {0, 2, 1};
+  p3.perm = {1, 2, 0};
+  ValueId v1 = b.emit(OpKind::Transpose, {x}, p1, tt, {}, "v1");
+  ValueId v2 = b.emit(OpKind::Transpose, {v1}, p2, tt, {}, "v2");
+  ValueId v3 = b.emit(OpKind::Transpose, {v2}, p3, tt, {}, "v3");
+  b.setOutput(v3);
+  TypedGraph g = b.finish();
+
+  DiagnosticEngine d;
+  PassContext ctx{types, d};
+  PassResult r = createTransposeCancellationPass()->run(g, ctx);
+  R.check(r.changed, "chain merges");
+  R.check(g.nodes().size() == 1, "one transpose node remains");
+  if (g.nodes().size() == 1) {
+    R.check(g.nodes()[0].inputs[0] == x, "reads x directly");
+    // v1 = x[{1,0,2}]; v2 = v1[{0,2,1}] = x[{1,2,0}]; v3 = v2[{1,2,0}] = x[{2,0,1}]
+    R.check(g.nodes()[0].attrs.perm == std::vector<uint32_t>{2, 0, 1}, "perm is the composition of all three");
+  }
+}
+
+CASE(OPT_TC_005, "OPT-TC-005", "TransposeCancellation: first two cancel, third keeps its own perm") {
+  TypeContext types;
+  const TensorType* tt = types.tensor(
+      {Axis{"a", Dimension::makeConst(1)}, Axis{"b", Dimension::makeConst(2)}, Axis{"c", Dimension::makeConst(3)}});
+  GraphBuilder b("g");
+  ValueId x = b.addInput("x", tt, {});
+  NodeAttrs p1, p2, p3;
+  p1.perm = {1, 0, 2};
+  p2.perm = {1, 0, 2};
+  p3.perm = {0, 2, 1};
+  ValueId v1 = b.emit(OpKind::Transpose, {x}, p1, tt, {}, "v1");
+  ValueId v2 = b.emit(OpKind::Transpose, {v1}, p2, tt, {}, "v2");
+  ValueId v3 = b.emit(OpKind::Transpose, {v2}, p3, tt, {}, "v3");
+  b.setOutput(v3);
+  TypedGraph g = b.finish();
+
+  DiagnosticEngine d;
+  PassContext ctx{types, d};
+  PassResult r = createTransposeCancellationPass()->run(g, ctx);
+  R.check(r.changed, "pair cancels");
+  R.check(g.nodes().size() == 1, "one transpose node remains");
+  if (g.nodes().size() == 1) {
+    R.check(g.nodes()[0].inputs[0] == x, "reads x directly");
+    R.check(g.nodes()[0].attrs.perm == std::vector<uint32_t>{0, 2, 1}, "perm is v3's own");
+  }
+}
+
 // --- OPT-EF-001: ElementwiseFusion tags a chain. ---
 CASE(OPT_EF_001, "OPT-EF-001", "ElementwiseFusion tags a chain of >= 2 elementwise ops") {
   TypeContext types;
